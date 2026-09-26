@@ -20,7 +20,7 @@ set -e
 IMG=eclipse-temurin:8-jdk-jammy
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-TOOLS_DIR="$(cd "$PROJECT_DIR/../../Tools/jxe2jar" && pwd)"
+TOOLS_DIR="$(cd "${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}" && pwd)"
 
 STOCK_JAR_NAME=${STOCK_JAR:-MU1316-final.jar}
 STOCK_JAR="$TOOLS_DIR/out/$STOCK_JAR_NAME"

@@ -7,6 +7,12 @@ Integrates **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPl
 
 **Tested & verified on:** Audi Q5 (FY) 2019 · `MHI2Q_ER_AUG22_P5092` · MU Software `1329`.
 
+**Additional owner-verified configuration:** Audi Q5 2020 · `MHI2Q_US_AUG22_P5145` · MU Software `1316`.
+On 2026-09-26, the owner reported a successful in-place upgrade from upstream
+MHI2Q-CarPlay-AltScreen and working operation, using a Java patch built against
+that unit's exported stock `lsd.jxe`. This confirms initial installation and
+operation, not exhaustive feature coverage or long-term reliability.
+
 **Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
 
 ## 🖼️ Gallery
@@ -159,7 +165,8 @@ Then run from this repository's root:
 All three build in Docker - no host toolchain required. The Java patch compiles in a pinned
 `eclipse-temurin:8` container (against the stock jar + OSGi libs under `../../Tools/jxe2jar`; the
 scripts expect the author's `out/MU1316-final.jar`, so if your own stock jar is named or located
-differently, adjust the path in `scripts/build_java.sh` and the test scripts); the two
+differently, set `TOOLS_DIR` to your jxe2jar directory and `STOCK_JAR` to the filename
+under its `out/` directory for the build; the test scripts have their own paths); the two
 native builds use the `qnx65-armv7-toolchain` image and synthesize their import stubs, so the resulting
 ELF binds the unit's real Screen/EGL/GLES libraries at runtime. The renderer's C++ scene engine is
 built with that image's `g++` and must not pull in the C++ runtime; the hook build rejects any dynamic
