@@ -1,7 +1,5 @@
 # MHI2Q CarPlay Virtual Cockpit Integration (AltScreen + Route Guidance)
 
-**English** | [Українська](README_UA.md)
-
 Unified CarPlay patch set for Audi MHI2Q infotainment with Audi Virtual Cockpit.  
 Integrates **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)** (CarPlay instrument cluster video streaming) with **[mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** (3D turn-by-turn route guidance & maneuver renderer) into one single codebase and all-in-one SD card build.
 
@@ -208,6 +206,11 @@ the last ~4 MB of the cluster H.264 stream to `MMI-Cockpit-Carplay/logs/h264/`;
 `python3 tools/h264_ring_analyze.py <file>` shows what the iPhone sent.
 End-to-end check of the package (needs an AltScreen stock backup from a unit):
 `FIXTURE=<card>/MMI-Cockpit-Carplay/backup ./scripts/test_altscreen_e2e.sh`.
+This host test explicitly stubs the ARM mirror launcher; it checks every command's
+exit status and the integrated completion message, not actual video output. It
+also exercises interrupted restore, cleanup failures, and retry recovery. Restore
+verifies the stock launcher configuration before removing the RGI runtime; failed
+cleanup retains the recovery scripts and pending transaction for a retry.
 
 #### Key enhancements over upstream AltScreen:
 - **30 fps instead of 15:** the frame tap reads back every decoded frame and the mirror sidecar polls every 4 ms with a one-vsync minimum period (binary patches applied by `build_sd.sh`).

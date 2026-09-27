@@ -110,8 +110,8 @@ rollback(){
         mount_app_ro >/dev/null 2>&1 || true
         APP_RW=0
     fi
-    ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$RGI_COMPANION" remove >/dev/null 2>&1 || echo "WARN: RGI companion removal failed"
-    ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$CONTROLLER" restore >/dev/null 2>&1 || echo "WARN: native rollback failed; runtime remains inert until RESTORE ORIGINAL succeeds"
+    ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$CONTROLLER" restore ||
+        echo "WARN: rollback incomplete; keep the SD card and retry RESTORE ORIGINAL"
 }
 fail(){ msg=$1; rollback; echo "FAIL: $msg" >&2; exit 1; }
 

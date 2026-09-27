@@ -1,7 +1,5 @@
 # MIB2 Toolbox — CarPlay AltScreen + Route Guidance Integration (RGI)
 
-**English** | [Українська](README_UA.md)
-
 This tree contains the SD-card package for Audi **MHI2Q** infotainment units, enabling the **native CarPlay AltScreen (secondary navigation video stream)** directly on the vehicle's **Virtual Cockpit**, integrated with full 3D turn-by-turn route guidance, steering-wheel map zoom, and vehicle marker centering.
 
 The core display pipeline, watermark removal, aspect-ratio correction, steering-wheel zoom, and RGI integration have been vehicle-validated.

@@ -2,7 +2,7 @@
 # mib2q-carplay-rgi companion for MMI-Cockpit-Carplay (AltScreen).
 #
 #   rgi_companion.sh install   called by INSTALL after the Java80 JAR is published
-#   rgi_companion.sh remove    called by RESTORE ORIGINAL before the native restore
+#   rgi_companion.sh remove    called after the native configuration is restored
 #
 # install puts the RGI native half next to AltScreen:
 #   /mnt/app/root/hooks/  libcarplay_hook.so maneuver_render flag_atlas.rgba
@@ -14,8 +14,8 @@
 #                               CARPLAY_PRELOAD_EXTRA); the wrapper builds
 #                               LD_PRELOAD=<altscreen>:libcarplay_hook.so for dio_manager
 #   dio_manager.json            iAP2 route-guidance IDs 0x5200..0x5204
-# remove deletes only the files above; both JSON files come back from the AltScreen
-# ORIGINAL backup in the controller restore that follows.
+# remove deletes only the files above, after the controller has restored both JSON
+# files from ORIGINAL and verified their bytes.
 #
 # QNX 6.5 /bin/sh is pdksh: portable subset only, no GNU tools.
 set -u
@@ -48,7 +48,13 @@ mount_app_rw(){ [ "$TESTING" = 1 ] || mount -uw /mnt/app; }
 mount_app_ro(){ [ "$TESTING" = 1 ] || mount -ur /mnt/app; }
 mount_system_rw(){ [ "$TESTING" = 1 ] || mount -uw /mnt/system; }
 mount_system_ro(){ [ "$TESTING" = 1 ] || mount -ur /mnt/system; }
-finish_mounts(){ sync >/dev/null 2>&1 || true; mount_app_ro >/dev/null 2>&1 || true; mount_system_ro >/dev/null 2>&1 || true; }
+finish_mounts(){
+    cleanup_rc=0
+    sync || { echo "FAIL: RGI sync failed" >&2; cleanup_rc=1; }
+    mount_app_ro || { echo "FAIL: cannot remount /mnt/app read-only" >&2; cleanup_rc=1; }
+    mount_system_ro || { echo "FAIL: cannot remount /mnt/system read-only" >&2; cleanup_rc=1; }
+    return "$cleanup_rc"
+}
 fail(){ echo "FAIL: $1"; finish_mounts; exit 1; }
 
 mode_for(){
@@ -158,10 +164,10 @@ patch_dio(){
 
 remove_files(){
     for name in $FILES; do
-        rm -f "$HOOKS/$name" "$HOOKS/$name.rgi-new."* 2>/dev/null
+        rm -f "$HOOKS/$name" "$HOOKS/$name.rgi-new."* || return 1
         [ ! -e "$HOOKS/$name" ] || return 1
     done
-    rm -f "$HOOKS/cluster_ui.url" "$HOOKS/cluster_fps"   # GEM cluster layout / refresh choices
+    rm -f "$HOOKS/cluster_ui.url" "$HOOKS/cluster_fps" || return 1
     rmdir "$HOOKS" 2>/dev/null || true
 }
 
@@ -183,23 +189,34 @@ cmd_install(){
     for name in $FILES; do
         dst=$HOOKS/$name; tmp=$dst.rgi-new.$$
         cp "$SRC/$name" "$tmp" && cmp -s "$SRC/$name" "$tmp" && chmod "$(mode_for "$name")" "$tmp" &&
-            mv -f "$tmp" "$dst" || { rm -f "$tmp"; remove_files; fail "cannot publish $dst"; }
+            mv -f "$tmp" "$dst" || { rm -f "$tmp"; fail "cannot publish $dst"; }
     done
     echo "RGI_NATIVE=INSTALLED dir=/mnt/app/root/hooks"
-    patch_json "$AWKF" "$SRC/carplay_child.json" || { remove_files; fail "smartphone_integrator.json not patched"; }
-    patch_dio || { remove_files; fail "dio_manager.json not patched"; }
-    finish_mounts
+    # Keep the runtime available until the outer rollback restores its launcher.
+    patch_json "$AWKF" "$SRC/carplay_child.json" || fail "smartphone_integrator.json not patched"
+    patch_dio || fail "dio_manager.json not patched"
+    finish_mounts || return 1
     echo "RGI_COMPANION=PASS"
 }
 
 cmd_remove(){
+    [ -s "$CFG" ] || fail "cannot verify restored SI configuration: $CFG"
+    if grep -Eq '"exec"[[:space:]]*:[[:space:]]*"carplay_startup[.]sh"|/mnt/app/root/hooks(/|")' "$CFG"; then
+        fail "SI still references the RGI runtime; restore its configuration before removing files"
+    else
+        [ "$?" -eq 1 ] || fail "cannot read restored SI configuration"
+    fi
     present=0
     for name in $FILES; do [ -e "$HOOKS/$name" ] && present=1; done
-    if [ "$present" = 0 ]; then echo "RGI_NATIVE=ABSENT"; return 0; fi
+    if [ "$present" = 0 ]; then
+        finish_mounts || return 1
+        echo "RGI_NATIVE=ABSENT"
+        return 0
+    fi
     # Best effort: a live renderer is reaped by the reboot RESTORE requires anyway.
     mount_app_rw || fail "cannot mount /mnt/app writable"
     remove_files || fail "cannot remove RGI files from /mnt/app/root/hooks"
-    finish_mounts
+    finish_mounts || return 1
     echo "RGI_NATIVE=REMOVED"
 }
 

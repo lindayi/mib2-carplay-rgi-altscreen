@@ -134,10 +134,7 @@ sync >/dev/null 2>&1 || true
 mount_app_ro || { echo "FAIL: cannot remount /mnt/app read-only"; exit 1; }
 
 rm -f "$STARTED" 2>/dev/null || true
-# RGI companion files; both JSON files return with the ORIGINAL backup below.
-if [ -f "$SCRIPTDIR/rgi_companion.sh" ]; then
-    /bin/sh "$SCRIPTDIR/rgi_companion.sh" remove || { echo "FAIL: RGI companion removal failed"; exit 1; }
-fi
+# The controller restores the launcher configuration before removing RGI files.
 /bin/sh "$CONTROLLER" restore
 RC=$?
 [ "$RC" -eq 0 ] || exit "$RC"

@@ -615,6 +615,11 @@ case "$CMD" in
         ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$diag" remove || fail "could not disable universal persistent diagnostics"
     fi
     delegate_restore_recorded "$route" || exit $?
+    # Keep the pending journal and recovery scripts until RGI cleanup is durable.
+    RGI_COMPANION="$SCRIPTDIR/rgi_companion.sh"
+    [ -f "$RGI_COMPANION" ] || fail "RGI cleanup helper missing; keep the runtime and retry RESTORE ORIGINAL"
+    ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$RGI_COMPANION" remove ||
+        fail "originals restored but RGI cleanup failed; retry RESTORE ORIGINAL"
     remove_runtime_scripts || fail "originals restored but persistent runtime cleanup failed"
     cleanup_volatile_runtime || fail "project volatile cleanup failed after RESTORE"
     record_transaction RESTORE COMMITTED || echo "WARN: RESTORE completed but SD transaction log could not be updated" >&2

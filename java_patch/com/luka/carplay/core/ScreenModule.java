@@ -109,11 +109,21 @@ public final class ScreenModule implements Module {
 
     /** Poll the AltScreen markers; only the switch worker calls this, never under LOCK. */
     private static void refreshAltScreenVideo() {
-        boolean ready = connected && com.luka.carplay.cluster.AltScreenVideo.isReady();
-        if (ready == altScreenVideo) return;
-        altScreenVideo = ready;
+        boolean ready = com.luka.carplay.cluster.AltScreenVideo.isReady();
+        boolean changed;
+        synchronized (LOCK) {
+            ready = connected && ready;
+            changed = ready != altScreenVideo;
+            altScreenVideo = ready;
+            // A restart can reset desiredCtx without changing the readiness markers.
+            int target = contextFor(connected, ready, navActive);
+            if (desiredCtx != target) {
+                desiredCtx = target;
+                LOCK.notifyAll();
+            }
+        }
+        if (!changed) return;
         Log.i(TAG, "AltScreen video " + (ready ? "ready -> ctx " + CTX_CLUSTER_VIDEO : "gone"));
-        republish();
         if (ready) com.luka.carplay.cluster.AltScreenCluster.onVideoReady();
     }
 
@@ -248,6 +258,7 @@ public final class ScreenModule implements Module {
             if (dm != d) { dm = d; currentCtx = -1; }
             connected = true;
             navActive = false;
+            altScreenVideo = false;
             navHidePending = false;
             desiredCtx = CTX_STOCK_CLUSTER;
         }
@@ -275,6 +286,7 @@ public final class ScreenModule implements Module {
         synchronized (LOCK) {
             connected = false;
             navActive = false;
+            altScreenVideo = false;
             navHidePending = false;
         }
         republish();
