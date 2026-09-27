@@ -20,6 +20,8 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CurrentPositionDeliveryTest.java" \
     "$PROJECT_DIR/tests/RouteInfoTimeoutTest.java" \
+    "$PROJECT_DIR/tests/InfoPreferencesTest.java" \
+    "$PROJECT_DIR/tests/DestinationTimeZoneTest.java" \
     "$PROJECT_DIR/tests/CurrentPositionStockChainTest.java" \
     "$PROJECT_DIR/tests/VCTextScrollTest.java" \
     "$PROJECT_DIR/tests/RouteInfoPresentationTest.java" \
@@ -46,6 +48,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 (cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \
     com.luka.carplay.rgd.VCTextScrollTest ${VC_UNICODE_TEST_DIR:+"$VC_UNICODE_TEST_DIR"})
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" DestinationTimeZoneTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteGuidanceDeltaTest
 # This probe loads additional IBM J9 classes reconstructed from the stock JXE.
@@ -69,6 +72,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.CurrentPositionDeliveryTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteInfoTimeoutTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.InfoPreferencesTest
 "$JDK_DIR/bin/java" -Xverify:none \
     -cp "$TEST_DIR:$PATCH_JAR:$STOCK_COMBINED:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar" \
     com.luka.carplay.rgd.CurrentPositionStockChainTest

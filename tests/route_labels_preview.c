@@ -65,15 +65,16 @@ int main(void) {
     }
     const char *names[]={"popup","popup-lanes","in-tube-lanes","long-road","metric","distance-only",
         "uturn-lanes","roundabout-lanes","exit-lanes","left-turn-lanes","large-lanes","large-roundabout",
-        "scroll-start","scroll-moving","lanes-hidden"};
+        "scroll-start","scroll-moving","lanes-hidden","preset-minimal","preset-standard","preset-large"};
     const char *roads[]={"Main Street","Main Street","Main Street","Commonwealth Avenue Extension","Rue de l'Eglise","",
         "Main Street","Park Avenue","Exit 12","Broadway","Main Street","Park Avenue",
-        "Commonwealth Avenue Extension","Commonwealth Avenue Extension","Main Street"};
-    for(int test=0;test<15;test++) {
+        "Commonwealth Avenue Extension","Commonwealth Avenue Extension","Main Street","Main Street","Main Street","Main Street"};
+    for(int test=0;test<18;test++) {
         cr_cmd_t options={CMD_DISPLAY_OPTIONS,0,{15,0,0,1}};
-        options.payload[1]=test==10 || test==11;
+        options.payload[1]=test==10 || test==11 || test==17;
         options.payload[2]=test==12 || test==13;
         if(test==14)options.payload[0]=3;
+        if(test==15)options.payload[0]=5;
         cr_route_labels_configure(&options);
         maneuver.icon=test==6?ICON_UTURN:(test==7 || test==11)?ICON_ROUNDABOUT:test==8?ICON_EXIT:ICON_TURN;
         maneuver.direction=test==6 || test==9?-1:1;
@@ -124,5 +125,5 @@ int main(void) {
     cr_route_labels_shutdown();render_shutdown();
     eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
     eglDestroyContext(display,context);eglDestroySurface(display,surface);eglTerminate(display);
-    puts("route_labels_preview: fifteen real GLES2 panel/lanes/label/options renders saved");
+    puts("route_labels_preview: eighteen real GLES2 panel/lanes/label/options renders saved");
 }

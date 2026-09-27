@@ -30,6 +30,9 @@ public final class MenuModel {
         if(page.equals("root"))return "";
         if(page.startsWith("choice:")) {
             int id=Integer.parseInt(page.substring(7));
+            if(id==Setting.MODE)return "root";
+            if(id==Setting.PRESET)return "appearance";
+            if(id>=Setting.INFO_DEFAULT)return "information";
             if(id<=Setting.LAYOUT)return "presentation";
             if(id<=Setting.PROGRESS)return "guidance";
             if(id<=Setting.BACKGROUND)return "appearance";
@@ -46,21 +49,30 @@ public final class MenuModel {
         String title=page.startsWith("choice:")?Setting.ALL[Integer.parseInt(page.substring(7))].label:
             page.equals("root")?"Carplay Altscreen":page.equals("presentation")?"Cockpit presentation":
             page.equals("guidance")?"Guidance details":page.equals("appearance")?"Overlay appearance":
-            page.equals("controls")?"Controls":page.equals("diagnostics")?"Status & diagnostics":
+            page.equals("information")?"VC information bar":page.equals("controls")?"Controls":page.equals("diagnostics")?"Status & diagnostics":
             page.equals("recovery")?"Recovery":page.equals("status")?"System status":"Confirm action";
         rows.add(new Row(title,"",-1,0,true,false,false));
         if(page.equals("root")) {
-            settings(rows,new int[]{Setting.ENABLED},prefs);
-            item(rows,"Cockpit presentation","presentation");
+            settings(rows,new int[]{Setting.ENABLED,Setting.MODE},prefs);
+            item(rows,"Reapply cluster layout","action:reapply_layout");
+            item(rows,"Phone map layout","presentation");
+            item(rows,"VC information bar","information");
             item(rows,"Guidance details","guidance");
             item(rows,"Overlay appearance","appearance");
             item(rows,"Controls","controls");
             item(rows,"Status & diagnostics","diagnostics");
             item(rows,"Recovery","recovery");
             item(rows,"Reset display/control preferences","confirm:reset");
-        } else if(page.equals("presentation"))settings(rows,new int[]{Setting.MODE,Setting.LAYOUT},prefs);
+        } else if(page.equals("presentation"))settings(rows,new int[]{Setting.LAYOUT},prefs);
+        else if(page.equals("information")) {
+            settings(rows,new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},prefs);
+            rows.add(new Row("Arrival uses destination time zone when supplied","",-1,0,true,false,false));
+        }
         else if(page.equals("guidance"))settings(rows,new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS},prefs);
-        else if(page.equals("appearance"))settings(rows,new int[]{Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND},prefs);
+        else if(page.equals("appearance")) {
+            settings(rows,new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND},prefs);
+            rows.add(new Row("Custom is retained; editing a preset creates new Custom","",-1,0,true,false,false));
+        }
         else if(page.equals("controls"))settings(rows,new int[]{Setting.ZOOM,Setting.ZOOM_SPEED,Setting.TOUCHPAD,Setting.TOUCH_SENSITIVITY},prefs);
         else if(page.equals("diagnostics")) {
             item(rows,"System status","status");

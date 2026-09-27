@@ -196,6 +196,8 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     if (upd->present & RGD_UPD_CURRENT_ROAD) memcpy(c->current_road, upd->current_road, sizeof(c->current_road));
     if (upd->present & RGD_UPD_DESTINATION) memcpy(c->destination, upd->destination, sizeof(c->destination));
     if (upd->present & RGD_UPD_ETA) c->eta = upd->eta;
+    if (upd->present & RGD_UPD_DEST_TIMEZONE)
+        c->destination_timezone_minutes = upd->destination_timezone_minutes;
     if (upd->present & RGD_UPD_TIME_REMAINING) c->time_remaining = upd->time_remaining;
     if (upd->present & RGD_UPD_DISTANCE_REMAINING) c->distance_remaining = upd->distance_remaining;
     if (upd->present & RGD_UPD_DISTANCE_STRING) memcpy(c->distance_string, upd->distance_string, sizeof(c->distance_string));
@@ -228,6 +230,8 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
             if (generation <= g_rgd.route_generation)
                 generation = g_rgd.route_generation + 1;
             g_rgd.route_generation = generation;
+            g_rgd.update_cache.present &= ~RGD_UPD_DEST_TIMEZONE;
+            g_rgd.update_cache.destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
 		    g_rgd.current_list_present = false;
 		    g_rgd.current_list_count = 0;
 		    g_rgd.seq_counter = 0;
@@ -250,6 +254,7 @@ static const uint64_t RGD_UPD_WRITE_MASK = RGD_UPD_ROUTE_STATE |
                                             RGD_UPD_DISTANCE_REMAINING |
                                             RGD_UPD_DIST_TO_MANEUVER |
                                             RGD_UPD_ETA |
+                                            RGD_UPD_DEST_TIMEZONE |
                                             RGD_UPD_TIME_REMAINING |
                                             RGD_UPD_CURRENT_ROAD |
                                             RGD_UPD_DESTINATION |
@@ -468,6 +473,13 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
     rgd_update_t enriched = *upd;
+    if (((enriched.present & RGD_UPD_SOURCE_SUPPORTS_RG) && !enriched.source_supports_route_guidance)
+            || ((enriched.present & RGD_UPD_DESTINATION) && !(enriched.present & RGD_UPD_DEST_TIMEZONE)
+            && (g_rgd.update_cache.present & RGD_UPD_DESTINATION)
+            && strcmp(enriched.destination, g_rgd.update_cache.destination) != 0)) {
+        enriched.present |= RGD_UPD_DEST_TIMEZONE;
+        enriched.destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
+    }
     if (enriched.present & RGD_UPD_LANE_INDEX) {
         int slot = rgd_lane_slot_for_iap_index(enriched.lane_guidance_index, false);
         enriched.present |= RGD_UPD_LANE_SLOT;
@@ -1015,6 +1027,8 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_uint(b, "dist_maneuver_m", upd->dist_to_maneuver);
     if (present & RGD_UPD_ETA)
         bus_text_uint(b, "eta_seconds", upd->eta);
+    if (present & RGD_UPD_DEST_TIMEZONE)
+        bus_text_int(b, "destination_timezone_minutes", upd->destination_timezone_minutes);
     if (present & RGD_UPD_TIME_REMAINING)
         bus_text_uint(b, "time_remaining_seconds", upd->time_remaining);
     if (present & RGD_UPD_CURRENT_ROAD)

@@ -9,10 +9,29 @@ cp "$PROJECT/tests/fixtures/carplay-preferences.txt" "$T/preferences"
 export CP_SETTINGS_FILE="$T/preferences"
 source "$T/hooks/carplay_settings.sh"
 test "$(cp_setting enabled 1)" = 0
-for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose; do
+for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset; do
     cp_setting "$key" 0 >/dev/null
 done
 cp "$T/preferences" "$T/good"
+cp "$PROJECT/tests/fixtures/carplay-preferences-v1.txt" "$T/preferences"
+for key in enabled info_default info_road info_return preset; do test "$(cp_setting "$key" 1)" = 0; done
+cmp "$T/preferences" "$PROJECT/tests/fixtures/carplay-preferences-v1.txt"
+echo 'preset=0' >> "$T/preferences"
+if cp_setting enabled 1; then echo "FAIL: mixed v1/v2 accepted"; exit 1; fi
+sed '/info_return=/d' "$T/good" > "$T/preferences"
+if cp_setting enabled 1; then echo "FAIL: incomplete v2 accepted"; exit 1; fi
+for preset in 0 1 2 3; do
+    sed "s/preset=0/preset=$preset/" "$T/good" > "$T/preferences"
+    case "$preset" in
+        0|2) expected="1 1 1 1 0 0 0 ";;
+        1) expected="1 0 1 0 0 0 1 ";;
+        3) expected="1 1 1 1 1 0 0 ";;
+    esac
+    actual=""
+    for key in distance road lanes progress text_size road_scroll background; do actual="$actual$(cp_setting "$key" 0) "; done
+    test "$actual" = "$expected"
+done
+cp "$T/good" "$T/preferences"
 echo 'enabled=1' >> "$T/preferences"
 if cp_setting enabled 1; then echo "FAIL: duplicate setting accepted"; exit 1; fi
 cp "$T/good" "$T/preferences"

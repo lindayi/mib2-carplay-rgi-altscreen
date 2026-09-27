@@ -20,7 +20,7 @@ public final class Preferences {
         private final int[] values;
         public final long revision;
         Snapshot(int[] values,long revision){this.values=values;this.revision=revision;}
-        public int get(int id){return values[id];}
+        public int get(int id){return Setting.presetValue(values[Setting.PRESET],id,values[id]);}
         public boolean on(int id){return get(id)!=0;}
         int[] copy(){int[] next=new int[values.length];System.arraycopy(values,0,next,0,next.length);return next;}
     }
@@ -61,7 +61,7 @@ public final class Preferences {
     static int[] parse(String text) throws IOException {
         int[] values=defaults();
         boolean[] seen=new boolean[values.length];
-        boolean format=false;
+        int format=0;
         BufferedReader reader=new BufferedReader(new StringReader(text));
         for(String line;(line=reader.readLine())!=null;) {
             if(line.length()==0 || line.charAt(0)=='#')continue;
@@ -69,8 +69,9 @@ public final class Preferences {
             if(equals<=0 || equals!=line.lastIndexOf('='))throw new IOException("Invalid setting line");
             String key=line.substring(0,equals), raw=line.substring(equals+1);
             if(key.equals("format")) {
-                if(format || !raw.equals("1"))throw new IOException("Unsupported settings format");
-                format=true;continue;
+                if(format!=0 || !raw.equals("1") && !raw.equals("2"))
+                    throw new IOException("Unsupported settings format");
+                format=Integer.parseInt(raw);continue;
             }
             int id=Setting.index(key);
             if(id<0 || seen[id])throw new IOException("Unknown or duplicate setting: "+key);
@@ -81,8 +82,12 @@ public final class Preferences {
             if(value<0 || value>=Setting.ALL[id].choices.length)throw new IOException("Out-of-range setting: "+key);
             values[id]=value;seen[id]=true;
         }
-        if(!format)throw new IOException("Missing settings format");
-        for(int i=0;i<seen.length;i++)if(!seen[i])throw new IOException("Missing setting: "+Setting.ALL[i].key);
+        if(format==0)throw new IOException("Missing settings format");
+        for(int i=0;i<seen.length;i++) {
+            if(format==1 && i>=Setting.VERSION_1_COUNT) {
+                if(seen[i])throw new IOException("Version 2 setting in version 1 file");
+            } else if(!seen[i])throw new IOException("Missing setting: "+Setting.ALL[i].key);
+        }
         return values;
     }
     private int[] load() throws IOException {
@@ -99,13 +104,13 @@ public final class Preferences {
         return values;
     }
     static String encode(int[] values) {
-        StringBuffer out=new StringBuffer("format=1\n");
+        StringBuffer out=new StringBuffer("format=2\n");
         for(int i=0;i<values.length;i++)out.append(Setting.ALL[i].key).append('=').append(values[i]).append('\n');
         return out.toString();
     }
     private void publish(int[] values,String problem) {
         boolean changed=!problem.equals(error);
-        for(int i=0;i<values.length;i++)if(values[i]!=snapshot.get(i))changed=true;
+        for(int i=0;i<values.length;i++)if(values[i]!=snapshot.values[i])changed=true;
         error=problem;
         if(!changed)return;
         snapshot=new Snapshot(values,++revision);
@@ -133,6 +138,11 @@ public final class Preferences {
         if(id<0 || id>=Setting.ALL.length || value<0 || value>=Setting.ALL[id].choices.length)
             throw new IOException("Invalid preference");
         int[] values=load();
+        if(Setting.isAppearance(id) && values[Setting.PRESET]!=0) {
+            int preset=values[Setting.PRESET];
+            for(int i=0;i<values.length;i++)values[i]=Setting.presetValue(preset,i,values[i]);
+            values[Setting.PRESET]=0;
+        }
         values[id]=value;
         save(values);
     }

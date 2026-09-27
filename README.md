@@ -121,8 +121,11 @@ features below follow it automatically.
   ([details](docs/cluster/display-contexts.md)).
 - **Route text in the Virtual Cockpit.** A text line names the exit sign or the next road (the
   current road when there is nothing else); long names scroll. Press **OK** (the left steering-wheel
-  roller) to switch it to arrival time and time left, and press again to go back; it returns by itself
-  after 20 s ([details](docs/rgd/vc-route-text.md)).
+  roller) to toggle Road and Trip. Normal MMI settings choose the default page,
+  current-road versus next-road/exit text, and 20-second return versus keeping the
+  selection until OK or route end. A valid phone-supplied destination offset is
+  used for Audi's existing arrival clock and the Trip summary; otherwise HU-local
+  time remains in use ([details and limits](docs/rgd/vc-route-text.md)).
 - **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
 - **Next-turn labels in the custom RGI panel.** Distance and the next road/exit appear beneath
   the arrow, with lane guidance reserved above them. Distance uses the same stock MMI formatter
@@ -145,11 +148,14 @@ features below follow it automatically.
   The selected layout is reapplied on later route transitions, not just video
   startup, including in map-only mode. **Known limitation:** the intermittent
   Google Maps offset has not yet been vehicle-retested with this correction;
-  neither the preset nor reapplication guarantees marker centering.
+  neither the preset nor reapplication guarantees marker centering. The normal-MMI
+  **Reapply cluster layout** action resends the current connection's layout without
+  restarting or reconnecting; it does not apply a newly saved layout early.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
-  **Carplay Altscreen**. Grouped controls cover master enable, presentation/layout,
-  overlay information/appearance, wheel/touchpad input, diagnostics and mirror
+  **Carplay Altscreen**. The root directly exposes master enable and presentation
+  mode. Grouped controls cover phone layout, the existing VC information bar,
+  Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
   recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
   reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
 - **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a

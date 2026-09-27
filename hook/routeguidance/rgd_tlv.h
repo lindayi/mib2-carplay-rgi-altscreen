@@ -80,6 +80,8 @@
 #define RGD_TLV_LANE_GUIDANCE_SHOWING   0x0012
 #define RGD_TLV_SOURCE_NAME             0x0013
 #define RGD_TLV_SOURCE_SUPPORTS_RG      0x0014
+#define RGD_TLV_DEST_TIMEZONE           0x0015
+#define RGD_UNKNOWN_TIMEZONE           32767
 
 /*
  * RouteGuidanceState values (as observed in MHI3 dio_manager type-info strings).
@@ -294,6 +296,7 @@ typedef struct {
     uint32_t distance_remaining;
     uint32_t dist_to_maneuver;
     uint64_t eta;
+    int16_t destination_timezone_minutes;
     uint64_t time_remaining;
     char current_road[256];
     char destination[256];
@@ -327,6 +330,7 @@ typedef struct {
 #define RGD_UPD_SOURCE_NAME          (1ULL << 19)
 #define RGD_UPD_SOURCE_SUPPORTS_RG   (1ULL << 20)
 #define RGD_UPD_LANE_SLOT            (1ULL << 21)  /* Bus-only remapped lane slot */
+#define RGD_UPD_DEST_TIMEZONE        (1ULL << 22)
 
 /* rgd_lane_guidance_t present bits */
 #define RGD_LANE_COMPONENT_IDS       (1ULL << 0)

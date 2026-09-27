@@ -435,7 +435,18 @@ bool rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                 }
                 break;
 
-            case 0x0015: /* destinationTimeZoneOffsetMinutes (iOS 17+) */
+            case RGD_TLV_DEST_TIMEZONE:
+                out->destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
+                out->present |= RGD_UPD_DEST_TIMEZONE;
+                if (val_len == 2) {
+                    int16_t minutes = (int16_t)read_be16(val);
+                    if (minutes >= -840 && minutes <= 840)
+                        out->destination_timezone_minutes = minutes;
+                }
+                if (out->destination_timezone_minutes == RGD_UNKNOWN_TIMEZONE)
+                    LOG_WARN(LOG_MODULE, "Invalid destination timezone; clearing offset (len=%d)", val_len);
+                break;
+
             case 0x0016: /* stopType (iOS 17+) */
             case 0x0017: /* electricVehicleDestination (iOS 17+) */
             case 0x0018: /* reserved/future iOS extension */
@@ -448,7 +459,7 @@ bool rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                  * Mapping verified against
                  * CarPlay.framework/CarPlay/CPRouteGuidance.mm:
                  * paramKey:0..26 with selectors
-                 * destinationTimeZoneOffsetMinutes(21), stopType(22),
+                 * stopType(22),
                  * electricVehicleDestination(23).
                  */
                 break;

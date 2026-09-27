@@ -51,7 +51,7 @@ flowchart LR
 ## 📊 0x5201 RouteGuidanceUpdate - our IDs match Apple exactly
 
 Every ID matches `+[ACCNavigationRouteGuidanceUpdateInfo keyForType:]` (accessoryd 23G71).
-`0x01-0x14` we **parse**; `0x15-0x1A` Apple emits but we **do not parse** (see gaps).
+`0x01-0x15` we **parse**; `0x16-0x1A` Apple emits but we **do not parse** (see gaps).
 
 | ID | Apple field (ACCNav_RGUpdate_*) | our field | parsed |
 |---:|---|---|:--:|
@@ -73,7 +73,7 @@ Every ID matches `+[ACCNavigationRouteGuidanceUpdateInfo keyForType:]` (accessor
 | 0x12 | LaneGuidanceShowing | `laneGuidanceShowing` | [x] |
 | 0x13 | SourceName | (from 0x5200) | [x] |
 | 0x14 | SourceSupportsRouteGuidance | `sourceSupportsRg` | [x] |
-| 0x15 | DestinationTimeZoneOffsetMinutes | - | [ ] |
+| 0x15 | DestinationTimeZoneOffsetMinutes | `destinationTimeZoneMinutes` | [x] |
 | 0x16 | StopType | - | [ ] |
 | 0x17 | ChargingStationInfoList | - | [ ] |
 | 0x18-0x1A | Arrival / Departure / FinalWaypoint BatteryLevel | - | [ ] |
@@ -119,10 +119,34 @@ disconnect clear carry it; Java clears route and lane caches when it changes, so
 reuses slot versions never inherits the old route's fields - see [rgd-activation](rgd-activation.md). Hook and JAR must
 be deployed together: an older hook sends no `route_generation`.
 
+## Destination time-zone offset
+
+The new parser accepts exactly two bytes, big-endian signed minutes, in the range
+`-840..840`. Negative and fractional-hour offsets are preserved; zero means UTC,
+not absent. An invalid length/value logs a warning and explicitly clears the
+cached offset without rejecting otherwise valid route data. Internal unknown is
+`32767`, not `-1`.
+
+The native cache and `RGD_UPD_WRITE_MASK` carry bit 22, publishing
+`destination_timezone_minutes`. Java uses the matching dirty bit. A new native
+route generation, a changed destination without a replacement offset, a support
+hard-clear or disconnect must not reuse the old destination's zone. Omitted
+fields in ordinary same-route deltas retain the current value.
+
+**Evidence limit:** the parameter ID is from the accessoryd analysis above.
+The iOS 17 [CPRouteGuidance runtime header](https://github.com/MTACS/iOS-17-Runtime-Headers/blob/d1d960dfaa4107765dd7fcf891e4967c0930d5fd/Frameworks/CarPlay.framework/CPRouteGuidance.h)
+declares `destinationTimeZoneOffsetMinutes` as signed `short`. The two-byte
+big-endian wire interpretation follows that type and the existing RGD integer
+encoding; it has not been independently confirmed with a phone capture in this
+task. Host tests use synthetic TLVs through the production parser/cache/text
+writer and Java/BAP clock conversion. They do not establish whether this iPhone's
+Google Maps supplies the field, or validate cross-zone trips in the vehicle.
+Unrecognized encodings fall back to HU-local time with a diagnostic.
+
+See [VC route text](vc-route-text.md) for display placement and UTC-duration rules.
+
 ## ⚠️ Gaps - Apple sends, we drop
 
-- **0x15 DestinationTimeZoneOffsetMinutes** - the ETA clock is computed in the vehicle's TZ, ignoring
-  the destination TZ Apple provides here. Cross-TZ trips show the arrival clock in the wrong zone.
 - **0x16 StopType**, **0x17 ChargingStationInfoList**, **0x18-0x1A BatteryLevel** - EV routing
   metadata, unused.
 - **0x5202/0x02 Description (InstructionText)** - parsed but not surfaced on the cluster.

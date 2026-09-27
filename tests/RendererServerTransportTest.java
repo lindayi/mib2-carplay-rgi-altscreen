@@ -190,6 +190,20 @@ public final class RendererServerTransportTest {
             Field packet=q[0].getClass().getDeclaredField("packet");packet.setAccessible(true);
             byte[] bytes=(byte[])packet.get(q[0]);
             check(bytes[0]==16 && bytes[2]==10 && bytes[3]==1 && bytes[4]==1 && bytes[5]==1,"option wire fields");
+            for(int preset=1;preset<=3;preset++) {
+                preferences.set(com.luka.carplay.settings.Setting.PRESET,preset);
+                check(server.sendDisplayOptions(),"preset options send");
+                q=(Object[])get(server,"writeQueue");
+                int head=(Integer)get(server,"writeHead");
+                bytes=(byte[])packet.get(q[head]);
+                check((Integer)get(server,"writeCount")==1 && bytes[2]==(preset==1?5:15)
+                    && bytes[3]==(preset==3?1:0) && bytes[4]==0,"effective preset wire fields");
+            }
+            preferences.set(com.luka.carplay.settings.Setting.PRESET,0);
+            check(server.sendDisplayOptions(),"restore Custom options");
+            q=(Object[])get(server,"writeQueue");
+            bytes=(byte[])packet.get(q[(Integer)get(server,"writeHead")]);
+            check(bytes[2]==10 && bytes[3]==1 && bytes[4]==1,"Custom wire settings lost");
             server.sendClear();
             preferences.set(com.luka.carplay.settings.Setting.TEXT_SIZE,0);
             check(server.sendDisplayOptions(),"options after CLEAR");

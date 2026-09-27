@@ -42,6 +42,15 @@ public final class SettingsRuntimeTest {
         long wait=System.currentTimeMillis()+5000;
         while(SettingsRuntime.busy() && System.currentTimeMillis()<wait)Thread.sleep(20);
         check(!SettingsRuntime.busy(),"short action remained busy");
+        Field lock=SettingsRuntime.class.getDeclaredField("LOCK");lock.setAccessible(true);
+        synchronized(lock.get(null)) {
+            SettingsRuntime.action("reapply_layout");
+            check(SettingsRuntime.busy(),"accepted but queued action reported idle");
+        }
+        wait=System.currentTimeMillis()+4000;
+        while(SettingsRuntime.busy() && System.currentTimeMillis()<wait)Thread.sleep(20);
+        check(SettingsRuntime.result().contains("Action failed:") && !SettingsRuntime.result().contains("helper"),
+            "manual layout uses local worker and reports inactive-video failure: "+SettingsRuntime.result());
         SettingsRuntime.action("export_full");
         awaitFile(Paths.get("/tmp/menu-long-started"));
         SettingsRuntime.set(Setting.ZOOM,0);

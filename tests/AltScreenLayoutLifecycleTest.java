@@ -152,9 +152,18 @@ public final class AltScreenLayoutLifecycleTest {
             String right = BASE + "?maneuverLayout=rightaligned";
             write(preference, right);
             route(peer, "route_generation:n:106\n"); flush(peer, TOP);
+            AltScreenCluster.reapplyLayout(); expect(peer, TOP);
+            AltScreenCluster.flushLayout(); quiet(peer, "manual action does not read saved layout");
+            route(peer, "route_generation:n:107\n");
+            AltScreenCluster.reapplyLayout(); expect(peer, TOP);
+            AltScreenCluster.flushLayout(); quiet(peer, "manual and pending automatic request coalesce");
             CarplayBus.Observer retired = (CarplayBus.Observer)field(AltScreenCluster.class, "routeObserver").get(null);
             AltScreenCluster.stop();
+            try { AltScreenCluster.reapplyLayout(); throw new AssertionError("manual action while disabled"); }
+            catch (java.io.IOException expected) { }
             AltScreenCluster.start();
+            try { AltScreenCluster.reapplyLayout(); throw new AssertionError("manual action without video"); }
+            catch (java.io.IOException expected) { }
             AltScreenCluster.setVideoReady(true); flush(peer, TOP);
             byte[] stale = "route_state:n:1\n".getBytes("UTF-8");
             retired.onFrame(bus.connectionGeneration(), CarplayBus.EVT_RGD_UPDATE, 0, stale, stale.length);
@@ -162,6 +171,8 @@ public final class AltScreenLayoutLifecycleTest {
 
             int oldConnection = bus.connectionGeneration();
             Socket old = peer; peer = connect(); old.close();
+            try { AltScreenCluster.reapplyLayout(); throw new AssertionError("manual action reused old receiver URL"); }
+            catch (java.io.IOException expected) { }
             check(!bus.sendBinary(CarplayBus.CMD_ALT_UICTX, TOP.getBytes("UTF-8"), oldConnection),
                 "stale async send accepted for replacement receiver");
             flush(peer, right);

@@ -185,6 +185,23 @@ public final class AltScreenCluster {
         }
     }
 
+    /** Reuse only the latched URL; enqueueing performs no socket I/O or settings reads. */
+    public static void reapplyLayout() throws IOException {
+        synchronized (LOCK) {
+            if (!enabled || !video) throw new IOException("CarPlay cluster video is not active");
+            int generation = CarplayBus.getInstance().connectionGeneration();
+            if (generation < 0) throw new IOException("Receiver is not connected");
+            if (urlConnection != generation || sessionUrl == null)
+                throw new IOException("Session layout is not ready; reconnect if preferences were invalid");
+            if (!CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX,
+                    sessionUrl.getBytes("UTF-8"), generation))
+                throw new IOException("Receiver changed; layout was not queued");
+            pending = 0;
+            revision++;
+            Log.i(TAG, "cluster showUI queued connection=" + generation + " reason=manual url=" + sessionUrl);
+        }
+    }
+
     /** Stock CombiBAPListener.setMapScale steps (positive = zoom out). */
     public static void onMapScaleSteps(int steps) {
         if (steps == 0 || !ScreenModule.isAltScreenVideo()) return;

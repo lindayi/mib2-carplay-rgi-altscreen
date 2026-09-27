@@ -121,8 +121,16 @@ the centre knob still selects in the CarPlay Main UI.
 
 Gated to the confirmed VC map tab, the press then calls `ScreenModule.onSteeringWheelOkPressed()` ->
 `RouteGuidance` toggles the cluster route-info line between the **next turn-to street** (phase 0) and
-the **trip summary** (ETA / arrival clock + remaining, phase 1). Phase 1 falls back to phase 0 by
-itself 20 s after it was published. Text layout: [vc-route-text](../rgd/vc-route-text.md) (FctID 19).
+the **trip summary** (ETA / arrival clock + remaining, phase 1). Normal MMI settings
+choose either default page, next-road/exit versus current-road text, and 20-second
+return versus keeping the selection until OK or route end. The timer starts only
+after successful publication of a nondefault page. Keep also preserves selection
+across View changes. Text layout: [vc-route-text](../rgd/vc-route-text.md) (FctID 19).
+
+**Carplay Altscreen -> Reapply cluster layout** queues the current receiver
+connection's latched layout URL without reading a newly saved preference,
+restarting video or disconnecting CarPlay. It requires active video and a live
+receiver; success means queued, not phone acknowledgment or proven recentering.
 
 ```mermaid
 flowchart LR

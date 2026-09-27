@@ -26,6 +26,28 @@ int main(void) {
     rgd_parse_update(buf, 15, &u); assert((u.present & RGD_UPD_MANEUVER_LIST) && !u.maneuver_list_count);
     header(buf, 16, 0x5201); buf[15] = 0xAA;
     rgd_parse_update(buf, 16, &u); assert(u.present == 0);
+    {
+        const int16_t offsets[] = {-840,-720,-480,-210,-1,0,60,330,345,765,840};
+        header(buf,12,0x5201);
+        write_be16(buf+6,6);write_be16(buf+8,RGD_TLV_DEST_TIMEZONE);
+        for(size_t j=0;j<sizeof(offsets)/sizeof(offsets[0]);j++) {
+            write_be16(buf+10,(uint16_t)offsets[j]);
+            assert(rgd_parse_update(buf,12,&u));
+            assert(u.present==RGD_UPD_DEST_TIMEZONE && u.destination_timezone_minutes==offsets[j]);
+        }
+        const int16_t invalid[] = {-32768,-841,841,32767};
+        for(size_t j=0;j<sizeof(invalid)/sizeof(invalid[0]);j++) {
+            write_be16(buf+10,(uint16_t)invalid[j]);
+            assert(rgd_parse_update(buf,12,&u));
+            assert(u.present==RGD_UPD_DEST_TIMEZONE && u.destination_timezone_minutes==RGD_UNKNOWN_TIMEZONE);
+        }
+        for(int length=0;length<=4;length++) {
+            if(length==2)continue;
+            header(buf,10+length,0x5201);write_be16(buf+6,4+length);
+            assert(rgd_parse_update(buf,10+length,&u));
+            assert(u.present==RGD_UPD_DEST_TIMEZONE && u.destination_timezone_minutes==RGD_UNKNOWN_TIMEZONE);
+        }
+    }
     /* A valid maneuver index plus truncated following TLV must not replace that slot. */
     header(buf, 16, 0x5202); write_be16(buf + 6, 6); write_be16(buf + 8, MAN_TLV_INDEX); write_be16(buf + 10, 17);
     write_be16(buf + 12, 5); write_be16(buf + 14, MAN_TLV_TYPE);

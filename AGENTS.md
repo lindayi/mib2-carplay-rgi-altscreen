@@ -183,10 +183,27 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.
+- New saves use format 2 (20 settings); accept complete format 1 (16 settings) with
+  explicit new defaults, but never mixed/incomplete schemas. Reads do not migrate
+  files on disk. Presets compute effective values without overwriting Custom;
+  an individual appearance edit materializes the active preset into new Custom.
+- The lower VC information bar is FctID 19, not the small renderer footer. Its
+  current-road choice must not alter the footer's next-road-only policy. Timeouts
+  apply to the nondefault page after successful publication; Keep survives View,
+  but route/session boundaries reset to the configured default.
+- Destination-zone data uses native/Java bit 22 and signed minutes; unknown is
+  32767, never -1. Reset on route generation, destination replacement without a
+  new zone, hard clear and disconnect. Only arrival wall clocks are shifted;
+  duration stays UTC-based. The two-byte BE interpretation is host-tested, not
+  phone-capture-confirmed; see `docs\rgd\rgd-tlv.md`.
+- Manual layout reapply uses only the current connection's cached URL and the
+  generation-checked bus queue. No preference lookup, shell helper, video restart
+  or reconnect; queued is not phone-confirmed and does not prove recentering.
 - Production preference singleton construction is non-I/O; the worker loads it.
   UI/model callbacks read snapshots and queue changes, never wait for persistence.
 - Separate preference and action workers: an export/restart must not stall preference
-  updates. Bound queue/process waits and surface failure.
+  updates. Bound queue/process waits and surface failure. Busy includes queued work;
+  dequeue and mark-busy happen under the same lock, without a false-idle gap.
 - Master Off releases Java cockpit modules live and clears project preloads/skips
   the monitor on the **next CarPlay session**. It is not an uninstall.
 - Audi-map mode's next session retains RGI but omits the AltScreen preload.

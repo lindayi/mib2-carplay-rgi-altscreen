@@ -25,10 +25,12 @@ guard to make an unrelated firmware build pass.
 | Group | Controls | Application |
 | --- | --- | --- |
 | Main | Enabled | Off releases our cockpit modules immediately; the complete preload/extra-video bypass takes effect on the next CarPlay session. On after bypass also requires reconnect. |
-| Presentation | CarPlay map + guidance / CarPlay map only / Audi map + guidance | Display and RGI changes apply live when possible. The launcher excludes the AltScreen preload for a new Audi-map session; switching back then needs reconnect. |
+| Main | CarPlay map + guidance / CarPlay map only / Audi map + guidance | Direct access beside Enabled. Display and RGI changes apply live when possible. The launcher excludes the AltScreen preload for a new Audi-map session; switching back then needs reconnect. |
+| Main | Reapply cluster layout | Queues the current connection's selected URL again; no restart, reconnect or crop change. Requires active cluster video and a live receiver with a latched URL. Success means queued, not phone-confirmed or guaranteed recentering. |
 | Phone map | Top / right / no ETA / original AltScreen | Reconnect; requests the iPhone layout, not direct marker positioning. |
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
-| Appearance | Standard/large text, shorten/scroll displayed road label, solid/reduced backing | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
+| VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
+| Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
 | Controls | CarPlay wheel zoom and speed; touchpad DPAD bridge and sensitivity | Live. Disabling the touchpad bridge restores stock raw-pad forwarding; ordinary knob input remains stock. |
 | Diagnostics | Read-only status, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
 | Recovery | Automatic mirror recovery; confirmed video-only restart | Live, but only for an installed, armed video-enabled session. No USB, dio_manager or MMI restart command is exposed. |
@@ -45,6 +47,37 @@ change. This addresses missing layout requests, not direct vehicle-marker
 positioning. Google Maps alignment still needs vehicle confirmation; see
 [layout request lifetime](../input/steering-wheel.md#google-maps-alignment-route-lifetime-correction-vehicle-confirmation-pending).
 
+### Information bar and appearance
+
+OK toggles Road and Trip. By default a manual override returns to the configured
+default page 20 seconds after successful publication. **Keep until OK or route
+ends** also preserves the selection across View changes. A route/session boundary
+resets to the configured default; changing that default applies it immediately.
+The current-road option affects only this lower bar: the maneuver footer still
+uses next-road/exit information. No now-playing page is added.
+
+| Preset | Distance | Road | Lanes | Progress | Text | Scrolling | Backing |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Custom | Stored individual choices | Stored | Stored | Stored | Stored | Stored | Stored |
+| Minimal | On | Off | On | Off | Standard | Off | Reduced |
+| Standard | On | On | On | On | Standard | Off | Solid |
+| Large text | On | On | On | On | Large | Off | Solid |
+
+Selecting a preset retains the stored Custom configuration. Selecting Custom
+restores it. Editing an individual appearance/guidance control while a preset is
+active copies its effective values into a new Custom configuration, then changes
+that control. Presets do not change master enable, map layout, information-bar
+selection, input or recovery.
+
+Arrival time uses a valid phone-supplied destination UTC offset when available,
+otherwise the existing HU-local conversion. It appears in Audi's existing arrival
+clock and the fullscreen Trip summary, **not** as new maneuver-box text. The Trip
+clock adds `dest` when it differs from HU-local time; Audi's numeric clock cannot
+carry that label. Duration remains UTC-based and the HU's 12/24-hour preference
+still applies. This does not change Google Maps' own video-rendered ETA. Actual
+app transmission and cross-zone behavior require vehicle confirmation; see
+[the transport evidence and limits](../rgd/rgd-tlv.md#destination-time-zone-offset).
+
 ### Master Off and wireless adapters
 
 The next-session launcher clears `LD_PRELOAD` and `CARPLAY_PRELOAD_EXTRA`, skips
@@ -60,7 +93,11 @@ be performed on the car with a fresh connection.
 ## Persistence and concurrency
 
 `/mnt/persist/var/app/carplay_altscreen/preferences` is a strict, versioned
-key/index file. Java and shell validate the same complete schema. Save uses a
+key/index file. Java and shell validate the same complete schema. New saves use
+`format=2` (20 settings). Complete `format=1` files (16 settings) are accepted with
+Road/exit, next-road text, 20-second return and Custom defaults. Reads do not
+rewrite old files; the next save migrates them. Incomplete or mixed-version files
+are rejected rather than filled with silent defaults. Save uses a
 flushed/synced temporary file and rename. Invalid settings select the safe disabled
 path and report an error; preference reset can repair them without enabling the
 master switch. The old `cluster_ui.url` is imported only when no new preference
@@ -76,14 +113,17 @@ process control.
 ## Tests and limitations
 
 `TOOLS_DIR=... STOCK_JAR=MU1316-P5145-stock.jar ./scripts/test_mmi_settings.sh`
-checks every preference choice, malformed files, atomic-save failure, reset,
+checks every preference choice, v1 migration/v2 strictness, preset preservation,
+malformed files, atomic-save failure, reset,
 guarded factory patch equivalence, strict class verification, real native widget
 constructors, OEM-row retention, nonblocking action handling/timeouts, live
 lifecycle gates, and launcher preload behavior.
 
 Existing Java/renderer tests cover overlay option messages, reconnect replay and
 input behavior. `./scripts/test_route_labels.sh` renders real GLES previews of
-large text, scrolling and hidden lanes. `test_altscreen_e2e.sh` checks matching
+large text, scrolling, hidden lanes and the three named presets. Route tests cover
+both default pages, pinned selection, live changes, destination-zone arithmetic
+and synthetic native-TLV-to-Java/BAP transmission. `test_altscreen_e2e.sh` checks matching
 package installation, preservation, diagnostic actions and recovery.
 
 There is no host emulator of the complete Audi native HMI graphics/input service.

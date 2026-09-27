@@ -79,7 +79,9 @@ public final class SettingsRuntime {
     public static void addListener(Listener l){synchronized(LOCK){if(!listeners.contains(l))listeners.add(l);}}
     public static void removeListener(Listener l){synchronized(LOCK){listeners.remove(l);}}
     public static String result(){return result;}
-    public static boolean busy(){synchronized(LOCK){return busy || actionBusy;}}
+    public static boolean busy(){
+        synchronized(LOCK){return busy || actionBusy || !jobs.isEmpty() || pendingAction!=null || syncPending;}
+    }
     public static boolean reconnectPending(){
         Preferences.Snapshot s=Preferences.get().snapshot();
         return !sessionKnown || s.on(Setting.ENABLED)!=sessionEnabled
@@ -95,7 +97,8 @@ public final class SettingsRuntime {
     public static void set(int id,int value){enqueue(new Job(id,value,null));}
     public static void action(String action){
         if(!"reset".equals(action) && !"export_summary".equals(action)
-                && !"export_full".equals(action) && !"restart_video".equals(action))
+                && !"export_full".equals(action) && !"restart_video".equals(action)
+                && !"reapply_layout".equals(action))
             throw new IllegalArgumentException("Unknown menu action");
         enqueue(new Job(-1,0,action));
     }
@@ -187,14 +190,16 @@ public final class SettingsRuntime {
     private static void loop(int run){
         while(current(run)) {
             Job job=null;
-            synchronized(LOCK){if(!jobs.isEmpty())job=(Job)jobs.remove(0);}
+            synchronized(LOCK){if(!jobs.isEmpty()){job=(Job)jobs.remove(0);busy=true;}}
             if(job!=null) {
-                busy=true;
                 try {
                     if(job.action==null) {
                         Preferences.get().set(job.id,job.value);
                         result=Setting.ALL[job.id].reconnect?"Saved - reconnect CarPlay to apply":"Saved";
                         if(job.id==Setting.LAYOUT)layoutPending=true;
+                    } else if(job.action.equals("reapply_layout")) {
+                        com.luka.carplay.cluster.AltScreenCluster.reapplyLayout();
+                        result="Layout queued to receiver; not phone-confirmed";
                     } else if(job.action.equals("reset")) {
                         Preferences.get().reset();
                         layoutPending=true;
@@ -205,7 +210,7 @@ public final class SettingsRuntime {
                             else {pendingAction=job.action;result=actionBusy?"Action queued":"Running action...";}
                         }
                     }
-                } catch(IOException e){result="Not saved: "+e.getMessage();Log.e("Settings",result,e);}
+                } catch(IOException e){result=(job.action==null?"Not saved: ":"Action failed: ")+e.getMessage();Log.e("Settings",result,e);}
                 catch(SecurityException e){result="Not saved: access denied";Log.e("Settings",result,e);}
                 finally {busy=false;changed();}
             }

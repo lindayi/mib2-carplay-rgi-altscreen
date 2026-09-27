@@ -18,6 +18,8 @@ package com.luka.carplay.rgd;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.settings.Preferences;
+import com.luka.carplay.settings.Setting;
 
 public class RouteGuidance implements CarplayBus.Listener {
 
@@ -56,10 +58,15 @@ public class RouteGuidance implements CarplayBus.Listener {
     /* Guarded by presentationLock. View always writes phase 0; the steering-
      * wheel encoder press toggles it. The worker is the sole BAP publisher. */
     private int desiredInfoPhase;
+    private int defaultInfoPhase, infoRoad;
+    private boolean keepInfoSelection;
     private long infoReturnDeadline;
     private int presentationGeneration;
     private static final long PRESENTATION_RETRY_MS = 500L;
     private static final long INFO_TIME_HOLD_MS = 20000L;
+    private final Preferences.Listener infoPreferencesListener = new Preferences.Listener() {
+        public void preferencesChanged() { requestInfoPreferencesRefresh(); }
+    };
 
     private final com.luka.carplay.core.ScreenModule.ViewAreaModeListener viewAreaModeListener =
         new com.luka.carplay.core.ScreenModule.ViewAreaModeListener() {
@@ -119,6 +126,8 @@ public class RouteGuidance implements CarplayBus.Listener {
         public static final int DIRTY_VISIBLE_IN_APP   = 1 << 17;
         public static final int DIRTY_SOURCE_SUPPORTS_RG = 1 << 20;
         public static final int DIRTY_LANE_GUIDANCE    = 1 << 21;
+        public static final int DIRTY_DEST_TIMEZONE    = 1 << 22;
+        public static final int UNKNOWN_TIMEZONE = 32767;
 
         /* Per-maneuver dirty */
         public static final int MAN_DIR_ICON = 1;
@@ -148,6 +157,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Time */
         public int etaSeconds = -1;
+        public int destinationTimeZoneMinutes = UNKNOWN_TIMEZONE;
         public long timeRemainingSeconds = -1;
         public long timeRemainingSampleSeconds = -1L;
 
@@ -221,6 +231,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             distDestM = -1;
             distManeuverM = -1;
             etaSeconds = -1;
+            destinationTimeZoneMinutes = UNKNOWN_TIMEZONE;
             timeRemainingSeconds = -1;
             timeRemainingSampleSeconds = -1L;
             currentRoad = null;
@@ -297,6 +308,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /** Re-publish the cached full snapshot after a late renderer connection/restart. */
         public void markAllDirtyForReplay() {
+            dirtyMask |= DIRTY_DEST_TIMEZONE;
             dirtyMask |= DIRTY_ROUTE_STATE | DIRTY_MANEUVER_STATE | DIRTY_MANEUVER_COUNT
                 | DIRTY_MANEUVER_LIST | DIRTY_DIST_DEST | DIRTY_DIST_MAN | DIRTY_ETA
                 | DIRTY_TIME_REMAINING | DIRTY_CURRENT_ROAD | DIRTY_DESTINATION
@@ -351,14 +363,19 @@ public class RouteGuidance implements CarplayBus.Listener {
         com.luka.carplay.core.ScreenModule.setInfoModeListener(infoModeListener);
         com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
         if (bap != null) bap.setPresentationListener(bapPresentationListener);
+        Preferences.get().addListener(infoPreferencesListener);
         final int generation;
         synchronized (presentationLock) {
+            Preferences.Snapshot preferences = Preferences.get().snapshot();
+            defaultInfoPhase = preferences.get(Setting.INFO_DEFAULT);
+            infoRoad = preferences.get(Setting.INFO_ROAD);
+            keepInfoSelection = preferences.on(Setting.INFO_RETURN);
             generation = ++presentationGeneration;
             presentationWake = false;
             presentationDrivePending = false;
             infoPresentationRefreshPending = false;
             rendererViewportRefreshPending = false;
-            desiredInfoPhase = 0;
+            desiredInfoPhase = defaultInfoPhase;
             infoReturnDeadline = 0L;
             presentationThread = new Thread(new Runnable() {
                 public void run() { presentationLoop(generation); }
@@ -415,6 +432,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 bap.setPresentationListener(null);
             }
         }
+        Preferences.get().removeListener(infoPreferencesListener);
         com.luka.carplay.core.ScreenModule.clearViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.ScreenModule.clearInfoModeListener(infoModeListener);
         com.luka.carplay.cluster.ClusterLayerController.clearViewportListener(viewportListener);
@@ -446,7 +464,19 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (d == null) return;
 
         /* Parse into state (delta) */
+        long previousRouteGeneration = state.routeGeneration;
         parse(d);
+        if (state.routeGeneration != previousRouteGeneration) {
+            synchronized (presentationLock) {
+                if (desiredInfoPhase != defaultInfoPhase) {
+                    infoPresentationRefreshPending = true;
+                    presentationWake = true;
+                    presentationLock.notifyAll();
+                }
+                desiredInfoPhase = defaultInfoPhase;
+                infoReturnDeadline = 0L;
+            }
+        }
         if (state.dirtyMask == 0) {
             if (rgActive && !presentationConfirmed) requestPresentationCheck("empty-rgi-delta");
             return;
@@ -605,21 +635,40 @@ public class RouteGuidance implements CarplayBus.Listener {
     }
 
     /**
-     * View is a hard presentation boundary: reset to phase 0 and immediately
+     * View is a presentation boundary: select the configured default unless pinned, and
      * replay the cached real position/ETA on the serialized worker.
      */
     private void requestViewAreaRefresh(int mode) {
         synchronized (presentationLock) {
             if (!running) return;
-            desiredInfoPhase = 0;
+            if (!keepInfoSelection) desiredInfoPhase = defaultInfoPhase;
             infoReturnDeadline = 0L;
             infoPresentationRefreshPending = true;
             rendererViewportRefreshPending = true;
             presentationWake = true;
             presentationLock.notifyAll();
         }
-        Log.i(TAG, "viewArea info phase reset=0 queued: "
+        Log.i(TAG, "viewArea information refresh queued: "
             + (mode == com.luka.carplay.core.ScreenModule.VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen"));
+    }
+
+    private void requestInfoPreferencesRefresh() {
+        Preferences.Snapshot preferences = Preferences.get().snapshot();
+        synchronized (presentationLock) {
+            if (!running) return;
+            int nextDefault = preferences.get(Setting.INFO_DEFAULT);
+            int nextRoad = preferences.get(Setting.INFO_ROAD);
+            boolean keep = preferences.on(Setting.INFO_RETURN);
+            if (nextDefault == defaultInfoPhase && nextRoad == infoRoad && keep == keepInfoSelection) return;
+            if (nextDefault != defaultInfoPhase) desiredInfoPhase = nextDefault;
+            if (nextDefault != defaultInfoPhase || keep != keepInfoSelection) infoReturnDeadline = 0L;
+            defaultInfoPhase = nextDefault;
+            infoRoad = nextRoad;
+            keepInfoSelection = keep;
+            infoPresentationRefreshPending = true;
+            presentationWake = true;
+            presentationLock.notifyAll();
+        }
     }
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
@@ -649,17 +698,17 @@ public class RouteGuidance implements CarplayBus.Listener {
     /** Called with the route monitor held, before ending its BAP session. */
     private void resetInfoPresentation() {
         synchronized (presentationLock) {
-            desiredInfoPhase = 0;
+            desiredInfoPhase = defaultInfoPhase;
             infoReturnDeadline = 0L;
             infoPresentationRefreshPending = false;
         }
     }
 
-    /** Called with presentationLock held. No polling while road text is selected. */
+    /** Called with presentationLock held. No timer on the default or a pinned page. */
     private long infoReturnWait(long now) {
-        if (desiredInfoPhase != 1 || infoReturnDeadline == 0L) return -1L;
+        if (keepInfoSelection || desiredInfoPhase == defaultInfoPhase || infoReturnDeadline == 0L) return -1L;
         long wait = infoReturnDeadline - now;
-        // HU wall-clock correction must not leave Time selected for hours.
+        // HU wall-clock correction must not keep a manual override for hours.
         if (wait > INFO_TIME_HOLD_MS) {
             infoReturnDeadline = now + INFO_TIME_HOLD_MS;
             wait = INFO_TIME_HOLD_MS;
@@ -722,7 +771,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     presentationWake = false;
                     long now = System.currentTimeMillis();
                     if (infoReturnWait(now) == 0L) {
-                        desiredInfoPhase = 0;
+                        desiredInfoPhase = defaultInfoPhase;
                         infoReturnDeadline = 0L;
                         infoPresentationRefreshPending = true;
                     }
@@ -769,11 +818,12 @@ public class RouteGuidance implements CarplayBus.Listener {
     private synchronized boolean driveInfoPresentation(int phase) {
         if (!running || bap == null || !rgActive) return true;
         boolean applied = bap.refreshInfoPresentation(state, phase);
-        if (applied && phase == 1) {
+        if (applied) {
             synchronized (presentationLock) {
                 // Arm once after publication. Deltas/recovery retries do not
-                // extend Time; View or a newer OK request supersedes this one.
-                if (desiredInfoPhase == 1 && !infoPresentationRefreshPending && infoReturnDeadline == 0L)
+                // extend the hold; View or a newer OK request supersedes it.
+                if (!keepInfoSelection && phase != defaultInfoPhase && desiredInfoPhase == phase
+                        && !infoPresentationRefreshPending && infoReturnDeadline == 0L)
                     infoReturnDeadline = System.currentTimeMillis() + INFO_TIME_HOLD_MS;
             }
         }
@@ -836,6 +886,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.distManeuverM = -1;
                 state.distDestM = -1;
                 state.etaSeconds = -1;
+                state.destinationTimeZoneMinutes = State.UNKNOWN_TIMEZONE;
                 state.timeRemainingSeconds = -1;
                 state.timeRemainingSampleSeconds = -1L;
                 state.currentRoad = null;
@@ -888,6 +939,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * to prevent stale icons/distances from lingering.
                  */
                 if (v == 0) {
+                    state.destinationTimeZoneMinutes = State.UNKNOWN_TIMEZONE;
+                    state.markDirty(State.DIRTY_DEST_TIMEZONE);
                     /* support=0 is the authoritative hard-clear edge even if an earlier transient
                      * route_state=0 already changed routeState.  Never let that transient suppress
                      * clearing cached slots/lane data. */
@@ -1092,8 +1145,24 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (d.has("destination")) {
             String v = d.str("destination");
             if (!strEq(state.destination, v)) {
+                if (state.destination != null && !d.has("destination_timezone_minutes")) {
+                    state.destinationTimeZoneMinutes = State.UNKNOWN_TIMEZONE;
+                    state.markDirty(State.DIRTY_DEST_TIMEZONE);
+                }
                 state.destination = v;
                 state.markDirty(State.DIRTY_DESTINATION);
+            }
+        }
+        if (d.has("destination_timezone_minutes")) {
+            int value = d.num("destination_timezone_minutes", State.UNKNOWN_TIMEZONE);
+            if (value < -840 || value > 840) {
+                if (value != State.UNKNOWN_TIMEZONE) Log.w(TAG, "invalid destination timezone; using HU time");
+                value = State.UNKNOWN_TIMEZONE;
+            }
+            if (state.sourceSupportsRg == 0) value = State.UNKNOWN_TIMEZONE;
+            if (value != state.destinationTimeZoneMinutes) {
+                state.destinationTimeZoneMinutes = value;
+                state.markDirty(State.DIRTY_DEST_TIMEZONE);
             }
         }
 

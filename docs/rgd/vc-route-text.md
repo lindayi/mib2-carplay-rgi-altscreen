@@ -29,22 +29,30 @@ the VC's distance/arrival block).
 
 ## 🔍 What is shown
 
-| View | Phase 0 (default) | Phase 1 (after roller OK) |
+| View | Phase 0: Road | Phase 1: Trip |
 |---|---|---|
 | Fullscreen | `‹exit/signpost›`, else `● next road`, else current road | `◌ 10:42 \| 37 min` (`1 h 05 min` over an hour) |
 | Smallscreen | same as fullscreen | `◌ 37 min` (arrival clock if no remaining time) |
 
 - **Input priority** - `mExitInfo` (signpost, wrapped in U+2039/U+203A) -> `mAfterRoad` (last `:`-part)
   -> `mName` -> `currentRoad` (no prefix), after whitespace normalisation.
+- **Current-road option** - the normal-MMI information-bar setting can instead select
+  `currentRoad` alone. It does not change the renderer footer's next-road-only policy.
 - **Prefixes** - U+25CF + space before the next road; U+25CC DOTTED CIRCLE + space before time. The
   decorations are budgeted on **every** fragment.
 - **Never `""`** - with no text and no estimate, active RGI publishes `…` (U+2026); an empty string makes
   the VC show its native placeholder.
-- **Phase 1 returns by itself** - `RouteGuidance` arms a 20 s hold (`INFO_TIME_HOLD_MS`) after the
-  summary is published, then drops back to phase 0. A View change resets to phase 0 and republishes the
-  cached state at once.
-- The 12/24 h clock follows the HU setting; the arrival epoch is shifted from the JVM's UTC to HU local
-  time before `AppConnectorNavi` formats it.
+- **Configurable default and return** - Road is the default; Trip can be selected in
+  **Carplay Altscreen -> VC information bar**. OK toggles between them. A nondefault
+  selection arms a 20 s hold (`INFO_TIME_HOLD_MS`) only after successful publication.
+  Ordinary RGI deltas do not extend it. The Keep option disables this timer and
+  preserves the selected phase across View changes. Otherwise View restores the default.
+  Route/session boundaries reset the selection; live default changes apply immediately.
+- The 12/24 h clock follows the HU setting. A valid destination offset shifts the
+  UTC arrival epoch to destination wall-clock time for both FctID 22 and the fullscreen
+  Trip text. The latter adds `dest` when it differs from HU-local time. Missing/invalid
+  offsets use the existing HU-local conversion. Remaining duration never uses the shifted
+  clock. No additional renderer-footer content or main-MMI overlay is introduced.
 
 ## 🔄 Scrolling (`CurrentPositionScroll`)
 

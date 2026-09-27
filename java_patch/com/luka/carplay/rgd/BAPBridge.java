@@ -90,6 +90,7 @@ public class BAPBridge {
     /* Explicit output caches allow View/OK to repaint immediately without
      * waiting for another iOS RGI delta. */
     private long lastEtaSeconds = -1L;
+    private int lastDestinationTimeZoneMinutes = RouteGuidance.State.UNKNOWN_TIMEZONE;
     private long lastTimeRemainingSeconds = -1L;
     private long lastTimeRemainingSampleSeconds = -1L;
     private int lastDistanceToDestinationM = -1;
@@ -653,8 +654,10 @@ public class BAPBridge {
             inApproachZone = false;
             latchedPositionText = "";
             routeTextPublished = false;
-            infoPhase = 0;
+            infoPhase = com.luka.carplay.settings.Preferences.get().snapshot()
+                .get(com.luka.carplay.settings.Setting.INFO_DEFAULT);
             lastEtaSeconds = -1L;
+            lastDestinationTimeZoneMinutes = RouteGuidance.State.UNKNOWN_TIMEZONE;
             lastTimeRemainingSeconds = -1L;
             lastTimeRemainingSampleSeconds = -1L;
             lastDistanceToDestinationM = -1;
@@ -830,6 +833,7 @@ public class BAPBridge {
             routeTextPublished = false;
             infoPhase = 0;
             lastEtaSeconds = -1L;
+            lastDestinationTimeZoneMinutes = RouteGuidance.State.UNKNOWN_TIMEZONE;
             lastTimeRemainingSeconds = -1L;
             lastTimeRemainingSampleSeconds = -1L;
             lastDistanceToDestinationM = -1;
@@ -1108,7 +1112,8 @@ public class BAPBridge {
             if (infoPhase != 0) {
                 routeTextDirty |= RouteGuidance.State.DIRTY_DIST_DEST
                     | RouteGuidance.State.DIRTY_TIME_REMAINING
-                    | RouteGuidance.State.DIRTY_ETA;
+                    | RouteGuidance.State.DIRTY_ETA
+                    | RouteGuidance.State.DIRTY_DEST_TIMEZONE;
             }
             if (!routeTextPublished || (dirty & routeTextDirty) != 0) {
                 updateLatchedRouteText(s);
@@ -1177,7 +1182,8 @@ public class BAPBridge {
             /* 8. Time to destination (FctID 22) always remains absolute ETA.
              * The click presentation is separate text in FctID 19 only. */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
-                          RouteGuidance.State.DIRTY_ETA)) != 0) {
+                          RouteGuidance.State.DIRTY_ETA |
+                          RouteGuidance.State.DIRTY_DEST_TIMEZONE)) != 0) {
                 publishTimeToDestinationForMode();
             }
 
@@ -1286,7 +1292,10 @@ public class BAPBridge {
 
         /* Preserve the full payload. Decorations are budgeted on EVERY fragment. */
         positionPrefix = positionSuffix = "";
-        if (signPost.length() > 0) {
+        if (com.luka.carplay.settings.Preferences.get().snapshot()
+                .get(com.luka.carplay.settings.Setting.INFO_ROAD) == 1) {
+            latchedPositionText = normalizeRouteText(s.currentRoad);
+        } else if (signPost.length() > 0) {
             latchedPositionText = signPost;
             positionPrefix = ROUTE_SIGN_OPEN;
             positionSuffix = ROUTE_SIGN_CLOSE;
@@ -1397,6 +1406,8 @@ public class BAPBridge {
         if ((dirty & RouteGuidance.State.DIRTY_ETA) != 0) {
             lastEtaSeconds = s.etaSeconds;
         }
+        if ((dirty & RouteGuidance.State.DIRTY_DEST_TIMEZONE) != 0)
+            lastDestinationTimeZoneMinutes = s.destinationTimeZoneMinutes;
         if ((dirty & RouteGuidance.State.DIRTY_TIME_REMAINING) != 0) {
             // Preserve source-sample age across retries, reconnect and info-mode
             // refresh. Directly constructed/legacy states acquire a timestamp once.
@@ -1440,18 +1451,24 @@ public class BAPBridge {
          * exactly what the smallscreen OK toggle used to do.  See
          * docs/cluster/kdk-geometry.md. */
         long timeVal = currentArrivalSeconds();
-        /* JVM default TZ is UTC on MHI2Q. AppConnectorNavi converts a type-1
-         * epoch with GregorianCalendar, so shift it to HU local time first. */
+        /* Stock expects a wall-clock epoch, not a zone identifier. */
         if (timeVal >= 0L) {
-            timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
+            timeVal = arrivalWallClockMs(timeVal * 1000L) / 1000L;
         }
         appConnectorNavi.updateTimeToDestination(1, timeFormat, timeVal);
     }
 
-    private static String formatArrivalForText(long utcSeconds) {
+    private long arrivalWallClockMs(long utcMs) {
+        int offset = lastDestinationTimeZoneMinutes;
+        return offset >= -840 && offset <= 840
+            ? utcMs + offset * 60000L : convertUtcToLocalMs(utcMs);
+    }
+
+    private String formatArrivalForText(long utcSeconds) {
         if (utcSeconds < 0L) return "";
-        long localMs = convertUtcToLocalMs(utcSeconds * 1000L);
-        java.util.GregorianCalendar cal = new java.util.GregorianCalendar();
+        long utcMs = utcSeconds * 1000L;
+        long localMs = arrivalWallClockMs(utcMs);
+        java.util.GregorianCalendar cal = new java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("GMT"));
         cal.setTimeInMillis(localMs);
         int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
         int minute = cal.get(java.util.Calendar.MINUTE);
@@ -1469,6 +1486,7 @@ public class BAPBridge {
             if (minute < 10) out.append('0');
             out.append(minute);
         }
+        if (localMs != convertUtcToLocalMs(utcMs)) out.append(" dest");
         return out.toString();
     }
 
