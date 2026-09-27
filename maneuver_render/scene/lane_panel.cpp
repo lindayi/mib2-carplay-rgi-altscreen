@@ -133,6 +133,7 @@ struct cr_lane_panel {
     const cr_scene_t *frame_scenes[2];
     unsigned frame_builds[2];
     float framing[3];
+    float footer;
     int frame_cached;
 };
 
@@ -199,6 +200,10 @@ void cr_lane_panel_clear(cr_lane_panel_t *p) {
     std::memset(&p->current,0,sizeof(p->current));
     std::memset(&p->previous,0,sizeof(p->previous));p->changed=0;p->frame_cached=0;
 }
+void cr_lane_panel_set_footer(cr_lane_panel_t *p,float height) {
+    if(!p || p->footer==height)return;
+    p->footer=height;p->frame_cached=0;
+}
 int cr_lane_panel_update(cr_lane_panel_t *p,const cr_lane_guidance_t *lanes,float w,double now) {
     if(!p)return 0;
     cr_lane_panel_layout_t next;
@@ -207,7 +212,7 @@ int cr_lane_panel_update(cr_lane_panel_t *p,const cr_lane_guidance_t *lanes,floa
     if(!next.count) {cr_lane_panel_clear(p);return 1;}
     // Rapid updates retain one departing snapshot, never a queue of stale events.
     p->previous=p->current;p->old_mesh=p->mesh;p->current=next;
-    compile(p->mesh,next);p->changed=now;return 1;
+    compile(p->mesh,next);p->changed=now;p->frame_cached=0;return 1;
 }
 int cr_lane_panel_animating(const cr_lane_panel_t *p,double now) {
     return p && p->current.count && now<p->changed+FadeSeconds;
@@ -242,7 +247,7 @@ void cr_lane_panel_draw(const cr_lane_panel_t *p,cr_rect_t visible,double now) {
 void cr_lane_panel_framing(cr_lane_panel_t *p,const cr_scene_t *current,
                            const cr_scene_t *next,float out[3]) {
     out[0]=out[1]=out[2]=0;
-    if(!p || !p->current.count)return;
+    if(!p || (!p->current.count && p->footer<=0))return;
     const cr_scene_t *scenes[]={current,next};unsigned builds[2]={0,0};
     bool same=p->frame_cached;
     for(int i=0;i<2;++i) {
@@ -252,9 +257,11 @@ void cr_lane_panel_framing(cr_lane_panel_t *p,const cr_scene_t *current,
     }
     if(!same) {
         const float safe[]={CR_POPUP_X+4.f,CR_POPUP_Y+4.f,CR_POPUP_X+CR_POPUP_W-4.f,
-                            CR_POPUP_Y+CR_POPUP_H-Height-CR_LANE_PANEL_FADE_Y-3.f};
+                            CR_POPUP_Y+CR_POPUP_H-p->footer-
+                            (p->current.count?Height+CR_LANE_PANEL_FADE_Y:0)-3.f};
         float best=1e9f;
-        for(int step=0;step<4;++step) {
+        int steps=p->footer>0?16:4;
+        for(int step=0;step<steps;++step) {
             float dolly=.12f+step*.02f,m[16],b[]={1e6f,1e6f,-1e6f,-1e6f};bool valid=false;
             render_build_framing_matrix(m,328.f/181,dolly);
             for(int i=0;i<2;++i) {

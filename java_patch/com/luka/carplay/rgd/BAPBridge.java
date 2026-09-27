@@ -1224,6 +1224,7 @@ public class BAPBridge {
                         (crIconMask | RouteGuidance.State.DIRTY_DIST_MAN)) != 0)) {
                     updateRendererProgress(s, bargraphDenominatorM);
                 }
+                updateRendererLabels(s);
             }
 
             // Enqueue failure is not a successful publication, even when a
@@ -1279,19 +1280,8 @@ public class BAPBridge {
         positionManeuverIndex = idx;
         positionManeuverVersion = version;
         positionRouteGeneration = s.routeGeneration;
-        String turnTo = "";
-        String signPost = "";
-        if (idx >= 0) {
-            if (s.mAfterRoad != null && idx < s.mAfterRoad.length) {
-                turnTo = normalizeRouteText(keepLastColonPart(s.mAfterRoad[idx]));
-            }
-            if (turnTo.length() == 0 && s.mName != null && idx < s.mName.length) {
-                turnTo = normalizeRouteText(s.mName[idx]);
-            }
-            if (s.mExitInfo != null && idx < s.mExitInfo.length) {
-                signPost = normalizeRouteText(s.mExitInfo[idx]);
-            }
-        }
+        String turnTo = maneuverRoad(s, idx);
+        String signPost = maneuverSign(s, idx);
 
         /* Preserve the full payload. Decorations are budgeted on EVERY fragment. */
         positionPrefix = positionSuffix = "";
@@ -1995,6 +1985,7 @@ public class BAPBridge {
      * lastCrVer tracks the slot version so a new maneuver with identical type/angle
      * still triggers a push animation (e.g., consecutive left turns). */
     private LaneGuidanceSnapshot lastCrLaneGuidance;
+    private String lastCrDistanceLabel, lastCrRoadLabel;
     private int lastCrIcon = -1;
     private int lastCrDirection = -99;
     private int lastCrExitAngle = -9999;
@@ -2050,6 +2041,7 @@ public class BAPBridge {
              * acknowledges eglSwapBuffers with FRAME_READY. */
             if (!rendererPrimed) {
                 lastCrLaneGuidance = null;
+                lastCrDistanceLabel = lastCrRoadLabel = null;
                 lastCrIcon = -1;
                 lastCrDirection = -99;
                 lastCrExitAngle = -9999;
@@ -2119,6 +2111,9 @@ public class BAPBridge {
              * its disappearance via Fct44. A route end must not clear pixels during fade-out.
              * The always-on renderer/link is reused and re-primed on the next route. */
             lastCrLaneGuidance = null;
+            lastCrDistanceLabel = lastCrRoadLabel = null;
+            if (rendererClient != null && preserveSurface
+                    && !rendererClient.sendRouteLabels("", "")) rendererClient.disconnectClient();
             if (rendererClient != null && !preserveSurface) rendererClient.sendClear();
             forceGfxAvailable(false);
             customRendererStarted = false;
@@ -2204,6 +2199,7 @@ public class BAPBridge {
                 progressState);
             // Failed enqueue must remain eligible for retry with the same input.
             if (ok) {
+                if (!roadsOnly) lastCrDistanceLabel = lastCrRoadLabel = null;
                 lastCrIcon = icon;
                 lastCrDirection = direction;
                 lastCrExitAngle = exitAngle;
@@ -2255,6 +2251,38 @@ public class BAPBridge {
         }
         noteRendererSendResult(rendererClient.sendProgress(remainingLevel, progressMode,
             progressMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF));
+    }
+
+    static String maneuverRoad(RouteGuidance.State s, int idx) {
+        if (idx < 0) return "";
+        String road = s.mAfterRoad != null && idx < s.mAfterRoad.length
+            ? normalizeRouteText(keepLastColonPart(s.mAfterRoad[idx])) : "";
+        if (road.length() == 0 && s.mName != null && idx < s.mName.length)
+            road = normalizeRouteText(s.mName[idx]);
+        return road;
+    }
+
+    static String maneuverSign(RouteGuidance.State s, int idx) {
+        return idx >= 0 && s.mExitInfo != null && idx < s.mExitInfo.length
+            ? normalizeRouteText(s.mExitInfo[idx]) : "";
+    }
+
+    private synchronized void updateRendererLabels(RouteGuidance.State s) {
+        if (rendererClient == null || !customRendererStarted) return;
+        int idx = primaryManeuverIndex(s);
+        String distance = "", road = "";
+        if (!rendererManeuverPending && s.routeState > 0 && s.maneuverCount > 0 && idx >= 0
+                && idx == lastCrIdx && s.routeGeneration == lastCrRouteGeneration) {
+            FormattedDistance fd = formatDistanceToTurn(s.distManeuverM);
+            distance = RouteLabels.distance(fd.value, fd.unit);
+            road = maneuverSign(s, idx);
+            if (road.length() == 0) road = maneuverRoad(s, idx);
+            road = RouteLabels.clip(road, RouteLabels.ROAD_BYTES);
+        }
+        if (distance.equals(lastCrDistanceLabel) && road.equals(lastCrRoadLabel)) return;
+        boolean ok = rendererClient.sendRouteLabels(distance, road);
+        if (ok) { lastCrDistanceLabel = distance; lastCrRoadLabel = road; }
+        noteRendererSendResult(ok);
     }
 
     /**

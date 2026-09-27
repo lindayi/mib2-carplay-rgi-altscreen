@@ -145,7 +145,28 @@ public final class RendererServerTransportTest {
         server.dispose();
     }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); restart();
+        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); labelQueue(); restart();
         System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS");
+    }
+    private static void labelQueue() throws Exception {
+        RendererServer server=new RendererServer(0);
+        set(server,"running",Boolean.TRUE);set(server,"sock",new Socket());
+        set(server,"out",new ByteArrayOutputStream());
+        check(server.sendManeuver(2,1,90,0,null,0,0,1),"first label maneuver");
+        for(int i=0;i<80;i++)check(server.sendRouteLabels(i+" m","First Street"),"coalesced labels");
+        check(server.sendClear(),"label clear barrier");
+        check(server.sendManeuver(2,-1,-90,0,null,0,0,1),"next label maneuver");
+        check(server.sendRouteLabels("500 ft","Next Street"),"new labels");
+        Object[] q=(Object[])get(server,"writeQueue");
+        int head=((Integer)get(server,"writeHead")).intValue();
+        int[] expected={1,15,7,1,15};
+        check(((Integer)get(server,"writeCount")).intValue()==expected.length,"bounded labels without crossing barriers");
+        for(int i=0;i<expected.length;i++) {
+            Field f=q[(head+i)%q.length].getClass().getDeclaredField("packet");f.setAccessible(true);
+            check(((byte[])f.get(q[(head+i)%q.length]))[0]==expected[i],"label ordering");
+        }
+        server.disconnectClient();
+        check(((Integer)get(server,"writeCount")).intValue()==0,"disconnect discards stale labels");
+        server.dispose();
     }
 }

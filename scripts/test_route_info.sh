@@ -37,6 +37,10 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
     "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
+"$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$TEST_DIR:$CLASSPATH" -d "$TEST_DIR" \
+    "$PROJECT_DIR/tests/RouteLabelsTest.java" "$PROJECT_DIR/tests/RouteLabelsBridgeTest.java"
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteLabelsTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" RouteLabelsBridgeTest
 # No checkout resources or font files are visible through the working directory.
 # The pure runtime uses only classes and the embedded data in the built JAR.
 (cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \

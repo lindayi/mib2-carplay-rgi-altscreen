@@ -22,6 +22,7 @@ public final class LaneGuidanceLifecycleTest {
     public static final class Renderer extends RendererServer {
         LaneGuidanceSnapshot lanes; int writes;
         boolean sendLaneGuidance(LaneGuidanceSnapshot value) { lanes=value; writes++; return true; }
+        public boolean sendRouteLabels(String distance,String road) { return true; }
     }
     static void check(boolean b,String message) { if(!b)throw new AssertionError(message); }
     static void set(Object o,String name,Object value) throws Exception {

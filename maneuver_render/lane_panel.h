@@ -28,6 +28,7 @@ typedef struct cr_lane_panel cr_lane_panel_t;
 cr_lane_panel_t *cr_lane_panel_create(void);
 void cr_lane_panel_destroy(cr_lane_panel_t *panel);
 void cr_lane_panel_clear(cr_lane_panel_t *panel);
+void cr_lane_panel_set_footer(cr_lane_panel_t *panel, float height);
 int cr_lane_panel_update(cr_lane_panel_t *panel, const cr_lane_guidance_t *lanes,
                          float visible_width, double now);
 int cr_lane_panel_animating(const cr_lane_panel_t *panel, double now);

@@ -64,6 +64,7 @@ public class RendererServer {
     private static final byte CMD_LANES_BEGIN = 0x0c;
     private static final byte CMD_LANES_LANE = 0x0d;
     private static final byte CMD_LANES_COMMIT = 0x0e;
+    static final byte CMD_ROUTE_LABELS = 0x0f;
     private int laneToken;
 
     /* CMD_MANEUVER flags */
@@ -614,6 +615,10 @@ public class RendererServer {
         return sendPacket(pkt, true);
     }
 
+    public boolean sendRouteLabels(String distance, String road) {
+        return sendPacket(RouteLabels.packet(distance, road));
+    }
+
     /** Stage/layout updates are independent of the current maneuver and distance.
      * Cache only a successful enqueue; reconnect always replays the visible area. */
     public boolean sendVisibleArea(int x, int y, int w, int h) {
@@ -674,13 +679,13 @@ public class RendererServer {
                         break;
                     }
                 }
-                if (pkt[0] == CMD_PROGRESS) {
-                    // Only replace progress belonging to this maneuver. A new
-                    // maneuver embeds its own initial progress; CLEAR is a barrier.
+                if (pkt[0] == CMD_PROGRESS || pkt[0] == CMD_ROUTE_LABELS) {
+                    // Progress and labels belong to one maneuver; neither may
+                    // coalesce across a maneuver change or CLEAR.
                     for (int n = writeCount - 1; n >= 0; n--) {
                         byte command = writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0];
                         if (command == CMD_MANEUVER || command == CMD_CLEAR) break;
-                        if (command == CMD_PROGRESS) {
+                        if (command == pkt[0]) {
                             removePendingWrite(n);
                             break;
                         }

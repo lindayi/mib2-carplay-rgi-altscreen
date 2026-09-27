@@ -481,6 +481,9 @@ static const char *k_flat_frag_body =
     "    gl_FragColor=texture2D(u_tex,v_uv);\n"
     "    gl_FragColor.a*=u_global_alpha; return;\n"
     "  }\n"
+    "  if (u_mode > 4.5 && u_mode < 5.5) {\n"
+    "    gl_FragColor=vec4(u_color.rgb,u_color.a*texture2D(u_tex,v_uv).a); return;\n"
+    "  }\n"
     "  gl_FragColor=u_color;\n"
     "  if (u_entry_fade.w > 0.0)\n"
     "    gl_FragColor.a*=smoothstep(0.0,1.0,(dot(v_world_pos.xz,u_entry_fade.xy)+u_entry_fade.z)*u_entry_fade.w);\n"
@@ -1425,6 +1428,20 @@ void render_end_overlay(void) {
     glDisable(GL_SCISSOR_TEST);
     use_lit_program();
     glEnable(GL_DEPTH_TEST);
+}
+
+void render_overlay_texture(unsigned int texture,const float *xyuv,int count,
+                            float shade,float alpha) {
+    if (!xyuv || count <= 0 || count > MAX_VERTS || count % 3) return;
+    use_flat_program(5);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D,texture);
+    vb_reset();
+    for(int i=0;i<count;i++) {
+        const float *v=xyuv+i*4;
+        vb_v(2*v[0]/CR_DEFAULT_WIDTH-1,1-2*v[1]/CR_DEFAULT_HEIGHT,0,v[2],v[3],0);
+    }
+    vb_flush(shade,shade,shade,alpha);
 }
 
 void render_overlay_cutout(cr_rect_t area,float fx,float fy,float alpha) {

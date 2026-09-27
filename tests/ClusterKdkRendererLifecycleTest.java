@@ -8,6 +8,7 @@ public final class ClusterKdkRendererLifecycleTest {
     public static final class Renderer extends RendererServer {
         int clears, disposals;
         public boolean sendClear() { clears++; return true; }
+        public boolean sendRouteLabels(String distance,String road) { return true; }
         public void dispose() { disposals++; }
     }
     static Field field(String name) throws Exception {

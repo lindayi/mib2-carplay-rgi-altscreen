@@ -45,6 +45,7 @@ echo "=== MMI-Cockpit-Carplay SD (AltScreen + RGI) -> $OUT ==="
 case "$OUT" in "$PROJECT_DIR"/build/*) rm -rf "$OUT" ;; *) [ ! -e "$OUT" ] || { echo "ERROR: $OUT exists; remove it or use a path under build/"; exit 1; } ;; esac
 mkdir -p "$OUT"
 (cd "$SRC" && tar --exclude=.DS_Store --exclude='._*' -cf - .) | (cd "$OUT" && tar -xf -)
+cp "$PROJECT_DIR/maneuver_render/LICENSE.DEJAVU" "$OUT/LICENSE.DEJAVU"
 rm -f "$OUT/SHA256SUMS-SD.list"
 
 # AltScreen reads back only every second decoded cluster frame and its mirror sidecar

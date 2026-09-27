@@ -120,6 +120,8 @@ void render_get_visible_area(cr_rect_t *current, cr_rect_t *target);
 void render_begin_overlay(cr_rect_t clip);
 void render_overlay_mesh(const float *xy, int count, float x, float y,
                          float r, float g, float b, float a);
+void render_overlay_texture(unsigned int texture, const float *xyuv, int count,
+                            float shade, float alpha);
 /* Destination RGBA attenuation in the overlay pass, before drawing the row. */
 void render_overlay_cutout(cr_rect_t area,float feather_x,float feather_y,float alpha);
 void render_end_overlay(void);

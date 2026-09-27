@@ -43,6 +43,7 @@ reconciles:
 | 0x07 | `CMD_CLEAR` | drop maneuver + progress + lanes, render transparent; link stays up |
 | 0x08 | `CMD_VISIBLE_AREA` | x, y, w, h as four BE u16, source pixels, top-left origin |
 | 0x0c-0x0e | `CMD_LANES_BEGIN/LANE/COMMIT` | atomic lane batch - [lane-guidance](../rgd/lane-guidance.md) |
+| 0x0f | `CMD_ROUTE_LABELS` | `[0]` distance byte count, `[1]` road byte count; UTF-8 distance `[2..13]` and road `[14..45]` |
 
 0x09-0x0b (lane-road scene commands) are retired.
 
@@ -61,6 +62,34 @@ perspective, `[44..45]` level/mode.
 | 0x20 | progress flag | explicit progress state in `[42]` (`CMD_PROGRESS`: `[2]`) |
 
 A refresh coalesced behind a new maneuver keeps the transition (`cr_merge_maneuver_flags`).
+
+## Route-label footer
+
+`CMD_ROUTE_LABELS` is one atomic 48-byte snapshot, independent of progress and lanes.
+Java uses the current primary maneuver's distance through `BAPDistanceFormatter`;
+the road is its exit/signpost, then next road, then maneuver name. It never borrows
+the current road or destination distance. Missing fields are empty. UTF-8 is
+NFC-normalized and clipped at grapheme boundaries with an ellipsis before sending.
+
+The footer uses up to 42 source pixels beneath the arrow. Lane guidance is moved
+above this reserved area and the existing scene-framing mechanism fits the arrow
+above both. The stock KDK position/crop and native destination widget are unchanged.
+Labels are withheld during arrow transitions, cleared on new maneuvers/CLEAR/link
+loss, and explicitly cleared at route end even when the old arrow surface is kept
+for the VC fade-out. Writer coalescing never moves labels across maneuver/CLEAR
+barriers; a renderer restart receives a fresh snapshot.
+
+The embedded DejaVu-derived 16 px atlas covers Latin, Greek, Cyrillic and common
+punctuation (999 glyphs). No font library or new runtime asset is installed on QNX.
+Names with unsupported glyphs are omitted from this footer with a diagnostic, not
+replaced by misleading text; the existing multilingual native BAP text is unchanged.
+Long supported names are ellipsized to the actual visible width. Regenerate with
+`tools/generate_route_font.py` and retain `maneuver_render/LICENSE.DEJAVU`.
+
+`./scripts/test_route_labels.sh` runs native validation and real offscreen GLES2
+previews in Docker. Images appear in `build/route-label-previews/`. Java tests are
+included in `test_route_info.sh`; queue/barrier coverage is in
+`RendererServerTransportTest`. These are host checks, not in-car verification.
 
 ## 🌐 Events (renderer -> Java)
 

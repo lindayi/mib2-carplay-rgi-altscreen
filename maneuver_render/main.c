@@ -26,6 +26,7 @@
 #endif
 
 #include "platform.h"
+#include "route_labels.h"
 
 #define TARGET_FPS     30
 #define FRAME_TIME_NS  (1000000000L / TARGET_FPS)
@@ -127,6 +128,7 @@ static cr_engine_t g_engine;
 static cr_lane_guidance_t g_lane_guidance;
 static cr_lane_decoder_t g_lane_decoder;
 static cr_lane_panel_t *g_lane_panel;
+static cr_route_labels_t g_route_labels;
 
 static cr_scene_t *engine_scene(const maneuver_state_t *m) {
     if(m==&g_engine.current)return g_engine.current_scene;
@@ -338,6 +340,7 @@ static void engine_apply_presentation(void) {
  * cleared latch prevent it from earning FRAME_READY.  The next CMD_MANEUVER
  * fades the deterministic scene back in. */
 static void clear_maneuver(void) {
+    cr_route_labels_clear(&g_route_labels);
     cr_lane_clear(&g_lane_decoder, &g_lane_guidance);
     cr_lane_panel_clear(g_lane_panel);
     render_reset_content_offset();
@@ -504,7 +507,7 @@ int main(int argc, char **argv) {
     provider.handles=scene_handles;provider.build_route=scene_route;
     provider.paint_masks=scene_paint;provider.elevation=scene_elevation;
     cr_scene_configure_provider(&provider);maneuver_set_scene_provider(&provider);
-    if (render_init(fb_w, fb_h) < 0) {
+    if (render_init(fb_w, fb_h) < 0 || cr_route_labels_init() < 0) {
         fprintf(stderr, "maneuver_render: render init failed\n");
         platform_shutdown();
         cr_server_shutdown();
@@ -629,6 +632,7 @@ int main(int argc, char **argv) {
             }
             switch (cmd.cmd) {
             case CMD_MANEUVER: {
+                if (!(cmd.flags & MAN_FLAG_REFRESH)) cr_route_labels_clear(&g_route_labels);
                 cr_decode_maneuver(&cmd, &pending_maneuver);
                 pending_flags = cr_merge_maneuver_flags(got_maneuver, pending_flags, cmd.flags);
                 pending_perspective = cmd.payload[43];
@@ -685,6 +689,9 @@ int main(int argc, char **argv) {
                 got_progress=1;
                 progress_level=cmd.payload[0]; progress_mode=cmd.payload[1];
                 progress_state=cr_progress_decode(cmd.flags,cmd.payload[2],progress_mode);
+                break;
+            case CMD_ROUTE_LABELS:
+                if (cr_route_labels_receive(&g_route_labels, &cmd)) g_engine.dirty = 1;
                 break;
             case CMD_CLEAR:
                 /* CLEAR wins over an earlier MANEUVER drained in this same loop. */
@@ -790,6 +797,8 @@ int main(int argc, char **argv) {
         if(cr_lane_panel_update(g_lane_panel,&g_lane_guidance,panel_target.w,progress_now))
             g_engine.dirty=1;
         float content_frame[3];
+        float label_height = g_cleared ? 0 : cr_route_labels_height(&g_route_labels);
+        cr_lane_panel_set_footer(g_lane_panel,label_height);
         watch_stage(WATCH_LANE_FRAMING);
         cr_lane_panel_framing(g_lane_panel,g_engine.current_scene,
                              g_engine.has_next?g_engine.next_scene:NULL,content_frame);
@@ -828,7 +837,11 @@ int main(int argc, char **argv) {
             cr_rect_t panel_visible;
             render_get_visible_area(&panel_visible,NULL);
             watch_stage(WATCH_LANE_DRAW);
-            cr_lane_panel_draw(g_lane_panel,panel_visible,progress_now);
+            cr_rect_t lane_visible=panel_visible;
+            lane_visible.h-=label_height;
+            cr_lane_panel_draw(g_lane_panel,lane_visible,progress_now);
+            if (!g_cleared && g_engine.phase==ENGINE_IDLE)
+                cr_route_labels_draw(&g_route_labels,panel_visible,g_fade_alpha);
             watch_stage(WATCH_IDLE);
             render_debug_grid();
             watch_stage(WATCH_END_FRAME);
@@ -1077,6 +1090,7 @@ int main(int argc, char **argv) {
     maneuver_set_scene_provider(NULL);
     cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
     cr_lane_panel_destroy(g_lane_panel);
+    cr_route_labels_shutdown();
     render_shutdown();
     platform_shutdown();
     g_renderer_running = 0;

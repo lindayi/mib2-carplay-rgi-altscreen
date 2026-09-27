@@ -104,6 +104,12 @@ features below follow it automatically.
   roller) to switch it to arrival time and time left, and press again to go back; it returns by itself
   after 20 s ([details](docs/rgd/vc-route-text.md)).
 - **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
+- **Next-turn labels in the custom RGI panel.** Distance and the next road/exit appear beneath
+  the arrow, with lane guidance reserved above them. Distance uses the same stock MMI formatter
+  as BAP (including imperial units); unknown values and ended routes clear the labels.
+  This does not move or repurpose the cockpit's native destination-distance widget.
+  The new overlay is host-tested, not yet vehicle-verified; see
+  [renderer details](docs/cluster/maneuver-renderer.md#route-label-footer).
 - **Steering-wheel roller zoom for CarPlay map & stock map.** While the AltScreen CarPlay video is on
   the Virtual Cockpit, each click of the left steering-wheel roller sends the factory AirPlay
   `changeMapZoomLevel` command to the iPhone for the cluster display (matching OEM CarPlay behavior).
@@ -140,6 +146,10 @@ features below follow it automatically.
 | `build/` | Canonical deployable artifacts |
 
 Raw unit logs and generated class trees are intentionally kept outside Git.
+
+The renderer embeds a small DejaVu-derived font atlas. Keep
+`maneuver_render/LICENSE.DEJAVU` with redistributed renderer binaries; the native
+build copies it into `build/` and the SD build includes it at the card root.
 
 ## 🔧 Build
 

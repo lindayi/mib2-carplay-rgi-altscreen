@@ -85,3 +85,8 @@ shows both is decided by the VC firmware, not the HU; the patched `ClusterServic
 Java distance model (64) valid alongside the bargraph model while CarPlay owns the cluster
 (`!showBargraph || ScreenModule.isConnected()`). (!) What the installed VC displays with the bar on is
 not re-verified on this branch.
+
+The custom renderer now has an independent next-turn distance/road footer, fed by
+the same stock distance formatter, so its number does not depend on the native
+VC distance-widget visibility. See [route-label footer](../cluster/maneuver-renderer.md#route-label-footer).
+The BAP bargraph and arrow-fill behavior described above is unchanged.
