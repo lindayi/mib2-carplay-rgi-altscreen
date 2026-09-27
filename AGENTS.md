@@ -83,21 +83,28 @@ As reported by the owner on **2026-09-27**:
   car** during the initial implementation session. Native MMI drawing, knob/Back
   behavior, QNX settings persistence and wireless-adapter behavior remain unverified.
 
-### Next investigation: layout request lifetime, not a blind crop adjustment
+### Layout request lifetime correction: vehicle confirmation still required
 
-`ScreenModule.refreshAltScreenVideo()` calls
-`AltScreenCluster.onVideoReady()` on a video-ready edge. That sends one
-`CMD_ALT_UICTX`/AirPlay `showUI` request. It does not reassert the layout for every
-new navigation route. A later route/app UI change while the video stays ready
-could therefore explain the symptom, but **this is a hypothesis, not a proven cause**.
+The earlier implementation sent `CMD_ALT_UICTX`/AirPlay `showUI` only on a
+video-ready edge. `AltScreenCluster` now observes live RGI independently of the
+primary `RouteGuidance` listener, so map-only mode also gets route reapplication.
+The existing screen worker drains coalesced video/route requests, gated by
+receiver connection and module generation; callbacks do not read files or write
+sockets. Keep this separate from `ScreenModule.setNavActive`: that is the BAP
+presentation latch, not route identity, and can stay active across route changes.
 
-Start with:
+Reapply the session's selected URL on entry into settled route states 1/6,
+changed `route_generation` while settled (native debounce can hide route end),
+or a changed reported source while settled. Do not treat distance, maneuver,
+`visible_in_app` or duplicate replay as new routes. No successful request is
+resent by a timer. Cache the URL per receiver connection so new preferences
+still require reconnect, including across video/module restarts.
 
-- `java_patch\com\luka\carplay\core\ScreenModule.java`
-- `java_patch\com\luka\carplay\cluster\AltScreenCluster.java`
-- `java_patch\com\luka\carplay\rgd\RouteGuidance.java`
-- `hook\altcluster\alt_cluster.c`
-- `docs\input\steering-wheel.md`
+`AltScreenLayoutLifecycleTest` uses real bus frames and delayed settings reads;
+`AltScreenContextTest` exercises the actual context worker. Host verification
+does not establish Google Maps behavior. The request-lifetime gap is real;
+whether it caused the observed offset remains a **vehicle-unproven hypothesis**.
+See `docs\input\steering-wheel.md` for the parked acceptance sequence and logging.
 
 Compare a centered first route and off-center later route in the same connection:
 app/iOS versions, route changes, video readiness, `showUI` events and raw cluster

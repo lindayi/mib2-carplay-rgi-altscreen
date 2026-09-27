@@ -45,15 +45,19 @@ AirPlay session is tracked through the PLT-bound `AirPlayReceiverSessionPlatform
 AltScreen's display UUID is fixed (`b7e6c5a0-2222-4000-8000-000000000002`).
 
 The same path carries `CMD_ALT_UICTX` (a `maps:/car/instrumentcluster` URL -> `showUI`), sent when
-the video comes up. With no `/mnt/app/root/hooks/cluster_ui.url`, Java requests
+the video comes up and reapplied when a route settles or changes within that stream.
+With no `/mnt/app/root/hooks/cluster_ui.url`, Java requests
 `maps:/car/instrumentcluster/map?maneuverLayout=topaligned`. A saved file takes precedence;
 the MMI-Cockpit-Carplay GEM menu writes it ("Cluster map layout": original AltScreen /
 card on top (default) / card on the right / no ETA). Original AltScreen explicitly saves
-the base URL; it does not remove the file. Upgrades leave saved choices untouched. (The listener
+the base URL; it does not remove the file. Native MMI preferences take precedence when
+present. The selected URL is latched on the first request for a receiver connection;
+later routes and video/module restarts reuse it, so changing the setting still requires
+a CarPlay reconnect. Upgrades leave saved choices untouched. (The listener
 also observes FctID 44 visibility and FctID 54 stage for the KDK layers - see
 [kdk-geometry](../cluster/kdk-geometry.md).)
 
-## Open: Google Maps layout does not stay centered
+## Google Maps alignment: route-lifetime correction, vehicle confirmation pending
 
 On 2026-09-27 the owner reported working navigation text/distance, but intermittent
 Google Maps centering: the first one or few navigations can be centered and later
@@ -61,17 +65,51 @@ navigation can revert to an off-center vehicle icon. No reliable trigger is know
 The last prepared test card was `cb64eee`; the later native-MMI build had not been
 deployed. Earlier owner feedback said Apple Maps did not have this offset.
 
-The current Java path sends the selected layout from `AltScreenCluster.onVideoReady`,
-called on a readiness edge in `ScreenModule.refreshAltScreenVideo`. It does not
-explicitly resend on every new route. A later route/UI transition while the same
-video stream remains ready is a plausible explanation, **not a confirmed cause**.
+The earlier Java path sent the selected layout only on a video-ready edge. A
+later route/UI transition while the same video stream remains ready could lose
+that selection without another request. This missing reapplication is confirmed
+in the code; its connection to the observed offset is **not yet vehicle-proven**.
+
+`AltScreenCluster` now observes live RGI frames alongside, not instead of,
+`RouteGuidance`. It also works when the custom maneuver overlay is disabled
+(CarPlay map-only mode). It requests the existing session layout when:
+
+- Video becomes ready, or its receiver bus connection changes.
+- Route state enters `ROUTE_SET` (1) or `PROCEED_TO_ROUTE` (6) from a non-settled
+  state, including completion of loading/rerouting.
+- `route_generation` changes while settled, catching a native route reset even
+  when debounce hides the intervening `NO_ROUTE_SET`.
+- The reported navigation source changes while settled.
+
+The screen worker coalesces overlapping events and waits for ready video.
+Distance, maneuver, foreground-visibility and duplicate replay updates do not
+resend the layout. Route end, video withdrawal, Master Off and obsolete
+connection/module generations cancel pending work. Callbacks do no file or
+socket I/O; the worker reads the selected URL and the bus writer sends it.
+There is **no timer reassertion after a successful enqueue**, new crop, forced
+top preset, receiver restart or automatic phone disconnect.
+
+`AltScreenLayoutLifecycleTest` exercises real bus packets for repeated routes on
+unchanged ready video, hidden route resets, reroutes, source changes, explicit
+presets, reconnects and cancellation during a delayed settings read.
+`AltScreenContextTest` covers the actual screen worker and context lifecycle.
+These are host checks, not proof that Google Maps honors `showUI` or centers
+its vehicle marker.
 
 Compare first/subsequent routes within one connection, recording app/iOS versions,
-video readiness, route state and `showUI` events. Compare raw second-screen video
-with the displayed crop before changing geometry. Do not assume a new route means
-a new Type-111 stream, repeatedly force `showUI` without evidence, or globally
-shift the image and break Apple Maps. The top-card preset is not a guaranteed
-centering fix.
+video readiness, route state and `showUI` events. With verbose logging enabled for
+the test connection, Java records the request reason (`video`, `route`, or both),
+connection and route generations, route state and selected URL. **Queued** means
+accepted by the local bus, not acknowledged by the phone; correlate it with the
+native hook's `showUI` result. Retain exports privately.
+
+While parked, compare at least three Google Maps start/stop/new-route cycles in
+one connection, a destination change/reroute, and switching to/from Apple Maps.
+Check both map-only and map-plus-guidance modes, and verify Apple Maps has not
+regressed. If the offset persists despite the matching request, compare raw
+second-screen video with the displayed crop before changing geometry. Do not
+assume a new route means a new Type-111 stream or globally shift the image.
+The top-card preset is not a guaranteed centering fix.
 
 ## ⚙️ Press (OK) -> route-info toggle
 

@@ -38,6 +38,13 @@ No preference invokes a full MMI reboot, disconnects the phone automatically, or
 uninstalls the patch. The initial patch installation still needs the normal
 installation reboot.
 
+The phone-map URL is latched per receiver connection and reapplied on later
+route transitions, including in map-only mode. A live route change or video
+restart does not silently apply a newly saved layout; reconnect CarPlay for that
+change. This addresses missing layout requests, not direct vehicle-marker
+positioning. Google Maps alignment still needs vehicle confirmation; see
+[layout request lifetime](../input/steering-wheel.md#google-maps-alignment-route-lifetime-correction-vehicle-confirmation-pending).
+
 ### Master Off and wireless adapters
 
 The next-session launcher clears `LD_PRELOAD` and `CARPLAY_PRELOAD_EXTRA`, skips

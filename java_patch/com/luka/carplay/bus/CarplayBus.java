@@ -60,6 +60,12 @@ public final class CarplayBus {
         void onFrame(int type, int flags, byte[] payload, int len);
     }
 
+    /** Non-owning live-frame consumer; does not consume the primary listener's sticky replay.
+     *  Removal does not wait for callbacks already in flight; consumers must gate their lifecycle. */
+    public interface Observer {
+        void onFrame(int connection, int type, int flags, byte[] payload, int len);
+    }
+
     private static final CarplayBus INSTANCE = new CarplayBus();
     public static CarplayBus getInstance() { return INSTANCE; }
     private CarplayBus() { this(PORT); }
@@ -73,6 +79,7 @@ public final class CarplayBus {
      * or holding the connection lock while calling a module. */
     private final Object dispatchLock = new Object();
     private final Listener[] listeners = new Listener[MAX_TYPES];
+    private final Observer[][] observers = new Observer[MAX_TYPES][];
     /* Last sticky frame of a type nobody listened to yet: the hook replays its sticky
      * state once per connection, and on a connected-phone cold boot that can come
      * before a late listener registers (a module that starts after the bus is up),
@@ -147,7 +154,42 @@ public final class CarplayBus {
         synchronized (lock) { return sock != null; }
     }
 
+    public int connectionGeneration() {
+        synchronized (lock) { return running && out != null ? connectionGeneration : -1; }
+    }
+
     /* ---- listeners ---- */
+    public void addObserver(int type, Observer observer) {
+        if (type < 0 || type >= MAX_TYPES || observer == null)
+            throw new IllegalArgumentException("Invalid bus observer");
+        synchronized (lock) {
+            Observer[] old = observers[type];
+            int n = old == null ? 0 : old.length;
+            for (int i = 0; i < n; i++) if (old[i] == observer) return;
+            Observer[] next = new Observer[n + 1];
+            if (n != 0) System.arraycopy(old, 0, next, 0, n);
+            next[n] = observer;
+            observers[type] = next;
+        }
+    }
+
+    public void removeObserver(int type, Observer observer) {
+        if (type < 0 || type >= MAX_TYPES)
+            throw new IllegalArgumentException("Invalid bus observer type");
+        synchronized (lock) {
+            Observer[] old = observers[type];
+            if (old == null) return;
+            for (int i = 0; i < old.length; i++) {
+                if (old[i] != observer) continue;
+                Observer[] next = new Observer[old.length - 1];
+                System.arraycopy(old, 0, next, 0, i);
+                System.arraycopy(old, i + 1, next, i, old.length - i - 1);
+                observers[type] = next;
+                return;
+            }
+        }
+    }
+
     public void on(final int type, final Listener l) {
         if (type < 0 || type >= MAX_TYPES) return;
         final Object[] held;
@@ -180,6 +222,10 @@ public final class CarplayBus {
 
     /* ---- writer (Java -> hook) ---- */
     public boolean send(int type, int flags, byte[] payload, int len) {
+        return send(type, flags, payload, len, -1);
+    }
+
+    private boolean send(int type, int flags, byte[] payload, int len, int expectedConnection) {
         if (type < 0 || type >= MAX_TYPES || flags < 0 || flags > 255) return false;
         if (len < 0 || len > MAX_PAYLOAD) return false;
         if (len > 0 && (payload == null || len > payload.length)) return false;
@@ -191,6 +237,7 @@ public final class CarplayBus {
                 return false;
             }
             generation = connectionGeneration;
+            if (expectedConnection != -1 && generation != expectedConnection) return false;
         }
 
         byte[] packet = new byte[HEADER_SIZE + len];
@@ -273,6 +320,12 @@ public final class CarplayBus {
 
     public boolean sendBinary(int type, byte[] payload) {
         return send(type, FLAG_BINARY, payload, payload == null ? 0 : payload.length);
+    }
+
+    /** An async producer must not enqueue work onto a replacement receiver. */
+    public boolean sendBinary(int type, byte[] payload, int expectedConnection) {
+        if (expectedConnection < 0) return false;
+        return send(type, FLAG_BINARY, payload, payload == null ? 0 : payload.length, expectedConnection);
     }
 
     /* ---- text payload parser (hook -> Java "key:type:val\n" frames) ---- */
@@ -487,13 +540,23 @@ public final class CarplayBus {
     private boolean dispatch(int lifecycle, Socket owned, int type, int flags, byte[] payload, int len) {
         synchronized (dispatchLock) {
             Listener l;
+            Observer[] copy;
+            int connection;
             synchronized (lock) {
                 if (!isCurrentRun(lifecycle) || sock != owned) return false;
                 if (type < 0 || type >= MAX_TYPES) return true;
                 l = listeners[type];
+                copy = observers[type];
+                connection = connectionGeneration;
                 if (l != null) unheard[type] = null;                   /* newer than a held one */
                 else if ((flags & FLAG_STICKY) != 0)
                     unheard[type] = new Object[] { new Integer(flags), payload };
+            }
+            if (copy != null) {
+                for (int i = 0; i < copy.length; i++) {
+                    try { copy[i].onFrame(connection, type, flags, payload, len); }
+                    catch (Throwable t) { Log.w(TAG, "observer 0x" + Integer.toHexString(type) + " threw: " + t); }
+                }
             }
             if (l != null) {
                 try { l.onFrame(type, flags, payload, len); }

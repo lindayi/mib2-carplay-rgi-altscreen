@@ -26,6 +26,11 @@ can be centered, then later navigation can return to an off-center layout. The
 trigger is not established. The last prepared test card was `cb64eee`; this report
 does not validate the later native-MMI menu or recovery additions.
 
+**Alignment follow-up:** The code now reapplies the selected phone-map layout on
+route transitions even when cluster video stays ready, without changing the crop.
+This corrects a request-lifetime gap; resolution of the intermittent Google Maps
+offset still requires vehicle confirmation ([details](docs/input/steering-wheel.md)).
+
 **Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
 
 ## 🖼️ Gallery
@@ -137,9 +142,10 @@ features below follow it automatically.
   *maneuver card on top (default)*, *maneuver card on the right*, and *no ETA*
   (applied on next phone reconnect). With no saved preference, the maneuver card
   defaults to the top; upgrades preserve explicitly saved layouts.
-  **Known limitation:** Google Maps may return to an off-center layout on later
-  navigations; the triggering event is unknown and the preset is not a confirmed
-  centering fix.
+  The selected layout is reapplied on later route transitions, not just video
+  startup, including in map-only mode. **Known limitation:** the intermittent
+  Google Maps offset has not yet been vehicle-retested with this correction;
+  neither the preset nor reapplication guarantees marker centering.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
   **Carplay Altscreen**. Grouped controls cover master enable, presentation/layout,

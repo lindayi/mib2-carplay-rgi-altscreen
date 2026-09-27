@@ -143,6 +143,14 @@ public final class CarplayBusTransportTest {
         final CarplayBus bus = new CarplayBus(0);
         Socket s = new Socket();
         set(bus, "running", Boolean.TRUE); set(bus, "lifecycleGeneration", Integer.valueOf(1)); set(bus, "sock", s);
+        final int[] observed = {0};
+        CarplayBus.Observer observer = new CarplayBus.Observer() {
+            public void onFrame(int connection, int type, int flags, byte[] payload, int len) {
+                observed[0]++;
+            }
+        };
+        bus.addObserver(CarplayBus.EVT_RGD_UPDATE, observer);
+        bus.addObserver(CarplayBus.EVT_RGD_UPDATE, observer);
         Class[] t = {Integer.TYPE, Socket.class, Integer.TYPE, Integer.TYPE, byte[].class, Integer.TYPE};
         call(bus, "dispatch", t, new Object[] {Integer.valueOf(1), s, Integer.valueOf(CarplayBus.EVT_RGD_UPDATE),
             Integer.valueOf(CarplayBus.FLAG_STICKY), new byte[] {5}, Integer.valueOf(1)});
@@ -158,6 +166,8 @@ public final class CarplayBusTransportTest {
         long end = System.currentTimeMillis() + 3000;
         while (got[0] != 5 && System.currentTimeMillis() < end) Thread.sleep(1);
         check(got[0] == 5, "late listener missed the held sticky frame");
+        check(observed[0] == 1, "observer duplicated registration/replay or missed live frame");
+        bus.removeObserver(CarplayBus.EVT_RGD_UPDATE, observer);
         check(got[1] == -1, "non-sticky frame must not be held");
         /* A held frame never outlives its connection. */
         bus.off(CarplayBus.EVT_RGD_UPDATE);
@@ -170,6 +180,7 @@ public final class CarplayBusTransportTest {
         });
         Thread.sleep(100);
         check(got[0] == -1, "held frame survived its connection");
+        check(observed[0] == 1, "removed observer received a new frame");
         /* on() must not wait for a dispatch in progress (caller may hold a monitor the listener needs). */
         set(bus, "sock", s);
         call(bus, "dispatch", t, new Object[] {Integer.valueOf(1), s, Integer.valueOf(CarplayBus.EVT_COVERART),

@@ -7,9 +7,9 @@
  *   AirPlay "changeMapZoomLevel" command).  Stock still zooms its own hidden map.
  *
  *   Cluster UI context -> CMD_ALT_UICTX: if /mnt/app/root/hooks/cluster_ui.url holds a
- *   maps:/car/instrumentcluster URL, it is sent as "showUI" each time the video comes
- *   up, after AltScreen's own request.  The file is written by the MMI-Cockpit-Carplay
- *   GEM menu ("cluster layout"); without it the maneuver card is placed on top.
+ *   maps:/car/instrumentcluster URL, it is sent as "showUI" when video comes up and
+ *   when a route settles/changes in that stream. The screen worker performs I/O;
+ *   route callbacks only publish intent, independently of the BAP/renderer mode.
  */
 package com.luka.carplay.cluster;
 
@@ -21,6 +21,7 @@ import com.luka.carplay.settings.Setting;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 
 public final class AltScreenCluster {
 
@@ -34,7 +35,155 @@ public final class AltScreenCluster {
     /* Host tests point this at a scratch file. */
     private static String uiUrlPath = UI_URL_FILE;
 
+    private static final Object LOCK = new Object();
+    private static final int VIDEO = 1, ROUTE = 2;
+    private static boolean enabled, video;
+    private static int connection = -1;
+    private static int pending;
+    private static int lifecycle;
+    private static long revision;
+    private static int routeState = -1, sourceSupportsRg = -1;
+    private static long routeGeneration = -1L;
+    private static String sourceName;
+    /* Keep the applied layout across module restarts; saved changes require a receiver reconnect. */
+    private static int urlConnection = -1;
+    private static String sessionUrl;
+    private static CarplayBus.Observer routeObserver;
+
     private AltScreenCluster() {}
+
+    public static void start() {
+        synchronized (LOCK) {
+            if (routeObserver != null)
+                CarplayBus.getInstance().removeObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
+            final int run = ++lifecycle;
+            enabled = true;
+            video = false;
+            connection = -1;
+            pending = 0;
+            revision++;
+            resetRoute();
+            routeObserver = new CarplayBus.Observer() {
+                public void onFrame(int generation, int type, int flags, byte[] payload, int len) {
+                    onRouteFrame(run, generation, CarplayBus.parseText(payload, len));
+                }
+            };
+            CarplayBus.getInstance().addObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
+        }
+    }
+
+    public static void stop() {
+        synchronized (LOCK) {
+            enabled = false;
+            video = false;
+            pending = 0;
+            lifecycle++;
+            revision++;
+            resetRoute();
+            if (routeObserver != null)
+                CarplayBus.getInstance().removeObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
+            routeObserver = null;
+        }
+    }
+
+    private static void resetRoute() {
+        routeState = sourceSupportsRg = -1;
+        routeGeneration = -1L;
+        sourceName = null;
+    }
+
+    private static void useConnection(int generation) {
+        if (connection == generation) return;
+        connection = generation;
+        resetRoute();
+        pending = video && generation >= 0 ? VIDEO : 0;
+        revision++;
+    }
+
+    private static boolean settled(int state) { return state == 1 || state == 6; }
+
+    private static void onRouteFrame(int run, int generation, CarplayBus.Data data) {
+        synchronized (LOCK) {
+            if (!enabled || run != lifecycle
+                    || generation != CarplayBus.getInstance().connectionGeneration()) return;
+            useConnection(generation);
+            if (data.has("disconnect_reason")) {
+                resetRoute();
+                pending = 0;
+                revision++;
+                return;
+            }
+            boolean wasSettled = settled(routeState);
+            long oldGeneration = routeGeneration;
+            String oldSource = sourceName;
+            if (data.has("route_generation")) {
+                long next = data.num64("route_generation", -1L);
+                if (next >= 0L) routeGeneration = next;
+                else Log.w(TAG, "ignoring invalid route generation");
+            }
+            if (data.has("route_state")) routeState = data.num("route_state", -1);
+            if (data.has("source_supports_rg")) sourceSupportsRg = data.num("source_supports_rg", -1);
+            if (data.has("source_name")) sourceName = data.str("source_name");
+            if (sourceSupportsRg == 0) routeState = 0;
+            if (!settled(routeState)) {
+                if ((pending & ROUTE) != 0) { pending &= ~ROUTE; revision++; }
+                return;
+            }
+            boolean newSource = oldSource != null && sourceName != null && !oldSource.equals(sourceName);
+            if (!wasSettled || routeGeneration != oldGeneration || newSource) {
+                pending |= ROUTE;
+                revision++;
+            }
+        }
+    }
+
+    /** Lightweight publication under ScreenModule's context lock; no files or socket writes. */
+    public static void setVideoReady(boolean ready) {
+        synchronized (LOCK) {
+            if (!enabled || video == ready) return;
+            video = ready;
+            pending = ready ? pending | VIDEO : 0;
+            revision++;
+        }
+    }
+
+    /** Only the persistent screen worker calls this. No successful request is retried on a timer. */
+    public static void flushLayout() {
+        int generation;
+        long request;
+        String url;
+        boolean load;
+        synchronized (LOCK) {
+            if (!enabled) return;
+            generation = CarplayBus.getInstance().connectionGeneration();
+            useConnection(generation);
+            if (!video || generation < 0 || pending == 0) return;
+            request = revision;
+            load = urlConnection != generation;
+            url = sessionUrl;
+        }
+        if (load) url = readUiUrl();
+        byte[] bytes = null;
+        try { if (url != null) bytes = url.getBytes("UTF-8"); }
+        catch (IOException e) { Log.e(TAG, "cannot encode cluster layout", e); }
+        synchronized (LOCK) {
+            if (!enabled || !video || revision != request
+                    || generation != CarplayBus.getInstance().connectionGeneration()) return;
+            if (load) { sessionUrl = url; urlConnection = generation; }
+            if (bytes == null) {
+                pending = 0;
+                Log.w(TAG, "cluster layout unavailable; reconnect after repairing preferences");
+                return;
+            }
+            int reasons = pending;
+            boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes, generation);
+            if (sent) pending = 0;
+            Log.i(TAG, "cluster showUI " + (sent ? "queued" : "not queued")
+                + " connection=" + generation
+                + " reason=" + (reasons == VIDEO ? "video" : reasons == ROUTE ? "route" : "video+route")
+                + " route_generation=" + routeGeneration + " route_state=" + routeState + " url=" + url);
+        }
+    }
 
     /** Stock CombiBAPListener.setMapScale steps (positive = zoom out). */
     public static void onMapScaleSteps(int steps) {
@@ -52,50 +201,49 @@ public final class AltScreenCluster {
             + (sent ? "" : " (bus down)"));
     }
 
-    /** ScreenModule: the AltScreen video just came up on the cluster. */
-    public static void onVideoReady() {
-        String url = readUiUrl();
-        if (url == null) return;
-        byte[] bytes;
-        try { bytes = url.getBytes("UTF-8"); }
-        catch (Throwable t) { return; }
-        boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes);
-        Log.i(TAG, "cluster showUI " + url + (sent ? "" : " (bus down)"));
-    }
-
     static String readUiUrl() {
-        if(Preferences.get().exists()) {
-            if(Preferences.get().error().length()!=0)return null;
-            switch(Preferences.get().snapshot().get(Setting.LAYOUT)) {
-                case 1:return "maps:/car/instrumentcluster/map?maneuverLayout=rightaligned";
-                case 2:return "maps:/car/instrumentcluster/map?showETA=no";
-                case 3:return "maps:/car/instrumentcluster/map";
-                default:return DEFAULT_UI_URL;
-            }
-        }
         FileInputStream in = null;
         try {
+            if(Preferences.get().exists()) {
+                if(Preferences.get().error().length()!=0)return null;
+                switch(Preferences.get().snapshot().get(Setting.LAYOUT)) {
+                    case 1:return "maps:/car/instrumentcluster/map?maneuverLayout=rightaligned";
+                    case 2:return "maps:/car/instrumentcluster/map?showETA=no";
+                    case 3:return "maps:/car/instrumentcluster/map";
+                    default:return DEFAULT_UI_URL;
+                }
+            }
             File f = new File(uiUrlPath);
             if (!f.exists()) return DEFAULT_UI_URL;
-            if (f.length() <= 0 || f.length() > MAX_URL) return null;
-            byte[] buf = new byte[(int)f.length()];
+            long length = f.length();
+            if (length <= 0 || length > MAX_URL) {
+                Log.w(TAG, "ignoring " + uiUrlPath + ": invalid layout length");
+                return null;
+            }
+            byte[] buf = new byte[(int)length];
             in = new FileInputStream(f);
             int n = 0;
             while (n < buf.length) {
                 int r = in.read(buf, n, buf.length - n);
-                if (r < 0) break;
+                if (r < 0) throw new IOException("Layout file truncated during read");
                 n += r;
             }
+            if (in.read() != -1) throw new IOException("Layout file grew during read");
             String url = new String(buf, 0, n, "UTF-8").trim();
             if (!url.startsWith(URL_PREFIX)) {
                 Log.w(TAG, "ignoring " + uiUrlPath + ": not a maps: URL");
                 return null;
             }
             return url;
-        } catch (Throwable t) {
+        } catch (IOException e) {
+            Log.w(TAG, "cannot read cluster layout: " + e);
+            return null;
+        } catch (SecurityException e) {
+            Log.w(TAG, "cluster layout access denied: " + e);
             return null;
         } finally {
-            if (in != null) try { in.close(); } catch (Throwable t) { }
+            if (in != null) try { in.close(); }
+            catch (IOException e) { Log.w(TAG, "cannot close cluster layout: " + e); }
         }
     }
 }

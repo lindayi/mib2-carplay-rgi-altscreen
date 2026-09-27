@@ -11,9 +11,12 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
     "$PROJECT_DIR/tests/RendererServerTransportTest.java" \
     "$PROJECT_DIR/tests/TouchpadControllerTest.java" \
-    "$PROJECT_DIR/tests/AltScreenLayoutTest.java"
+    "$PROJECT_DIR/tests/AltScreenLayoutTest.java" \
+    "$PROJECT_DIR/tests/AltScreenLayoutLifecycleTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" \
     com.luka.carplay.cluster.AltScreenLayoutTest "$PROJECT_DIR/altscreen/Toolbox/scripts/cluster_layout.sh"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" \
+    com.luka.carplay.cluster.AltScreenLayoutLifecycleTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest

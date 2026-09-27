@@ -111,7 +111,10 @@ public final class ScreenModule implements Module {
         synchronized(LOCK) {
             if(videoAllowed==allowed)return;
             videoAllowed=allowed;
-            if(!allowed)altScreenVideo=false;
+            if(!allowed) {
+                altScreenVideo=false;
+                com.luka.carplay.cluster.AltScreenCluster.setVideoReady(false);
+            }
         }
         republish();
     }
@@ -124,6 +127,7 @@ public final class ScreenModule implements Module {
             ready = connected && videoAllowed && ready;
             changed = ready != altScreenVideo;
             altScreenVideo = ready;
+            com.luka.carplay.cluster.AltScreenCluster.setVideoReady(ready);
             // A restart can reset desiredCtx without changing the readiness markers.
             int target = contextFor(connected, ready, navActive);
             if (desiredCtx != target) {
@@ -131,9 +135,9 @@ public final class ScreenModule implements Module {
                 LOCK.notifyAll();
             }
         }
-        if (!changed) return;
-        Log.i(TAG, "AltScreen video " + (ready ? "ready -> ctx " + CTX_CLUSTER_VIDEO : "gone"));
-        if (ready) com.luka.carplay.cluster.AltScreenCluster.onVideoReady();
+        if (changed)
+            Log.i(TAG, "AltScreen video " + (ready ? "ready -> ctx " + CTX_CLUSTER_VIDEO : "gone"));
+        com.luka.carplay.cluster.AltScreenCluster.flushLayout();
     }
 
     /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
@@ -270,6 +274,7 @@ public final class ScreenModule implements Module {
             altScreenVideo = false;
             navHidePending = false;
             desiredCtx = CTX_STOCK_CLUSTER;
+            com.luka.carplay.cluster.AltScreenCluster.start();
         }
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
@@ -297,6 +302,7 @@ public final class ScreenModule implements Module {
             navActive = false;
             altScreenVideo = false;
             navHidePending = false;
+            com.luka.carplay.cluster.AltScreenCluster.stop();
         }
         republish();
     }
