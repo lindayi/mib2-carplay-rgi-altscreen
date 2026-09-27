@@ -64,14 +64,21 @@ int main(void) {
         lanes.lanes[i].angles[0]=lanes.lanes[i].primary;
     }
     const char *names[]={"popup","popup-lanes","in-tube-lanes","long-road","metric","distance-only",
-        "uturn-lanes","roundabout-lanes","exit-lanes","left-turn-lanes"};
+        "uturn-lanes","roundabout-lanes","exit-lanes","left-turn-lanes","large-lanes","large-roundabout",
+        "scroll-start","scroll-moving","lanes-hidden"};
     const char *roads[]={"Main Street","Main Street","Main Street","Commonwealth Avenue Extension","Rue de l'Eglise","",
-        "Main Street","Park Avenue","Exit 12","Broadway"};
-    for(int test=0;test<10;test++) {
-        maneuver.icon=test==6?ICON_UTURN:test==7?ICON_ROUNDABOUT:test==8?ICON_EXIT:ICON_TURN;
+        "Main Street","Park Avenue","Exit 12","Broadway","Main Street","Park Avenue",
+        "Commonwealth Avenue Extension","Commonwealth Avenue Extension","Main Street"};
+    for(int test=0;test<15;test++) {
+        cr_cmd_t options={CMD_DISPLAY_OPTIONS,0,{15,0,0,1}};
+        options.payload[1]=test==10 || test==11;
+        options.payload[2]=test==12 || test==13;
+        if(test==14)options.payload[0]=3;
+        cr_route_labels_configure(&options);
+        maneuver.icon=test==6?ICON_UTURN:(test==7 || test==11)?ICON_ROUNDABOUT:test==8?ICON_EXIT:ICON_TURN;
         maneuver.direction=test==6 || test==9?-1:1;
         maneuver.exit_angle=test==9?-90:90;
-        maneuver.junction_angle_count=test==7?3:0;
+        maneuver.junction_angle_count=(test==7 || test==11)?3:0;
         maneuver.junction_angles[0]=-90;maneuver.junction_angles[1]=0;maneuver.junction_angles[2]=90;
         cr_rect_t visible=test==2?(cr_rect_t){0,0,328,180}:(cr_rect_t){59,27,210,153};
         cr_cmd_t packet={CMD_ROUTE_LABELS,0,{0}};
@@ -80,7 +87,7 @@ int main(void) {
         memcpy(packet.payload+2,distance,strlen(distance));memcpy(packet.payload+14,roads[test],strlen(roads[test]));
         cr_route_labels_t labels={{0},{0}};cr_route_labels_receive(&labels,&packet);
         float footer=cr_route_labels_height(&labels);
-        lanes.showing=test==1 || test==2 || test>=6;
+        lanes.showing=(test==1 || test==2 || test>=6) && (options.payload[0]&4);
         cr_lane_panel_update(panel,&lanes,visible.w,0);
         cr_lane_panel_set_footer(panel,footer);
         render_set_visible_area((int)visible.x,(int)visible.y,(int)visible.w,(int)visible.h);
@@ -106,6 +113,7 @@ int main(void) {
             render_begin_frame();maneuver_draw(&maneuver,NULL);
             cr_rect_t lane_area=visible;lane_area.h-=footer;
             cr_lane_panel_draw(panel,lane_area,10);
+            cr_route_labels_clock(test==12?0:test==13?3.0:frame/15.0);
             cr_route_labels_draw(&labels,visible,1);
             render_end_frame();
         }
@@ -116,5 +124,5 @@ int main(void) {
     cr_route_labels_shutdown();render_shutdown();
     eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
     eglDestroyContext(display,context);eglDestroySurface(display,surface);eglTerminate(display);
-    puts("route_labels_preview: ten real GLES2 panel/lanes/label renders saved");
+    puts("route_labels_preview: fifteen real GLES2 panel/lanes/label/options renders saved");
 }

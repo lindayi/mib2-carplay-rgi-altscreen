@@ -9,7 +9,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL ($1): $2"; exit 1; }
 
-mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+mode() {
+    if [ "$(uname)" = Darwin ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi
+}
 
 stock_si='{
     "children": {
@@ -27,7 +29,7 @@ stock_dio='        ## 0x5000
         ## 0x5001
         "MessagesReceivedFromDevice":["0x5001", "0x4C04"],'
 
-ASSETS="libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh carplay_hook.jar"
+ASSETS="libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh carplay_hook.jar"
 
 run() {   # $1 shell, $2 layout (flat|tree), $3 action
     S=$T/$2; mkdir -p "$S/mod/carplay" "$S/mnt/system/etc/eso/production"
@@ -55,7 +57,7 @@ for sh in /bin/ksh /bin/mksh /bin/dash /bin/sh; do
 
         run "$sh" "$layout" install
         H=$S/mnt/app/root/hooks
-        for a in libcarplay_hook.so maneuver_render carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh; do
+        for a in libcarplay_hook.so maneuver_render carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh; do
             [ "$(cat "$H/$a")" = "$a" ] || fail "$sh $layout" "$a not installed"
             [ "$(mode "$H/$a")" = 755 ] || fail "$sh $layout" "$a mode $(mode "$H/$a")"
         done

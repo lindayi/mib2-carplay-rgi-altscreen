@@ -108,6 +108,23 @@ public final class CarPlayAppLifecycleTest {
             CarPlayApp.onDeactivate(); Thread.sleep(25); CarPlayApp.onActivate(context); settled();
             for (int i = 0; i < 3; ++i)
                 check(LifecycleTestModule.count(i) == 2, "existing debounce restart behavior changed");
+        } else if(scenario.equals("menu")) {
+            CarPlayApp.setFeaturesEnabled(false);
+            CarPlayApp.onActivate(context);settled();
+            check(CarPlayApp.isSessionConnected() && !CarPlayApp.isActive(),"disabled session must stay stock");
+            check(LifecycleTestModule.count(0)==0,"disabled session started cockpit module");
+            CarPlayApp.setFeaturesEnabled(true);settled();
+            check(CarPlayApp.isActive() && LifecycleTestModule.count(1)==1,"enabled connection not activated");
+            CarPlayApp.setGuidanceEnabled(false);settled();
+            check(LifecycleTestModule.count(1)==1 && LifecycleTestModule.count(0)==2,"map-only restarted RGI");
+            CarPlayApp.setGuidanceEnabled(true);settled();
+            check(LifecycleTestModule.count(1)==2,"live guidance re-enable");
+            CarPlayApp.setFeaturesEnabled(false);settled();
+            check(!CarPlayApp.isActive() && CarPlayApp.isSessionConnected(),"disable lost physical session");
+            CarPlayApp.onDeactivateAndWait();
+            check(!CarPlayApp.isSessionConnected(),"disconnect left stale phone context");
+            CarPlayApp.setFeaturesEnabled(true);settled();
+            check(!CarPlayApp.isActive(),"enable resurrected a disconnected phone");
         } else throw new AssertionError("unknown scenario");
         CarPlayApp.onDeactivateAndWait(); settled();
         check(!CarPlayApp.isActive(), "disconnect remained active");

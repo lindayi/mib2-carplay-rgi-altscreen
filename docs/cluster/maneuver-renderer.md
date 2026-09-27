@@ -44,6 +44,7 @@ reconciles:
 | 0x08 | `CMD_VISIBLE_AREA` | x, y, w, h as four BE u16, source pixels, top-left origin |
 | 0x0c-0x0e | `CMD_LANES_BEGIN/LANE/COMMIT` | atomic lane batch - [lane-guidance](../rgd/lane-guidance.md) |
 | 0x0f | `CMD_ROUTE_LABELS` | `[0]` distance byte count, `[1]` road byte count; UTF-8 distance `[2..13]` and road `[14..45]` |
+| 0x10 | `CMD_DISPLAY_OPTIONS` | `[0]` distance/road/lane/progress bits, `[1]` large text, `[2]` scroll bounded road label, `[3]` version 1 |
 
 0x09-0x0b (lane-road scene commands) are retired.
 
@@ -85,6 +86,10 @@ Names with unsupported glyphs are omitted from this footer with a diagnostic, no
 replaced by misleading text; the existing multilingual native BAP text is unchanged.
 Long supported names are ellipsized to the actual visible width. Regenerate with
 `tools/generate_route_font.py` and retain `maneuver_render/LICENSE.DEJAVU`.
+The native MMI menu can instead scroll the bounded transmitted label and select
+large text. Display options are live, coalesced as one global snapshot and replayed
+after reconnect; unsupported option versions retain the previous presentation.
+They change only our overlay, not the HUD's BAP distance/lane/progress data.
 
 `./scripts/test_route_labels.sh` runs native validation and real offscreen GLES2
 previews in Docker. Images appear in `build/route-label-previews/`. Java tests are

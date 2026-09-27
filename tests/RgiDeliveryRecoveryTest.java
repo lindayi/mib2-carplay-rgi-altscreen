@@ -43,6 +43,7 @@ public final class RgiDeliveryRecoveryTest {
         public void disconnectClient(){disconnects++;}
         public boolean sendVisibleArea(int x,int y,int w,int h){return true;}
         public boolean sendRouteLabels(String distance,String road){return true;}
+        public boolean sendDisplayOptions(){return true;}
         boolean sendLaneGuidance(LaneGuidanceSnapshot s){lanes=s.showing && s.count>0;return true;}
         public boolean sendProgress(int level,int mode,int state){
             if(failProgress-->0)return false;

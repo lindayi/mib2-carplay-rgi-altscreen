@@ -16,4 +16,8 @@ void cr_route_labels_clear(cr_route_labels_t *labels);
 int cr_route_labels_receive(cr_route_labels_t *labels, const cr_cmd_t *cmd);
 float cr_route_labels_height(const cr_route_labels_t *labels);
 void cr_route_labels_draw(const cr_route_labels_t *labels, cr_rect_t visible, float alpha);
+int cr_route_labels_configure(const cr_cmd_t *cmd);
+unsigned cr_route_labels_options(void);
+void cr_route_labels_clock(double now);
+int cr_route_labels_animating(const cr_route_labels_t *labels, float width);
 #endif

@@ -54,3 +54,5 @@ metainfo2.txt
 LICENSE.DEJAVU
 Toolbox/scripts/export_mmi_cockpit_diagnostics.sh
 Toolbox/carplay_alt_screen/mirror_display/release/mirror_health.sh
+Toolbox/scripts/carplay_mmi_action.sh
+Toolbox/carplay_alt_screen/rgi/carplay_settings.sh

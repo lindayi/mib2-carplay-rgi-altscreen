@@ -413,7 +413,8 @@ bool log_verbose(void) {
     static volatile int verbose = -1;       /* benign race: every caller stores the same value */
     if (verbose < 0)
         verbose = access("/mnt/app/carplay_verbose", F_OK) == 0
-               || access("/tmp/carplay_verbose", F_OK) == 0;
+               || access("/tmp/carplay_verbose", F_OK) == 0
+               || access("/tmp/carplay_menu_verbose", F_OK) == 0;
     return verbose != 0;
 }
 

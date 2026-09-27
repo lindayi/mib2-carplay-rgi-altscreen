@@ -7,12 +7,11 @@
 # Input:  java_patch/   +   ../../Tools/jxe2jar   (stock jar + OSGi libs)
 # Output: build/carplay_hook.jar
 #
-# Compiles against MU1316-final.jar + OSGi, target 1.4 (jclfoun11 = Foundation 1.1),
+# Compiles against the owner's MU1316/P5145 stock JAR + OSGi, target 1.4,
 # inside a pinned JDK 8 container so the build does not depend on a host JVM.
 #
-# NOTE: MU1316-final.jar is the author's own decompiled stock HMI jar
-# (../../Tools/jxe2jar/out/). For another MU train, convert that unit's lsd.jxe
-# into the same out/ folder and name it:  STOCK_JAR=MU1329-base.jar ./scripts/build_java.sh
+# The native menu weave is hash-guarded to the exact P5145 stock class. Do not
+# bypass that check or substitute another firmware's generated HMI factory.
 set -e
 
 [ "$#" -eq 0 ] || { echo "usage: ./scripts/build_java.sh"; exit 2; }
@@ -22,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TOOLS_DIR="$(cd "${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}" && pwd)"
 
-STOCK_JAR_NAME=${STOCK_JAR:-MU1316-final.jar}
+STOCK_JAR_NAME=${STOCK_JAR:-MU1316-P5145-stock.jar}
 STOCK_JAR="$TOOLS_DIR/out/$STOCK_JAR_NAME"
 [ -f "$STOCK_JAR" ] || { echo "ERROR: $STOCK_JAR not found"; exit 1; }
 [ -d "$PROJECT_DIR/java_patch" ] || { echo "ERROR: java_patch/ not found"; exit 1; }
@@ -60,6 +59,9 @@ docker run --rm \
   javac -source 1.4 -target 1.4 -cp "$CP" -sourcepath "$GEN:$SRC" -d "$OUT" -Xlint:-options @"$SRCLIST"
   # Compact generated metrics/Unicode tables (VC route text) live inside the jar.
   cp -R /src/java_resources/. "$OUT/"
+  ASM="/tools/tools/uninline/lib/asm-9.7.jar:/tools/tools/uninline/lib/asm-tree-9.7.jar"
+  javac -cp "$ASM" -d "$GEN" /src/tools/PatchNavigationSettings.java
+  java -cp "$GEN:$ASM" PatchNavigationSettings "/tools/out/$STOCK_JAR_NAME" "$OUT"
   (cd "$OUT" && jar cf "$OUTJAR" .)
   rm -rf /src/build/java
 '

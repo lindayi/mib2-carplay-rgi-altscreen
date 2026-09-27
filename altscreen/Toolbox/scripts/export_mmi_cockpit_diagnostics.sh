@@ -4,7 +4,9 @@ set -u
 PATH=${PATH:-/bin:/usr/bin}:/proc/boot:/armle/bin:/bin:/usr/bin:/mnt/app/armle/bin:/mnt/app/armle/usr/bin
 export PATH
 umask 077
-[ "$#" -eq 0 ] || { echo "Usage: export_mmi_cockpit_diagnostics.sh"; exit 2; }
+PRIVATE=1
+if [ "$#" -eq 1 ] && [ "$1" = --summary ]; then PRIVATE=0
+elif [ "$#" -ne 0 ]; then echo "Usage: export_mmi_cockpit_diagnostics.sh [--summary]"; exit 2; fi
 ROOT=""; VOLUME=""
 if [ "${ALTSCREEN_CHAIN_TESTING:-0}" = 1 ]; then
     ROOT=${ALTSCREEN_CHAIN_ROOT:-}
@@ -46,6 +48,7 @@ pid_state(){
 summary(){
     echo "MMI-Cockpit-Carplay export-only diagnostic snapshot"
     echo "EXPORT_VERSION=1"
+    echo "PRIVATE_LOGS_REQUESTED=$PRIVATE"
     echo "CAPTURED_AT=$STAMP"
     echo "HEAD_UNIT_MUTATION=NONE"
     echo "PIXEL_OUTPUT=NOT_VERIFIED"
@@ -106,10 +109,12 @@ Missing logs are reported explicitly and may be normal for a quiet or new sessio
 PRIVACY
 [ "$?" -eq 0 ] || { echo "FAIL: cannot write privacy notice"; exit 1; }
 : > "$OUT/FILES.txt" || { echo "FAIL: cannot write file inventory"; exit 1; }
-for name in carplay_java.log carplay_hook.log maneuver_render.log carplay_wrapper.log \
+LOGS="carplay_java.log carplay_hook.log maneuver_render.log carplay_wrapper.log \
     MMI-Cockpit-Carplay.altscreen_hook.log altscreen_hook.log CinemoDioManager.log \
     MMI-Cockpit-Carplay.mirror.log MMI-Cockpit-Carplay.mirror.autorestart.log \
-    MMI-Cockpit-Carplay.mirror.autostart.log MMI-Cockpit-Carplay.boot_entry.log mmi-mirror-controller.log; do
+    MMI-Cockpit-Carplay.mirror.autostart.log MMI-Cockpit-Carplay.boot_entry.log mmi-mirror-controller.log"
+[ "$PRIVATE" = 1 ] || LOGS=""
+for name in $LOGS; do
     source="$ROOT/tmp/$name"
     if [ ! -f "$source" ]; then
         echo "MISSING $name" >> "$OUT/FILES.txt" || exit 1

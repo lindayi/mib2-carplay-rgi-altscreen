@@ -1,5 +1,10 @@
 MMI Cockpit CarPlay AltScreen + RGI SD Package
 
+This personal native-MMI menu package requires MHI2Q_US_AUG22_P5145 / MU1316.
+The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
+No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.
+Native-menu rendering, controls and wireless-adapter behavior need in-car validation.
+
 1. Copy all contents of this package directly to the root of a FAT32 SD card.
    The card root should directly contain:
    metainfo2.txt, Toolbox/, SD_CARD_README.txt, and SHA256SUMS-SD.txt.
@@ -13,7 +18,8 @@ MMI Cockpit CarPlay AltScreen + RGI SD Package
 4. Execution in GEM (MMI-Cockpit-Carplay menu):
    Disconnect iPhone -> INSTALL -> Full MMI Reboot -> START -> Full MMI Reboot ->
    Connect iPhone / CarPlay -> Launch navigation.
-5. Supported on MHI2Q units (tested on Audi Q5 FY 2019, MHI2Q_ER_AUG22_P5092, MU 1329).
+5. This fork targets the owner's Q5 2020 P5145/MU1316 only. Earlier upstream builds
+   were tested on Audi Q5 FY 2019, MHI2Q_ER_AUG22_P5092, MU1329.
    - Display video is rendered at 1:1 aspect ratio with clean bottom crop (no distortion).
    - Watermarks are completely removed (transparent overlay).
    - Startup screen displays the Audi logo (logo.rgba) for ~2 seconds.

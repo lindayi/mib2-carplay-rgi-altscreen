@@ -1,10 +1,10 @@
 #!/bin/bash
 # Host test of the actual Java 1.4 BAPBridge against the stock service interface.
-# Always build fresh; no HU access or application startup.
+# Builds fresh unless SKIP_BUILD=1 explicitly selects the already-built artifact.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JDK_DIR="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
+TOOLS_DIR="${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}"
+JDK_DIR="${JDK_DIR:-${JAVA_HOME:-$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home}}"
 # STOCK_JAR=<name> in ../../Tools/jxe2jar/out/ selects another MU train (default MU1316).
 STOCK_FINAL="$TOOLS_DIR/out/${STOCK_JAR:-MU1316-final.jar}"
 STOCK_COMBINED="$TOOLS_DIR/out/${STOCK_JAR:-MU1316-combined.jar}"
@@ -13,7 +13,7 @@ if [ ! -x "$JDK_DIR/bin/javac" ] || [ ! -f "$STOCK_FINAL" ]; then
     echo "Missing build JDK or stock JAR $STOCK_FINAL." >&2
     exit 1
 fi
-bash "$PROJECT_DIR/scripts/build_java.sh"
+[ "${SKIP_BUILD:-0}" = 1 ] || bash "$PROJECT_DIR/scripts/build_java.sh"
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"

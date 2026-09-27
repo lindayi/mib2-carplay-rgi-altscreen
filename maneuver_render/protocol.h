@@ -44,6 +44,7 @@
 #define CMD_LANES_LANE   0x0d
 #define CMD_LANES_COMMIT 0x0e
 #define CMD_ROUTE_LABELS 0x0f /* [0] distance bytes, [1] road bytes; UTF-8 [2..13], [14..45] */
+#define CMD_DISPLAY_OPTIONS 0x10 /* [0] distance/road/lanes/progress bits, [1] large, [2] scroll, [3] version=1 */
 
 /* 48-byte command packet */
 typedef struct {

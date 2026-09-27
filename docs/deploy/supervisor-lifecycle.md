@@ -61,6 +61,10 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
 
 ## ⚙️ Ownership rules
 
+- The normal MMI preferences are read by `carplay_settings.sh` before the receiver
+  session starts. Off bypasses all project preloads/monitor; Audi-map mode excludes
+  only the AltScreen preload. Invalid/missing parser with an installed wrapper
+  takes the stock receiver path. See [native settings](../hmi/carplay-settings.md).
 - `children.carplay.envs` carries **no** `LD_PRELOAD`; the wrapper exports it only right before
   `exec dio_manager`, and starts the monitor with it cleared - so neither the shells nor the renderer
   load the hook.

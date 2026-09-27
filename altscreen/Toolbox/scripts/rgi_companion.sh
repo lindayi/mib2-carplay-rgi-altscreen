@@ -42,7 +42,7 @@ CFG=$(p /mnt/system/etc/eso/production/smartphone_integrator.json)
 DIO=$(p /mnt/system/etc/eso/production/dio_manager.json)
 ALTS_PRELOAD=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so
 FILES="libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh
-carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh"
+carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh"
 
 mount_app_rw(){ [ "$TESTING" = 1 ] || mount -uw /mnt/app; }
 mount_app_ro(){ [ "$TESTING" = 1 ] || mount -ur /mnt/app; }
@@ -179,7 +179,7 @@ cmd_install(){
     missing=
     for name in $FILES carplay_child.json; do [ -s "$SRC/$name" ] || missing="$missing $name"; done
     [ -z "$missing" ] || { echo "FAIL: RGI payload incomplete in $SRC:$missing"; exit 1; }
-    for name in carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh; do
+    for name in carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh; do
         sh -n "$SRC/$name" || { echo "FAIL: RGI script syntax: $name"; exit 1; }
     done
 

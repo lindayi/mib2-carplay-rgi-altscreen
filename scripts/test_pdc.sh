@@ -2,8 +2,8 @@
 # Real MU1316 resource policy, reactive properties and commands; fake physical HMI.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
-JDK="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
+TOOLS_DIR="${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}"
+JDK="${JDK:-${JAVA_HOME:-$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home}}"
 # combined retains executable stock accessors. final's decompiler-only
 # AccessInline pass breaks private accesses in stock anonymous classes;
 # audit_java_stock.sh separately verifies linkage against both inventories.

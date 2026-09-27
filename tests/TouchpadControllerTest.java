@@ -35,6 +35,16 @@ public final class TouchpadControllerTest {
         check(next.keys.isEmpty(), "reconnected sink inherited an old touch anchor");
         input.onOneFinger(9000, 8000);
         check(!next.keys.isEmpty() && first.keys.size() == oldCount, "event reached the previous session");
+        input.configure(false,1);next.keys.clear();
+        input.onOneFinger(0,0);input.onOneFinger(2000,0);
+        check(next.keys.isEmpty(),"disabled bridge emitted input");
+        int[] counts=new int[3];
+        for(int sensitivity=0;sensitivity<3;sensitivity++) {
+            input.configure(true,sensitivity);input.onTouchEnd();next.keys.clear();
+            input.onOneFinger(0,0);input.onOneFinger(1200,0);counts[sensitivity]=next.keys.size();
+        }
+        check(counts[0]<counts[1] && counts[1]<counts[2],"sensitivity ordering");
+        input.configure(true,1);
         input.onTouchEnd(); input.setTouchSink(null);
         System.out.println("TouchpadControllerTest: jitter, four directions, repeated ticks and sink reconnect PASS");
     }

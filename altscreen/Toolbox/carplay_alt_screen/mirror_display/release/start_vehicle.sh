@@ -173,6 +173,11 @@ schedule_abnormal_restart() {
   fi
   # Even when the retry budget is exhausted, stale readiness must not retain ctx 81.
   rm -f "$READY" "$BASE_READY"
+  if ! mh_video_wanted || ! mh_recovery_allowed; then
+    mh_publish RECOVERY_DISABLED || :
+    echo "MIRROR_ABNORMAL_RESTART=SUPPRESSED reason=menu_preferences"
+    return 1
+  fi
   if ! ( set -C; : > "$RECOVERY_LOCK" ) 2>/dev/null; then
     echo "MIRROR_ABNORMAL_RESTART=ALREADY_SCHEDULED reason=$WHY lock=$RECOVERY_LOCK"
     return 0
@@ -210,28 +215,11 @@ schedule_abnormal_restart() {
 
 mirror_confirm_identity(){
   sidecar_is_current || return 1
-  [ "${BIN##*/}" = carplay-alt111-mirror-display ] || return 1
-  command -v pidin >/dev/null 2>&1 || return 1
-  identity="$TMP_ROOT/MMI-Cockpit-Carplay.mirror.identity.$$"
-  (exec pidin -p "$PID" ar) > "$identity" 2>/dev/null &
-  identity_pid=$!
-  (sleep 3; kill -KILL "$identity_pid" 2>/dev/null || true) &
-  identity_timer=$!
-  identity_rc=0
-  wait "$identity_pid" || identity_rc=$?
-  kill "$identity_timer" 2>/dev/null || true
-  wait "$identity_timer" 2>/dev/null || true
-  if [ "$identity_rc" != 0 ]; then rm -f "$identity"; return 1; fi
-  matched=1
-  while read -r candidate executable rest; do
-    [ "$candidate" = "$PID" ] || continue
-    case "$executable" in "$BIN"|*/"${BIN##*/}") matched=0 ;; esac
-  done < "$identity"
-  rm -f "$identity"
-  return "$matched"
+  mh_confirm_identity "$PID" "$BIN"
 }
 recover_stalled_mirror(){
   [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
+  mh_video_wanted && mh_recovery_allowed || return 1
   sidecar_is_current || return 1
   rm -f "$READY" "$BASE_READY"
   if ! mirror_confirm_identity; then
@@ -240,6 +228,7 @@ recover_stalled_mirror(){
     return 1
   fi
   [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
+  mh_video_wanted && mh_recovery_allowed || return 1
   echo "MIRROR_STALL_RECOVERY=TERM pid=$PID input_advancing=YES presentation_stalled=YES"
   kill -TERM "$PID" || return 1
   stopped=0

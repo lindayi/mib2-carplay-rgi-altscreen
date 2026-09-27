@@ -88,6 +88,7 @@ public final class ScreenModule implements Module {
     private static volatile boolean connected = false;
     private static volatile boolean navActive = false;
     private static volatile boolean altScreenVideo = false;
+    private static volatile boolean videoAllowed = true;
     private static boolean navHidePending;
 
     static int contextFor(boolean connected, boolean video, boolean nav) {
@@ -99,20 +100,28 @@ public final class ScreenModule implements Module {
     /** Recompute desiredCtx and wake the worker. Caller must NOT hold LOCK. */
     private static void republish() {
         synchronized (LOCK) {
-            desiredCtx = contextFor(connected, altScreenVideo, navActive);
+            desiredCtx = contextFor(connected, altScreenVideo && videoAllowed, navActive);
             LOCK.notifyAll();
         }
     }
 
     /** True while displayable 3 carries the AltScreen CarPlay video (ctx 81 target). */
     public static boolean isAltScreenVideo() { return altScreenVideo; }
+    public static void setVideoAllowed(boolean allowed) {
+        synchronized(LOCK) {
+            if(videoAllowed==allowed)return;
+            videoAllowed=allowed;
+            if(!allowed)altScreenVideo=false;
+        }
+        republish();
+    }
 
     /** Poll the AltScreen markers; only the switch worker calls this, never under LOCK. */
     private static void refreshAltScreenVideo() {
         boolean ready = com.luka.carplay.cluster.AltScreenVideo.isReady();
         boolean changed;
         synchronized (LOCK) {
-            ready = connected && ready;
+            ready = connected && videoAllowed && ready;
             changed = ready != altScreenVideo;
             altScreenVideo = ready;
             // A restart can reset desiredCtx without changing the readiness markers.

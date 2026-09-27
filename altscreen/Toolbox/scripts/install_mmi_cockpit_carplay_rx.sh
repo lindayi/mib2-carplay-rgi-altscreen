@@ -30,6 +30,16 @@ else
 fi
 
 [ -n "$VOLUME" ] || { echo "FAIL: no Toolbox SD card discovered"; exit 1; }
+TRAIN=""
+for version_file in "$DEVICE_ROOT/net/rcc/dev/shmem/version.txt" "$DEVICE_ROOT/dev/shmem/version.txt" "$DEVICE_ROOT/net/mmx/dev/shmem/version.txt"; do
+    [ -r "$version_file" ] || continue
+    TRAIN=$(sed -n 's/.*\(MHI2Q_[A-Za-z0-9_]*\).*/\1/p' "$version_file" | head -n 1)
+    [ -z "$TRAIN" ] || break
+done
+[ "$TRAIN" = MHI2Q_US_AUG22_P5145 ] || {
+    echo "FAIL: this personal native-MMI package requires MHI2Q_US_AUG22_P5145 (MU1316); found ${TRAIN:-UNKNOWN}"
+    exit 1
+}
 CONTROLLER="$VOLUME/Toolbox/scripts/altscreen_chain_test.sh"
 RGI_COMPANION="$VOLUME/Toolbox/scripts/rgi_companion.sh"
 MIRROR_RELEASE="$VOLUME/Toolbox/carplay_alt_screen/mirror_display/release"

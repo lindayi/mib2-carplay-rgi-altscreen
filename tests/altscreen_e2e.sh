@@ -33,7 +33,7 @@ new_fixture(){
     cp "$F/_mnt_system_etc_eso_production_dio_manager.json" "$P/dio_manager.json"
     cp /fixture/firewall-original/pf.conf "$ROOT/mnt/system/etc/pf.conf"
     cp /fixture/boot-diagnostics/startup.sh "$ROOT/mnt/system/etc/boot/startup.sh"
-    echo "Current train = MHI2Q_US_AUG22_FIXTURE" > "$ROOT/dev/shmem/version.txt"
+    echo "Current train = MHI2Q_US_AUG22_P5145" > "$ROOT/dev/shmem/version.txt"
     export ALTSCREEN_CHAIN_TESTING=1 ALTSCREEN_CHAIN_ROOT=$ROOT ALTSCREEN_CHAIN_VOLUME=$VOL
 }
 
@@ -96,6 +96,12 @@ FAULT
 }
 
 new_fixture
+echo "Current train = MHI2Q_ER_AUG22_P5092" > "$ROOT/dev/shmem/version.txt"
+expect_failure 1 wrong-firmware "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need wrong-firmware 'requires MHI2Q_US_AUG22_P5145'
+stock_configs
+test ! -e "$RUNTIME"
+echo "Current train = MHI2Q_US_AUG22_P5145" > "$ROOT/dev/shmem/version.txt"
 install
 preference=maps:/car/instrumentcluster/map?maneuverLayout=rightaligned
 printf '%s\n' "$preference" > "$H/cluster_ui.url"
@@ -106,7 +112,7 @@ stub_mirror
 grep -Fq '"CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so"' \
     "$P/smartphone_integrator.json"
 sed -n '/^INHERITED_PRELOAD=/,/^echo "\[startup\] preload/p' "$H/carplay_startup.sh" > "$CASE_DIR/pre.sh"
-got=$(env -u LD_PRELOAD CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so \
+got=$(env -u LD_PRELOAD MENU_VIDEO=1 CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so \
     H=/mnt/app/root/hooks WLOG=/dev/null /bin/sh -c ". \"$CASE_DIR/pre.sh\"; echo \$LD_PRELOAD")
 test "$got" = /mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so:/mnt/app/root/hooks/libcarplay_hook.so
 
@@ -148,7 +154,12 @@ grep -Fq 'PRIVATE_DESTINATION_TEST' "$exported/private/carplay_java.log"
 test "$(wc -c < "$exported/private/carplay_java.log")" -eq 262144
 test ! -e "$exported/lsd.jxe"
 run export-again "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
-test "$(find "$exports" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2
+run export-summary "$SCRIPTS/carplay_mmi_action.sh" export_summary
+summary_export=$(sed -n 's/^EXPORT_PATH=//p' "$CASE_DIR/export-summary.log")
+test -n "$summary_export"
+test "$(find "$summary_export/private" -type f | wc -l)" -eq 0
+need export-summary 'PRIVATE_LOGS_REQUESTED=0'
+test "$(find "$exports" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 3
 (cd "$ROOT" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/after-export"
 cmp "$CASE_DIR/before-export" "$CASE_DIR/after-export"
 (cd "$VOL" && find . -type f ! -path './MMI-Cockpit-Carplay/logs/exports/*' -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/sd-after-export"

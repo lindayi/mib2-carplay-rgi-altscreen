@@ -145,7 +145,7 @@ public final class RendererServerTransportTest {
         server.dispose();
     }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); labelQueue(); restart();
+        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); labelQueue(); optionsQueue(); restart();
         System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS");
     }
     private static void labelQueue() throws Exception {
@@ -168,5 +168,40 @@ public final class RendererServerTransportTest {
         server.disconnectClient();
         check(((Integer)get(server,"writeCount")).intValue()==0,"disconnect discards stale labels");
         server.dispose();
+    }
+    private static void optionsQueue() throws Exception {
+        java.nio.file.Path root=java.nio.file.Files.createTempDirectory("renderer-options");
+        java.lang.reflect.Constructor<?> ctor=com.luka.carplay.settings.Preferences.class.getDeclaredConstructor(java.io.File.class,java.io.File.class);
+        ctor.setAccessible(true);
+        com.luka.carplay.settings.Preferences preferences=(com.luka.carplay.settings.Preferences)ctor.newInstance(
+            root.resolve("preferences").toFile(),root.resolve("legacy").toFile());
+        Field singleton=com.luka.carplay.settings.Preferences.class.getDeclaredField("instance");singleton.setAccessible(true);
+        Object previous=singleton.get(null);singleton.set(null,preferences);
+        RendererServer server=new RendererServer(0);
+        try {
+            set(server,"running",Boolean.TRUE);set(server,"sock",new Socket());set(server,"out",new ByteArrayOutputStream());
+            preferences.set(com.luka.carplay.settings.Setting.DISTANCE,0);
+            preferences.set(com.luka.carplay.settings.Setting.LANES,0);
+            preferences.set(com.luka.carplay.settings.Setting.TEXT_SIZE,1);
+            preferences.set(com.luka.carplay.settings.Setting.ROAD_SCROLL,1);
+            check(server.sendDisplayOptions() && server.sendDisplayOptions(),"options send/cache");
+            check(((Integer)get(server,"writeCount")).intValue()==1,"duplicate options");
+            Object[] q=(Object[])get(server,"writeQueue");
+            Field packet=q[0].getClass().getDeclaredField("packet");packet.setAccessible(true);
+            byte[] bytes=(byte[])packet.get(q[0]);
+            check(bytes[0]==16 && bytes[2]==10 && bytes[3]==1 && bytes[4]==1 && bytes[5]==1,"option wire fields");
+            server.sendClear();
+            preferences.set(com.luka.carplay.settings.Setting.TEXT_SIZE,0);
+            check(server.sendDisplayOptions(),"options after CLEAR");
+            check(((Integer)get(server,"writeCount")).intValue()==2,"latest global options coalesced");
+            server.disconnectClient();
+            set(server,"sock",new Socket());set(server,"out",new ByteArrayOutputStream());
+            check(server.sendDisplayOptions() && ((Integer)get(server,"writeCount")).intValue()==1,"options replay on reconnect");
+        } finally {
+            server.dispose();singleton.set(null,previous);
+            try(java.util.stream.Stream<java.nio.file.Path> paths=java.nio.file.Files.walk(root)) {
+                paths.sorted(java.util.Comparator.reverseOrder()).forEach(p->{try{java.nio.file.Files.delete(p);}catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}});
+            }
+        }
     }
 }

@@ -988,6 +988,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             if (atouchevent == null || atouchevent.length == 0) { c.onTouchEnd(); return; }
 
             ArrayList screen = new ArrayList(atouchevent.length);
+            ArrayList pad = new ArrayList(atouchevent.length);
             int screenActive = 0;
             int padCount = 0, padActive = 0, padFirstActive = -1;
             for (int i = 0; i < atouchevent.length; i++) {
@@ -997,6 +998,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                         atouchevent[i].getCurrentY() - this.this$0.configuration.getScreenOffsetY()));
                     if (atouchevent[i].getTouchState() != 1) screenActive++;
                 } else {
+                    pad.add(new TouchEvent(atouchevent[i].getCurrentX(),atouchevent[i].getCurrentY()));
                     padCount++;
                     if (atouchevent[i].getTouchState() != 1) {
                         if (padActive == 0) padFirstActive = i;
@@ -1009,7 +1011,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 this.this$0.dsiCarplaySafe.postTouchEvent(
                     1, screenActive, (TouchEvent[])screen.toArray(new TouchEvent[screen.size()]));
             }
-            if (padCount > 0 && padActive == 1) {
+            if(!c.isEnabled() && padCount>0) {
+                Collections.sort(pad,new TouchXComparator());
+                this.this$0.dsiCarplaySafe.postTouchEvent(0,padActive,(TouchEvent[])pad.toArray(new TouchEvent[pad.size()]));
+                c.onTouchEnd();
+            } else if (padCount > 0 && padActive == 1) {
                 c.onOneFinger(atouchevent[padFirstActive].getCurrentX(),
                     atouchevent[padFirstActive].getCurrentY());
             } else {

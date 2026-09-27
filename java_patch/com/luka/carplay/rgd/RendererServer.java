@@ -36,6 +36,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class RendererServer {
+    private static volatile RendererServer activeServer;
+    public static void preferencesChanged(){
+        RendererServer server=activeServer;
+        if(server!=null)server.notifyStateChanged("preferences");
+    }
 
     private static final String TAG = "RendererServer";
     private static final String HOST = "127.0.0.1";
@@ -65,6 +70,8 @@ public class RendererServer {
     private static final byte CMD_LANES_LANE = 0x0d;
     private static final byte CMD_LANES_COMMIT = 0x0e;
     static final byte CMD_ROUTE_LABELS = 0x0f;
+    private static final byte CMD_DISPLAY_OPTIONS = 0x10;
+    private int lastDisplayOptions=-1;
     private int laneToken;
 
     /* CMD_MANEUVER flags */
@@ -138,6 +145,7 @@ public class RendererServer {
                 ss.bind(new InetSocketAddress(HOST, port));
                 server = ss;
                 running = true;
+                activeServer=this;
                 Log.i(TAG, "listening on " + HOST + ":" + port);
             } catch (IOException e) {
                 if (ss != null) try { ss.close(); } catch (IOException closeError) { }
@@ -408,6 +416,7 @@ public class RendererServer {
      * (or build a new instance) to reopen.
      */
     public void dispose() {
+        if(activeServer==this)activeServer=null;
         /* Do NOT send CMD_SHUTDOWN. The CarPlay supervisor owns the renderer and may preserve it
          * across a fast dio_manager replacement. Close only our sockets. */
         Thread accept, writer;
@@ -434,6 +443,7 @@ public class RendererServer {
     }
 
     private void closeClientLocked() {
+        lastDisplayOptions=-1;
         if (out != null) {
             try { out.close(); } catch (Exception e) {}
             out = null;
@@ -618,6 +628,24 @@ public class RendererServer {
     public boolean sendRouteLabels(String distance, String road) {
         return sendPacket(RouteLabels.packet(distance, road));
     }
+    public boolean sendDisplayOptions() {
+        com.luka.carplay.settings.Preferences.Snapshot p=com.luka.carplay.settings.Preferences.get().snapshot();
+        int flags=(p.on(com.luka.carplay.settings.Setting.DISTANCE)?1:0)
+            |(p.on(com.luka.carplay.settings.Setting.ROAD)?2:0)
+            |(p.on(com.luka.carplay.settings.Setting.LANES)?4:0)
+            |(p.on(com.luka.carplay.settings.Setting.PROGRESS)?8:0);
+        int size=p.get(com.luka.carplay.settings.Setting.TEXT_SIZE);
+        int scroll=p.get(com.luka.carplay.settings.Setting.ROAD_SCROLL);
+        int identity=flags|(size<<8)|(scroll<<16);
+        synchronized(lock) {
+            if(identity==lastDisplayOptions)return true;
+            byte[] packet=new byte[PKT_SIZE];packet[0]=CMD_DISPLAY_OPTIONS;
+            packet[2]=(byte)flags;packet[3]=(byte)size;packet[4]=(byte)scroll;packet[5]=1;
+            if(!sendPacket(packet))return false;
+            lastDisplayOptions=identity;
+            return true;
+        }
+    }
 
     /** Stage/layout updates are independent of the current maneuver and distance.
      * Cache only a successful enqueue; reconnect always replays the visible area. */
@@ -671,7 +699,7 @@ public class RendererServer {
                 // In particular, a lane hide must survive progress traffic.
                 // Replacing an older snapshot across CLEAR is safe: the new
                 // snapshot stays after that barrier at its original TCP order.
-                if (pkt[0] == CMD_VISIBLE_AREA || pkt[0] == CMD_LANES_BEGIN) {
+                if (pkt[0] == CMD_VISIBLE_AREA || pkt[0] == CMD_LANES_BEGIN || pkt[0] == CMD_DISPLAY_OPTIONS) {
                     for (int n = 0; n < writeCount; n++) {
                         if (writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0] != pkt[0])
                             continue;

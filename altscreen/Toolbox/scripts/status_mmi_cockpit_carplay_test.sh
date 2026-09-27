@@ -208,7 +208,7 @@ fi
 
 # mib2q-carplay-rgi companion: route guidance hook, maneuver renderer, supervisor.
 RGI_MISSING=
-for name in libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh; do
+for name in libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh; do
     [ -s "$RGI_HOOKS/$name" ] || RGI_MISSING="$RGI_MISSING $name"
 done
 if [ -z "$RGI_MISSING" ]; then echo "RGI_NATIVE=INSTALLED"; else echo "RGI_NATIVE=MISSING files:$RGI_MISSING"; [ "$STATUS_RC" -ne 0 ] || STATUS_RC=1; fi

@@ -2,13 +2,17 @@
 set -euo pipefail
 RELEASE=${1:?mirror release directory required}
 T=$(mktemp -d /tmp/mirror-health-test.XXXXXX)
-trap 'rm -rf "$T"' EXIT
+sleep 300 &
+TEST_OWNER_PID=$!
+trap 'kill "$TEST_OWNER_PID" 2>/dev/null || true; wait "$TEST_OWNER_PID" 2>/dev/null || true; rm -rf "$T"' EXIT
 export ALTSCREEN_CHAIN_TESTING=1 ALT111_TEST_INTERVAL=0.02 ALT111_TEST_READY_LIMIT=4 ALT111_TEST_STALL_LIMIT=6
 TMP_ROOT=$T
 DEMAND=$T/active STOP_GUARD=$T/stop LOGFILE=$T/mirror.log
 RESTART_COUNT=0
 touch "$DEMAND" "$LOGFILE"
 printf 'ctx=74\n' > "$T/carplay_cluster.ctx"
+printf 'pid=%s\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\n' "$TEST_OWNER_PID" > "$T/carplay_menu_session"
+echo "$TEST_OWNER_PID" > "$T/carplay_supervisor.owner"
 . "$RELEASE/mirror_health.sh"
 
 sample(){
@@ -53,9 +57,16 @@ test "$MH_MAX_REPORT_GAP" -eq 10
 for i in $(seq 24 53); do sample "$i" keep; done
 test "$MH_STALLED" -eq 30
 sample 54 4
+export CP_SETTINGS_FILE="$T/preferences"
+MH_SETTINGS_HELPER="$RELEASE/../../rgi/carplay_settings.sh"
+sed 's/enabled=0/enabled=1/;s/recovery=1/recovery=0/' /tests/fixtures/carplay-preferences.txt > "$CP_SETTINGS_FILE"
+sample 55 keep
+grep -q 'HEALTH_STATE=RECOVERY_DISABLED' "$MH_STATUS"
+rm "$CP_SETTINGS_FILE"
+unset CP_SETTINGS_FILE
 
 PIDFILE=$T/pid READY=$T/ready BASE_READY=$T/base-ready RECOVERY_LOCK=$T/recovery.lock
-PID=$$ MAX_ABNORMAL_RESTARTS=0
+PID=$TEST_OWNER_PID MAX_ABNORMAL_RESTARTS=0
 ROOT=$RELEASE
 eval "$(sed -n '/^schedule_abnormal_restart() {/,/^}/p' "$RELEASE/start_vehicle.sh")"
 echo "$PID" > "$PIDFILE"; touch "$READY" "$BASE_READY"
@@ -75,7 +86,7 @@ printf '%s %s\n' "$TEST_IDENTITY_PID" "$TEST_IDENTITY_EXE"
 PIDIN
     chmod +x "$T/identity-tools/pidin"
     export PATH="$T/identity-tools:$PATH"
-    PID=$$
+    PID=$TEST_OWNER_PID
     BIN="$T/carplay-alt111-mirror-display"
     export TEST_IDENTITY_PID="$PID" TEST_IDENTITY_EXE="$BIN"
     echo "$PID" > "$PIDFILE"
@@ -95,7 +106,7 @@ PIDIN
     eval "$(sed -n '/^recover_stalled_mirror(){/,/^}/p' "$RELEASE/start_vehicle.sh")"
     sidecar_is_current(){ return 0; }
     mirror_confirm_identity(){ [ "$IDENTITY" = known ]; }
-    kill(){ echo "$*" >> "$T/signals"; return 0; }
+    kill(){ [ "$1" = -0 ] || echo "$*" >> "$T/signals"; return 0; }
     sleep(){ :; }
     schedule_abnormal_restart(){ echo "$1" > "$T/restart-reason"; }
     PID=321 IDENTITY=unknown
@@ -130,6 +141,7 @@ exit 0
 FAKE
     chmod +x "$D/fake-mirror"
     touch "$D/active"
+    printf 'pid=%s\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\n' "$TEST_OWNER_PID" > "$D/carplay_menu_session"
     export ALT111_MIRROR_BIN=$D/fake-mirror ALT111_MIRROR_TMP_ROOT=$D
     export ALT111_MIRROR_ACTIVE_FILE=$D/active ALT111_JAVA_BASE_READY_FILE=$D/base-ready
     export ALT111_MIRROR_MAX_ABNORMAL_RESTARTS=0
@@ -137,6 +149,7 @@ FAKE
 make_launch_fixture
 /bin/sh "$D/release/start_vehicle.sh" > "$D/launch.log" 2>&1
 test ! -e "$D/launched"
+echo "$TEST_OWNER_PID" > "$D/carplay_supervisor.owner"
 printf 'ctx=74\n' > "$D/carplay_cluster.ctx"
 await_file "$D/launched"
 test "$(cat "$D/recovery-mode")" = 1
@@ -148,7 +161,7 @@ grep -q 'HEALTH_STATE=RECOVERY_EXHAUSTED' "$D/MMI-Cockpit-Carplay.mirror.health"
 test ! -e "$D/base-ready"
 
 make_launch_fixture
-echo "$$" > "$D/carplay_supervisor.owner"
+echo "$TEST_OWNER_PID" > "$D/carplay_supervisor.owner"
 if /bin/sh "$D/release/start_vehicle.sh" > "$D/launch.log" 2>&1; then
     echo "FAIL: missing HMI context with an active phone must time out"; exit 1
 fi

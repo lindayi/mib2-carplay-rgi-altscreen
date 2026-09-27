@@ -51,6 +51,15 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     }
 
     public void init() {
+        try { com.luka.carplay.settings.SettingsRuntime.start(); }
+        catch(RuntimeException error) {
+            com.luka.carplay.core.CarPlayApp.setFeaturesEnabled(false);
+            com.luka.carplay.framework.Log.e("Settings","startup failed; cockpit extensions disabled",error);
+        }
+        catch(LinkageError error) {
+            com.luka.carplay.core.CarPlayApp.setFeaturesEnabled(false);
+            com.luka.carplay.framework.Log.e("Settings","linkage failed; cockpit extensions disabled",error);
+        }
         this.serviceTracker.open();
         this.context.getEventBus().registerListener(this.cachingEventListener);
         this.context.getDeviceManager().addActiveDeviceListener(this.activeDeviceListener);
@@ -67,6 +76,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     }
 
     public void deinit() {
+        try { com.luka.carplay.settings.SettingsRuntime.stop(); }
+        catch(RuntimeException error){com.luka.carplay.framework.Log.e("Settings","shutdown failed",error);}
         try { com.luka.carplay.core.CarPlayApp.onDeactivateAndWait(); }
         catch (Throwable t) { /* optional lifecycle cleanup */ }
         try { com.luka.carplay.coverart.CoverArt.getInstance().stop(this.eventListener); }
@@ -132,7 +143,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
              * ACTIVATING / ACTIVE) report carplay=true, so this only fires on a genuine drop.  onDeactivate()
              * is idempotent (no-op unless active), so it is safe.  It also releases the cluster pin
              * (ScreenModule.isConnected()), so the stock map and the View button work again. */
-            if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isActive()) {
+            if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isSessionConnected()) {
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();

@@ -1,5 +1,11 @@
 # MIB2 Toolbox — CarPlay AltScreen + Route Guidance Integration (RGI)
 
+**This personal fork's current package targets MHI2Q_US_AUG22_P5145 / MU1316 only.**
+It adds a native **Carplay Altscreen** entry under normal Navigation Settings.
+The menu's native display/input behavior and wireless-adapter bypass have not yet
+been tested on the car. Historical upstream reports below are not compatibility
+claims for this new menu build.
+
 This tree contains the SD-card package for Audi **MHI2Q** infotainment units, enabling the **native CarPlay AltScreen (secondary navigation video stream)** directly on the vehicle's **Virtual Cockpit**, integrated with full 3D turn-by-turn route guidance, steering-wheel map zoom, and vehicle marker centering.
 
 The core display pipeline, watermark removal, aspect-ratio correction, steering-wheel zoom, and RGI integration have been vehicle-validated.
@@ -8,7 +14,7 @@ The core display pipeline, watermark removal, aspect-ratio correction, steering-
 - **Vehicle:** Audi Q5 (FY) 2019
 - **Firmware Train:** `MHI2Q_ER_AUG22_P5092`
 - **MU Software:** `1329`
-*(Also compatible with China AUG22 and other MHI2Q units supported by the installer checks).*
+*(Historical upstream report; the personal-fork installer now requires P5145.)*
 
 > [!IMPORTANT]
 > This package modifies head unit configurations and system binaries. Keep the SD card inserted and maintain stable vehicle battery power during installation, start, or recovery operations.  

@@ -1,0 +1,17 @@
+format=1
+enabled=0
+mode=0
+layout=0
+distance=1
+road=1
+lanes=1
+progress=1
+text_size=0
+road_scroll=0
+background=0
+zoom=1
+zoom_speed=0
+touchpad=1
+touch_sensitivity=1
+recovery=1
+verbose=0

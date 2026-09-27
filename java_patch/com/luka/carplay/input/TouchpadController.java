@@ -63,6 +63,14 @@ public class TouchpadController {
      * State (access synchronised on 'this')
      * ============================================================ */
     private TouchSink sink;
+    private boolean enabled=true;
+    private int sensitivity=1;
+    public synchronized boolean isEnabled(){return enabled;}
+    public synchronized void configure(boolean enabled,int sensitivity) {
+        if(sensitivity<0 || sensitivity>2)throw new IllegalArgumentException("touchpad sensitivity");
+        if(this.enabled!=enabled || this.sensitivity!=sensitivity)resetTouchState();
+        this.enabled=enabled;this.sensitivity=sensitivity;
+    }
 
     /* touchpad anchor for relative dpad accumulation */
     private int     lastTpX = 0;
@@ -89,6 +97,7 @@ public class TouchpadController {
      * ============================================================ */
 
     public synchronized void onOneFinger(int tpX, int tpY) {
+        if(!enabled){resetTouchState();return;}
         long now = System.currentTimeMillis();
 
         if (prevCount != 1) {
@@ -157,6 +166,8 @@ public class TouchpadController {
             int bonus = (range - pos) * (DPAD_THRESHOLD_SLOW - DPAD_THRESHOLD_FAST) / range;
             threshold = DPAD_THRESHOLD_FAST + bonus;
         }
+
+        threshold=threshold*(sensitivity==0?140:sensitivity==2?75:100)/100;
 
         /* Emit as many ticks as the accumulators earned.  Loop so a
          * fast swipe across the whole pad can traverse several items

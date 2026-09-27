@@ -693,6 +693,9 @@ int main(int argc, char **argv) {
             case CMD_ROUTE_LABELS:
                 if (cr_route_labels_receive(&g_route_labels, &cmd)) g_engine.dirty = 1;
                 break;
+            case CMD_DISPLAY_OPTIONS:
+                if(cr_route_labels_configure(&cmd))g_engine.dirty=1;
+                break;
             case CMD_CLEAR:
                 /* CLEAR wins over an earlier MANEUVER drained in this same loop. */
                 got_maneuver = 0;
@@ -794,7 +797,8 @@ int main(int argc, char **argv) {
         cr_rect_t panel_target;
         render_get_visible_area(NULL,&panel_target);
         watch_stage(WATCH_LANE_UPDATE);
-        if(cr_lane_panel_update(g_lane_panel,&g_lane_guidance,panel_target.w,progress_now))
+        static const cr_lane_guidance_t hidden_lanes={0};
+        if(cr_lane_panel_update(g_lane_panel,(cr_route_labels_options()&4)?&g_lane_guidance:&hidden_lanes,panel_target.w,progress_now))
             g_engine.dirty=1;
         float content_frame[3];
         float label_height = g_cleared ? 0 : cr_route_labels_height(&g_route_labels);
@@ -806,6 +810,7 @@ int main(int argc, char **argv) {
         watch_stage(WATCH_IDLE);
         if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot
             || cr_lane_panel_animating(g_lane_panel,progress_now)
+            || (!g_cleared && cr_route_labels_animating(&g_route_labels,panel_target.w))
 #ifdef CR_DEBUG_GRID
             || 1  /* always render when grid is compiled in */
 #endif
@@ -829,7 +834,8 @@ int main(int argc, char **argv) {
             clock_gettime(CLOCK_MONOTONIC, &t_after_prep);
 #endif
 
-            render_set_route_progress(g_arrow.fill,g_arrow.path_weight,g_arrow.glow);
+            int show_progress=(cr_route_labels_options()&8)!=0;
+            render_set_route_progress(show_progress?g_arrow.fill:0,show_progress?g_arrow.path_weight:0,show_progress?g_arrow.glow:0);
             watch_stage(WATCH_BEGIN_FRAME);
             render_begin_frame();
             watch_stage(WATCH_SCENE_DRAW);
@@ -841,7 +847,10 @@ int main(int argc, char **argv) {
             lane_visible.h-=label_height;
             cr_lane_panel_draw(g_lane_panel,lane_visible,progress_now);
             if (!g_cleared && g_engine.phase==ENGINE_IDLE)
+            {
+                cr_route_labels_clock(progress_now);
                 cr_route_labels_draw(&g_route_labels,panel_visible,g_fade_alpha);
+            }
             watch_stage(WATCH_IDLE);
             render_debug_grid();
             watch_stage(WATCH_END_FRAME);

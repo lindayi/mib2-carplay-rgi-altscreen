@@ -77,6 +77,7 @@ cp "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" 
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_startup.sh" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_monitor.sh" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_processes.sh" \
+   "$PROJECT_DIR/deploy/smartphone_integrator/carplay_settings.sh" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_cleanup.sh" \
    "$PROJECT_DIR/deploy/altscreen/carplay_child.json" "$OUT/$RGI_DIR/"
 chmod 755 "$OUT/$RGI_DIR"/*.sh "$OUT/$RGI_DIR/maneuver_render" "$OUT/$RGI_DIR/libcarplay_hook.so"

@@ -5,8 +5,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static GLuint font_texture;
+static unsigned options=15;
+static int large_text,scroll_road;
+static double clock_now,road_epoch;
+static char scrolling_text[CR_LABEL_ROAD_BYTES+1];
+
+int cr_route_labels_configure(const cr_cmd_t *cmd) {
+    if(cmd->payload[3]!=1 || (cmd->payload[0]&~15) || cmd->payload[1]>1 || cmd->payload[2]>1) {
+        fprintf(stderr,"route labels: invalid display options; keeping previous settings\n");
+        return 0;
+    }
+    if(options==cmd->payload[0] && large_text==cmd->payload[1] && scroll_road==cmd->payload[2])return 0;
+    options=cmd->payload[0];large_text=cmd->payload[1];scroll_road=cmd->payload[2];
+    scrolling_text[0]=0;
+    return 1;
+}
+unsigned cr_route_labels_options(void){return options;}
+void cr_route_labels_clock(double now){clock_now=now;}
 
 static unsigned codepoint(const unsigned char **cursor, const unsigned char *end) {
     if (*cursor >= end) return 0;
@@ -43,7 +61,9 @@ static int validate_text(const char *text, size_t length) {
     return covered;
 }
 
-void cr_route_labels_clear(cr_route_labels_t *labels) { memset(labels, 0, sizeof(*labels)); }
+void cr_route_labels_clear(cr_route_labels_t *labels) {
+    memset(labels,0,sizeof(*labels));scrolling_text[0]=0;
+}
 
 int cr_route_labels_receive(cr_route_labels_t *labels, const cr_cmd_t *cmd) {
     cr_route_labels_t next = {{0}, {0}};
@@ -103,11 +123,23 @@ void cr_route_labels_shutdown(void) {
 }
 
 float cr_route_labels_height(const cr_route_labels_t *labels) {
-    if (!labels->distance[0] && !labels->road[0]) return 0;
-    return (labels->distance[0] ? 21.f : 0) + (labels->road[0] ? 17.f : 0) + 4.f;
+    int distance=(options&1) && labels->distance[0], road=(options&2) && labels->road[0];
+    if (!distance && !road) return 0;
+    return (distance ? (large_text?26.f:21.f) : 0) + (road ? (large_text?20.f:17.f) : 0) + 4.f;
 }
 
-static void line(const char *text, cr_rect_t visible, float top, float scale, float shade, float alpha) {
+int cr_route_labels_animating(const cr_route_labels_t *labels,float width) {
+    if(!scroll_road || !(options&2) || !labels->road[0])return 0;
+    const unsigned char *p=(const unsigned char *)labels->road,*end=p+strlen(labels->road);
+    float text_width=0,scale=large_text?1.f:.875f;
+    while(p<end) {
+        const route_glyph_t *g=glyph(codepoint(&p,end));
+        if(!g)return 0;
+        text_width+=g->advance*scale/64;
+    }
+    return text_width>width-12;
+}
+static void line(const char *text, cr_rect_t visible, float top, float scale, float shade, float alpha,int scrolling) {
     const route_glyph_t *row[CR_LABEL_ROAD_BYTES + 1];
     const unsigned char *p = (const unsigned char *)text, *end = p + strlen(text);
     int count = 0;
@@ -118,7 +150,13 @@ static void line(const char *text, cr_rect_t visible, float top, float scale, fl
         row[count++] = g;
         width += g->advance * scale / 64;
     }
-    if (width > max_width) {
+    float offset=0;
+    if(scrolling && width>max_width) {
+        double travel=(width-max_width)/18.f;
+        double phase=fmod(fmax(0,clock_now-road_epoch),4+2*travel);
+        offset=phase<2?0:phase<2+travel?(float)((phase-2)*18):
+            phase<4+travel?width-max_width:(float)((4+2*travel-phase)*18);
+    } else if (width > max_width) {
         const route_glyph_t *dots = glyph(0x2026);
         while (count && width + dots->advance * scale / 64 > max_width)
             width -= row[--count]->advance * scale / 64;
@@ -126,7 +164,7 @@ static void line(const char *text, cr_rect_t visible, float top, float scale, fl
         width += dots->advance * scale / 64;
     }
     float vertices[(CR_LABEL_ROAD_BYTES + 1) * 6 * 4];
-    float x = visible.x + (visible.w - width) * .5f;
+    float x = scrolling && width>max_width?visible.x+6-offset:visible.x+(visible.w-width)*.5f;
     int n = 0;
     for (int i = 0; i < count; ++i) {
         const route_glyph_t *g = row[i];
@@ -149,10 +187,15 @@ void cr_route_labels_draw(const cr_route_labels_t *labels, cr_rect_t visible, fl
     render_begin_overlay(visible);
     cr_rect_t footer = {visible.x, top, visible.w, height};
     render_overlay_cutout(footer, 0, 3, alpha);
-    if (labels->distance[0]) {
-        line(labels->distance, visible, top + 1, 1.125f, 1, alpha);
-        top += 21;
+    if ((options&1) && labels->distance[0]) {
+        line(labels->distance,visible,top+1,large_text?1.375f:1.125f,1,alpha,0);
+        top+=large_text?26:21;
     }
-    if (labels->road[0]) line(labels->road, visible, top + 1, .875f, .9f, alpha);
+    if ((options&2) && labels->road[0]) {
+        if(strcmp(scrolling_text,labels->road)){strcpy(scrolling_text,labels->road);road_epoch=clock_now;}
+        cr_rect_t text_clip={visible.x+6,top,visible.w-12,visible.y+visible.h-top};
+        render_begin_overlay(text_clip);
+        line(labels->road,visible,top+1,large_text?1.f:.875f,.9f,alpha,scroll_road);
+    }
     render_end_overlay();
 }

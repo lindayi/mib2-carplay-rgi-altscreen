@@ -19,6 +19,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `carplay_monitor.sh`
 - `carplay_cleanup.sh`
 - `carplay_processes.sh`
+- `carplay_settings.sh`
 - `libcarplay_hook.so`
 - `maneuver_render`
 - `flag_atlas.rgba`
@@ -29,6 +30,11 @@ service; it exits only on its own failure, a reboot or an explicit maintenance a
 
 Lifecycle semantics:
 
+- The validated persistent menu settings select the next receiver session. Off
+  clears the project preloads, skips the monitor and executes stock dio_manager.
+  Audi-map mode keeps the RGI hook but excludes the AltScreen hook. Invalid settings
+  fail to the disabled path. Session ownership/options are published atomically
+  for the Java menu; changing negotiation requires a new CarPlay session, not MMI reboot.
 - `carplay_startup.sh` checks `dio_manager`, the hook and both helper scripts,
   atomically writes its PID to `/tmp/carplay_supervisor.owner`, starts
   `carplay_monitor.sh` in the background with `LD_PRELOAD` cleared, then `exec`s

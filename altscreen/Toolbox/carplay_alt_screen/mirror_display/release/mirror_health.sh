@@ -16,6 +16,55 @@ if [ "${ALTSCREEN_CHAIN_TESTING:-0}" = 1 ]; then
 fi
 MH_LAST_INPUT=""; MH_LAST_PRESENT=""; MH_STALLED=0
 MH_SAMPLES=0; MH_REPORT_GAP=0; MH_MAX_REPORT_GAP=0
+MH_SETTINGS_HELPER=${ALT111_SETTINGS_HELPER:-/mnt/app/root/hooks/carplay_settings.sh}
+
+mh_setting(){
+    if [ -r "$MH_SETTINGS_HELPER" ]; then
+        (. "$MH_SETTINGS_HELPER"; cp_setting "$1" "$2")
+    elif [ -e "${CP_SETTINGS_FILE:-/mnt/persist/var/app/carplay_altscreen/preferences}" ]; then
+        echo "WARN: settings exist but parser is missing" >&2; return 1
+    else printf '%s\n' "$2"; fi
+}
+mh_video_wanted(){
+    enabled=$(mh_setting enabled 1) || return 1
+    mode=$(mh_setting mode 0) || return 1
+    [ "$enabled" = 1 ] && [ "$mode" != 2 ] || return 1
+    session="$TMP_ROOT/carplay_menu_session"
+    session_pid=""
+    [ ! -r "$session" ] || session_pid=$(sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' "$session")
+    case "$session_pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
+    [ "$(cat "$MH_OWNER" 2>/dev/null)" = "$session_pid" ] && kill -0 "$session_pid" 2>/dev/null || return 1
+    [ -r "$session" ] && grep -q '^enabled=1$' "$session" &&
+        grep -q '^video=1$' "$session" && grep -q '^config_error=0$' "$session"
+}
+mh_recovery_allowed(){
+    value=$(mh_setting recovery 1) || return 1
+    [ "$value" = 1 ]
+}
+
+mh_confirm_identity(){
+    mh_pid=$1;mh_binary=$2
+    case "$mh_pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
+    [ "${mh_binary##*/}" = carplay-alt111-mirror-display ] || return 1
+    command -v pidin >/dev/null 2>&1 || return 1
+    identity="$TMP_ROOT/MMI-Cockpit-Carplay.mirror.identity.$$"
+    (exec pidin -p "$mh_pid" ar) > "$identity" 2>/dev/null &
+    identity_pid=$!
+    (sleep 3; kill -KILL "$identity_pid" 2>/dev/null || true) &
+    identity_timer=$!
+    identity_rc=0
+    wait "$identity_pid" || identity_rc=$?
+    kill "$identity_timer" 2>/dev/null || true
+    wait "$identity_timer" 2>/dev/null || true
+    if [ "$identity_rc" != 0 ]; then rm -f "$identity"; return 1; fi
+    matched=1
+    while read -r candidate executable rest; do
+        [ "$candidate" = "$mh_pid" ] || continue
+        case "$executable" in "$mh_binary"|*/"${mh_binary##*/}") matched=0 ;; esac
+    done < "$identity"
+    rm -f "$identity"
+    return "$matched"
+}
 
 mh_publish(){
     mh_tmp="$MH_STATUS.new.$$"
@@ -37,9 +86,9 @@ mh_wait_for_hmi(){
     mh_wait=0
     echo "COLD_START_WAIT=JAVA_CLUSTER_CONTEXT main_carplay_delay=NONE"
     [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
-    while ! mh_context_ready; do
+    while ! mh_context_ready || ! mh_video_wanted; do
         [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
-        if mh_phone_running; then mh_wait=$((mh_wait + 1)); else mh_wait=0; fi
+        if mh_phone_running && mh_video_wanted; then mh_wait=$((mh_wait + 1)); else mh_wait=0; fi
         if [ "$mh_wait" -ge "$MH_READY_LIMIT" ]; then
             echo "COLD_START_TIMEOUT=JAVA_CLUSTER_CONTEXT"
             return 1
@@ -80,6 +129,9 @@ mh_poll(){
         MH_STALLED=0; MH_LAST_INPUT=""; MH_LAST_PRESENT=""
         MH_SAMPLES=0; MH_REPORT_GAP=0; MH_MAX_REPORT_GAP=0
         mh_publish WAITING_FOR_HMI || :; return 0
+    fi
+    if ! mh_video_wanted || ! mh_recovery_allowed; then
+        MH_STALLED=0;mh_publish RECOVERY_DISABLED || :;return 0
     fi
     mh_input=$(mh_input_signature) || mh_input=""
     mh_present=$(mh_present_signature) || mh_present=UNKNOWN

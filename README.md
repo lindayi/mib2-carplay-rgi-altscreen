@@ -1,5 +1,11 @@
 # MHI2Q CarPlay Virtual Cockpit Integration (AltScreen + Route Guidance)
 
+**Personal-fork target:** Audi Q5 2020, `MHI2Q_US_AUG22_P5145`, MU1316, iPhone/CarPlay.
+The new native-MMI menu is guarded to this unit's reconstructed stock HMI class.
+Other firmware examples and vehicle reports below describe upstream history, not
+additional supported targets for this fork. The native menu has not yet been
+visually or operationally verified on the head unit.
+
 Unified CarPlay patch set for Audi MHI2Q infotainment with Audi Virtual Cockpit.  
 Integrates **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)** (CarPlay instrument cluster video streaming) with **[mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** (3D turn-by-turn route guidance & maneuver renderer) into one single codebase and all-in-one SD card build.
 
@@ -122,6 +128,11 @@ features below follow it automatically.
   (applied on next phone reconnect). With no saved preference, the maneuver card
   defaults to the top; upgrades preserve explicitly saved layouts.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
+- **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
+  **Carplay Altscreen**. Grouped controls cover master enable, presentation/layout,
+  overlay information/appearance, wheel/touchpad input, diagnostics and mirror
+  recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
+  reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
 - **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
   health summary and bounded private log tails to the SD card without stopping,
   restarting, restoring or uninstalling anything.
@@ -161,6 +172,16 @@ The renderer embeds a small DejaVu-derived font atlas. Keep
 `maneuver_render/LICENSE.DEJAVU` with redistributed renderer binaries; the native
 build copies it into `build/` and the SD build includes it at the card root.
 
+### Native-menu build and tests
+
+The menu build also uses `tools/uninline/lib/asm-9.7.jar` and `asm-tree-9.7.jar`
+from the jxe2jar tooling. `tools/PatchNavigationSettings.java` checks the exact
+private stock factory fingerprint, adds our native subclasses, and rejects other
+input classes. The initial menu installation requires the normal Toolbox update,
+INSTALL/reboot/START/reboot sequence; subsequent menu preferences never reboot MMI.
+Run `TOOLS_DIR=<jxe2jar> ./scripts/test_mmi_settings.sh` for the menu/storage/session
+tests and `./scripts/test_route_labels.sh` for live overlay-option previews.
+
 ## 🔧 Build
 
 Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
@@ -180,11 +201,11 @@ Then run from this repository's root:
 ./scripts/build_renderers.sh   # → build/maneuver_render
 ```
 
-All three build in Docker - no host toolchain required. The Java patch compiles in a pinned
-`eclipse-temurin:8` container (against the stock jar + OSGi libs under `../../Tools/jxe2jar`; the
-scripts expect the author's `out/MU1316-final.jar`, so if your own stock jar is named or located
-differently, set `TOOLS_DIR` to your jxe2jar directory and `STOCK_JAR` to the filename
-under its `out/` directory for the build; the test scripts have their own paths); the two
+All three build in Docker - no host toolchain required. The Java patch compiles in a
+JDK 8 container against `out/MU1316-P5145-stock.jar`, OSGi and ASM libraries in
+`TOOLS_DIR` (default `../../Tools/jxe2jar`). Set `STOCK_JAR` only to an equivalent
+conversion of the owner's original P5145 JXE; the native settings factory's SHA256
+must match. No stock JAR or decompiled factory source is committed. The two
 native builds use the `qnx65-armv7-toolchain` image and synthesize their import stubs, so the resulting
 ELF binds the unit's real Screen/EGL/GLES libraries at runtime. The renderer's C++ scene engine is
 built with that image's `g++` and must not pull in the C++ runtime; the hook build rejects any dynamic
@@ -205,8 +226,8 @@ SD tree (CarPlay's instrument-cluster video on the Virtual Cockpit) with this pr
 guidance wired into its installer. One command builds everything and stages a ready card:
 
 ```sh
-STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh                  # -> build/sd/
-SD=/Volumes/SD32 STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh   # ... and copy onto the card
+STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh            # -> build/sd/
+SD=/Volumes/SD32 STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
 ```
 
 It fills in the JAR size/cksum that AltScreen's INSTALL/START/STATUS pin and regenerates
@@ -299,11 +320,12 @@ This installs both **AltScreen** (full CarPlay cluster video stream on the Virtu
 
 For users who want route guidance and 3D maneuver arrows drawn only over the native Audi cluster map without the CarPlay video stream.
 
-A release consists of eight files plus two config edits; nothing stock is replaced:
+A standalone release consists of nine files plus two config edits; use the unified
+SD package for this fork's native menu runtime and its diagnostic/video actions:
 
 | On-unit path | Files |
 | --- | --- |
-| `/mnt/app/root/hooks/` | `libcarplay_hook.so`, `maneuver_render` (from `build/`), `flag_atlas.rgba` (from `maneuver_render/resources/`), `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` (from `deploy/smartphone_integrator/`) |
+| `/mnt/app/root/hooks/` | `libcarplay_hook.so`, `maneuver_render` (from `build/`), `flag_atlas.rgba` (from `maneuver_render/resources/`), `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_settings.sh`, `carplay_cleanup.sh` (from `deploy/smartphone_integrator/`) |
 | `/mnt/app/eso/hmi/lsd/jars/` | `carplay_hook.jar` (from `build/`) |
 | `/mnt/system/etc/eso/production/smartphone_integrator.json` | `children.carplay` replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
 | `/mnt/system/etc/eso/production/dio_manager.json` | `MessagesSentByAccessory` += `0x5200`, `0x5203`; `MessagesReceivedFromDevice` += `0x5201`, `0x5202`, `0x5204` |
@@ -312,7 +334,7 @@ Both the `dio_manager.json` IDs and the hook's runtime Identify patch are requir
 iOS sends route guidance and the SDK silently drops it.
 
 - **With M.I.B. (recommended for standalone RGI):** Copy `install_MoreIncredibleBash/` to the M.I.B. SD card and drop
-  all release assets straight into `mod/carplay/` (the eight files above plus `carplay_child.json`), then run
+  all release assets straight into `mod/carplay/` (the nine files above plus `carplay_child.json`), then run
   **GEM -> M.I.B. -> Advanced Settings -> Run Custom Script** with CarPlay disconnected. To remove, run
   `uninstall_MoreIncredibleBash/`.
 - **Manually:** Over root shell (SSH or Telnet). See [`docs/deploy/install.md`](docs/deploy/install.md) for the complete

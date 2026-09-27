@@ -16,6 +16,8 @@ package com.luka.carplay.cluster;
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.core.ScreenModule;
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.settings.Preferences;
+import com.luka.carplay.settings.Setting;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -37,6 +39,11 @@ public final class AltScreenCluster {
     /** Stock CombiBAPListener.setMapScale steps (positive = zoom out). */
     public static void onMapScaleSteps(int steps) {
         if (steps == 0 || !ScreenModule.isAltScreenVideo()) return;
+        Preferences.Snapshot preferences=Preferences.get().snapshot();
+        if(!preferences.on(Setting.ZOOM))return;
+        if(preferences.get(Setting.ZOOM_SPEED)==1) {
+            if(steps>63)steps=127;else if(steps<-63)steps=-127;else steps*=2;
+        }
         if (steps > 127) steps = 127;
         if (steps < -127) steps = -127;
         boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_ZOOM,
@@ -57,6 +64,15 @@ public final class AltScreenCluster {
     }
 
     static String readUiUrl() {
+        if(Preferences.get().exists()) {
+            if(Preferences.get().error().length()!=0)return null;
+            switch(Preferences.get().snapshot().get(Setting.LAYOUT)) {
+                case 1:return "maps:/car/instrumentcluster/map?maneuverLayout=rightaligned";
+                case 2:return "maps:/car/instrumentcluster/map?showETA=no";
+                case 3:return "maps:/car/instrumentcluster/map";
+                default:return DEFAULT_UI_URL;
+            }
+        }
         FileInputStream in = null;
         try {
             File f = new File(uiUrlPath);

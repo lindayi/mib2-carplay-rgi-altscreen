@@ -26,6 +26,7 @@ OWNED="/mnt/app/root/hooks/libcarplay_hook.so
 /mnt/app/root/hooks/carplay_startup.sh
 /mnt/app/root/hooks/carplay_monitor.sh
 /mnt/app/root/hooks/carplay_processes.sh
+/mnt/app/root/hooks/carplay_settings.sh
 /mnt/app/root/hooks/carplay_cleanup.sh
 /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar"
 

@@ -22,11 +22,13 @@ SH
 chmod +x "$STARTUP_APP/dio_manager" "$STARTUP_HOOKS/carplay_monitor.sh"
 : > "$STARTUP_HOOKS/libcarplay_hook.so"
 : > "$STARTUP_HOOKS/carplay_processes.sh"
+cp "$ROOT/deploy/smartphone_integrator/carplay_settings.sh" "$STARTUP_HOOKS/carplay_settings.sh"
 STARTUP_TEST_DIO=$TEST_DIR/dio.env
 STARTUP_TEST_MONITOR=$TEST_DIR/monitor.env
 export STARTUP_TEST_DIO STARTUP_TEST_MONITOR
 DIODIR=$STARTUP_APP H=$STARTUP_HOOKS WLOG=$TEST_DIR/startup.log \
 OWNER_FILE=$TEST_DIR/startup.owner \
+CP_SETTINGS_FILE=$TEST_DIR/missing-preferences MENU_SESSION_FILE=$TEST_DIR/menu-session MENU_VERBOSE_FILE=$TEST_DIR/menu-verbose \
     sh "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" alpha beta
 sleep 1
 STARTUP_OLD_IFS=$IFS

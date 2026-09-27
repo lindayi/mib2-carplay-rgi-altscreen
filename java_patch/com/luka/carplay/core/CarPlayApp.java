@@ -46,6 +46,9 @@ public final class CarPlayApp {
     private static int lifecycleGeneration;
     private static int lifecycleAppliedGeneration;
     private static IContext desiredContext;
+    private static IContext phoneContext;
+    private static boolean featuresEnabled=true;
+    private static boolean guidanceEnabled=true;
     private static final int RGD_MODULE_INDEX = 1;
 
     private CarPlayApp() {}
@@ -60,6 +63,29 @@ public final class CarPlayApp {
      *  REPLACE mode gates roller/key capture on this (whole-session takeover),
      *  not on cluster-tab focus. */
     public static boolean isActive() { return active; }
+    public static boolean isSessionConnected() { synchronized(lock){return phoneContext!=null;} }
+
+    /** Runtime preference gates; never disconnect the physical phone session. */
+    public static void setFeaturesEnabled(boolean enabled) {
+        synchronized(lock) {
+            if(featuresEnabled==enabled)return;
+            featuresEnabled=enabled;
+            ensureLifecycleWorkerLocked();
+            if(!enabled) {
+                publishDeactivate();
+            } else if(phoneContext!=null) {
+                active=true;desiredContext=phoneContext;
+                serviceChangeGeneration++;lifecycleGeneration++;lock.notifyAll();
+            }
+        }
+    }
+    public static void setGuidanceEnabled(boolean enabled) {
+        synchronized(lock) {
+            if(guidanceEnabled==enabled)return;
+            guidanceEnabled=enabled;
+            if(active){serviceChangeGeneration++;lifecycleGeneration++;lock.notifyAll();}
+        }
+    }
 
     /** Bring the transport up ALWAYS-ON, independent of any CarPlay session.
      *  Called from the patched TerminalModeBapCombi.init() (component start / boot),
@@ -84,6 +110,8 @@ public final class CarPlayApp {
         }
         Log.refreshLevel();
         synchronized (lock) {
+            phoneContext=(IContext)context;
+            if(!featuresEnabled)return;
             ensureLifecycleWorkerLocked();
             /* ACTIVATING may be repeated for the same TMDevice.  Publishing the
              * same desired edge twice must not restart modules that are already
@@ -110,12 +138,16 @@ public final class CarPlayApp {
         }
     }
 
-    public static void onDeactivate() { publishDeactivate(); }
+    public static void onDeactivate() {
+        synchronized(lock){phoneContext=null;}
+        publishDeactivate();
+    }
 
     /** Component teardown is not the hot TMDevice callback.  Let it wait for
      * the already-published async cleanup before TerminalMode closes its OSGi
      * trackers; the bound prevents a broken module from hanging HMI shutdown. */
     public static void onDeactivateAndWait() {
+        synchronized(lock){phoneContext=null;}
         int generation = publishDeactivate();
         long deadline = System.currentTimeMillis() + 3000L;
         synchronized (lock) {
@@ -335,6 +367,7 @@ public final class CarPlayApp {
                 if (!active || expectedLifecycleGeneration != lifecycleGeneration
                         || fwRef != fw) return false;
                 if (started[i]) continue;
+                if(i==RGD_MODULE_INDEX && !guidanceEnabled){started[i]=true;continue;}
             }
             boolean ok;
             try { ok = MODULES[i].start(fw); }

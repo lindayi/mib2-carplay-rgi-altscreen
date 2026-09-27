@@ -9,6 +9,7 @@ public final class ClusterKdkRendererLifecycleTest {
         int clears, disposals;
         public boolean sendClear() { clears++; return true; }
         public boolean sendRouteLabels(String distance,String road) { return true; }
+        public boolean sendDisplayOptions(){return true;}
         public void dispose() { disposals++; }
     }
     static Field field(String name) throws Exception {

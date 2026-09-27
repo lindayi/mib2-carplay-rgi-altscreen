@@ -39,7 +39,7 @@ JARS=/mnt/app/eso/hmi/lsd/jars
 flat_dest() {
     case $1 in
         libcarplay_hook.so|maneuver_render|flag_atlas.rgba) echo "$HOOKS/$1" ;;
-        carplay_startup.sh|carplay_monitor.sh|carplay_processes.sh|carplay_cleanup.sh) echo "$HOOKS/$1" ;;
+        carplay_startup.sh|carplay_monitor.sh|carplay_processes.sh|carplay_settings.sh|carplay_cleanup.sh) echo "$HOOKS/$1" ;;
         carplay_hook.jar) echo "$JARS/$1" ;;
         *) return 1 ;;
     esac
@@ -64,7 +64,7 @@ backup_once() { [ -e "$2" ] || cp -p "$1" "$2" || { echo "FAILED backup $2"; ret
 # The release assets, dropped flat into carplay/.  All or nothing: a partly copied
 # release would pair a new carplay_startup.sh with an old monitor, so it stops here.
 FLAT_ASSETS="libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh
-carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh carplay_hook.jar"
+carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh carplay_hook.jar"
 
 # Payload as "source|destination" lines into $1.  Flat assets are checked by name,
 # never by walking the card.  The optional root/ tree needs find: QNX fs-dos cannot

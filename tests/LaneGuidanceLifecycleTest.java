@@ -23,6 +23,7 @@ public final class LaneGuidanceLifecycleTest {
         LaneGuidanceSnapshot lanes; int writes;
         boolean sendLaneGuidance(LaneGuidanceSnapshot value) { lanes=value; writes++; return true; }
         public boolean sendRouteLabels(String distance,String road) { return true; }
+        public boolean sendDisplayOptions(){return true;}
     }
     static void check(boolean b,String message) { if(!b)throw new AssertionError(message); }
     static void set(Object o,String name,Object value) throws Exception {

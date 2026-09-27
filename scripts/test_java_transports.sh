@@ -2,8 +2,9 @@
 # Compile shipping Java 1.4 sources, then exercise input and local transports.
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TEST_JDK="$PROJECT_DIR/../../Tools/jxe2jar/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
-bash "$PROJECT_DIR/scripts/build_java.sh"
+TOOLS_DIR="${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}"
+TEST_JDK="${TEST_JDK:-${JAVA_HOME:-$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home}}"
+[ "${SKIP_BUILD:-0}" = 1 ] || bash "$PROJECT_DIR/scripts/build_java.sh"
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
@@ -19,7 +20,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 
 # NAVSD INITIALIZING/READY must pass straight through the RGI gate
 # (the altscreen INITIALIZING takeover and AltScreenStartupTest do not apply here).
-STOCK_FINAL="$PROJECT_DIR/../../Tools/jxe2jar/out/${STOCK_JAR:-MU1316-final.jar}"
+STOCK_FINAL="$TOOLS_DIR/out/${STOCK_JAR:-MU1316-P5145-stock.jar}"
 mkdir -p "$TEST_DIR/nav-init"
 "$TEST_JDK/bin/javac" -encoding UTF-8 \
     -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_FINAL" \
@@ -41,7 +42,7 @@ mkdir -p "$TEST_DIR/lifecycle"
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/pdc/PdcSmallStageGuard.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/app/terminalmode/IContext.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/atip/base/IFrameworkAccess.java"
-for scenario in publication during-start replug failure bounce; do
+for scenario in publication during-start replug failure bounce menu; do
     "$TEST_JDK/bin/java" -cp "$TEST_DIR/lifecycle" com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
 done
 # Parking resource policy also uses the freshly built shipping JAR.

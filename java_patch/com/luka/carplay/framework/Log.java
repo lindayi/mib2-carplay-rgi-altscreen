@@ -21,7 +21,7 @@ public final class Log {
      * session start (refreshLevel), like the hook, so a marker takes effect on the next phone
      * connect without a reboot.  /tmp is cleared by a reboot; /mnt/app survives it. */
     private static final String VERBOSE_MARKERS =
-        "/mnt/app/carplay_verbose:/tmp/carplay_verbose";
+        "/mnt/app/carplay_verbose:/tmp/carplay_verbose:/tmp/carplay_menu_verbose";
     private static int level = resolveLevel();
 
     /** Re-read the markers; called at each CarPlay session start. */

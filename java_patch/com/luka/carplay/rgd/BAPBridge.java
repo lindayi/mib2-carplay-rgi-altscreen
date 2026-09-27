@@ -1198,6 +1198,7 @@ public class BAPBridge {
             if (!customRendererStarted && csRef != null) startCustomRenderer();
 
             if (rendererClient != null && customRendererStarted) {
+                if(!rendererClient.sendDisplayOptions())noteRendererSendResult(false);
                 if (!refreshRendererViewport()) noteRendererSendResult(false);
                 /* Link-loss → noteRendererSendResult drops the view; the retry above reconnects. */
 
@@ -2040,6 +2041,7 @@ public class BAPBridge {
             /* Paint a deterministic frame, but do not expose displayable 98 until the peer
              * acknowledges eglSwapBuffers with FRAME_READY. */
             if (!rendererPrimed) {
+                if(!rendererClient.sendDisplayOptions()){noteRendererSendResult(false);return false;}
                 lastCrLaneGuidance = null;
                 lastCrDistanceLabel = lastCrRoadLabel = null;
                 lastCrIcon = -1;

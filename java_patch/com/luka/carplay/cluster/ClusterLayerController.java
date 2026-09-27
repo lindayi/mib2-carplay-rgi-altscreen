@@ -327,7 +327,9 @@ public final class ClusterLayerController {
             dm.setCropping(MANEUVER, terminal, cx, cy, cw, ch, dx, dy, cw, ch);
             dm.setOpacity(MANEUVER, terminal, carplayOpacity);
             dm.setPosition(backing, terminal, dx, dy);
-            dm.setOpacity(backing, terminal, carplayOpacity);
+            int backingOpacity=com.luka.carplay.settings.Preferences.get().snapshot()
+                .get(com.luka.carplay.settings.Setting.BACKGROUND)==0?carplayOpacity:carplayOpacity*65/100;
+            dm.setOpacity(backing, terminal, backingOpacity);
             dm.setOpacity(otherBacking, terminal, 0);
             errorLogged = false;
         } catch (Throwable t) {
