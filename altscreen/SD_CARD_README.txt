@@ -18,7 +18,9 @@ MMI Cockpit CarPlay AltScreen + RGI SD Package
    - Watermarks are completely removed (transparent overlay).
    - Startup screen displays the Audi logo (logo.rgba) for ~2 seconds.
    - Steering-wheel roller zooms CarPlay map and native map simultaneously.
-   - Four Cluster map layout presets available in GEM for car marker positioning.
+   - Four Cluster map layout presets are available in GEM. Maneuver card on top
+     is the default when no preference is saved; upgrades preserve explicit choices.
+     Select "original AltScreen" to request the original layout. Reconnect to apply.
 6. To restore stock firmware configurations, run RESTORE ORIGINAL from the menu.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.
    Cold boots do not require the SD card to remain inserted once installed.

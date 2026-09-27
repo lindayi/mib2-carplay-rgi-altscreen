@@ -9,7 +9,10 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CarplayBusTransportTest.java" \
     "$PROJECT_DIR/tests/RendererServerTransportTest.java" \
-    "$PROJECT_DIR/tests/TouchpadControllerTest.java"
+    "$PROJECT_DIR/tests/TouchpadControllerTest.java" \
+    "$PROJECT_DIR/tests/AltScreenLayoutTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" \
+    com.luka.carplay.cluster.AltScreenLayoutTest "$PROJECT_DIR/altscreen/Toolbox/scripts/cluster_layout.sh"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
@@ -43,4 +46,3 @@ for scenario in publication during-start replug failure bounce; do
 done
 # Parking resource policy also uses the freshly built shipping JAR.
 bash "$PROJECT_DIR/scripts/test_pdc.sh"
-

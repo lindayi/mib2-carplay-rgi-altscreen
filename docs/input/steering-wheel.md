@@ -45,8 +45,11 @@ AirPlay session is tracked through the PLT-bound `AirPlayReceiverSessionPlatform
 AltScreen's display UUID is fixed (`b7e6c5a0-2222-4000-8000-000000000002`).
 
 The same path carries `CMD_ALT_UICTX` (a `maps:/car/instrumentcluster` URL -> `showUI`), sent when
-the video comes up if `/mnt/app/root/hooks/cluster_ui.url` exists; the MMI-Cockpit-Carplay GEM menu
-writes it ("Cluster map layout": default / card on top / card on the right / no ETA). (The listener
+the video comes up. With no `/mnt/app/root/hooks/cluster_ui.url`, Java requests
+`maps:/car/instrumentcluster/map?maneuverLayout=topaligned`. A saved file takes precedence;
+the MMI-Cockpit-Carplay GEM menu writes it ("Cluster map layout": original AltScreen /
+card on top (default) / card on the right / no ETA). Original AltScreen explicitly saves
+the base URL; it does not remove the file. Upgrades leave saved choices untouched. (The listener
 also observes FctID 44 visibility and FctID 54 stage for the KDK layers - see
 [kdk-geometry](../cluster/kdk-geometry.md).)
 

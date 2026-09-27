@@ -117,8 +117,10 @@ features below follow it automatically.
   continues to zoom ([details](docs/input/steering-wheel.md)).
 - **Cluster map layout selector (car marker centering).** To address the car location marker
   offset caused by iOS reserving space for its own maneuver card, the MMI-Cockpit-Carplay GEM menu
-  provides a **Cluster map layout** selector with four options: *AltScreen default*, *maneuver card on top*,
-  *maneuver card on the right*, and *no ETA* (applied on next phone reconnect).
+  provides a **Cluster map layout** selector with four options: *original AltScreen*,
+  *maneuver card on top (default)*, *maneuver card on the right*, and *no ETA*
+  (applied on next phone reconnect). With no saved preference, the maneuver card
+  defaults to the top; upgrades preserve explicitly saved layouts.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up beside it,
   CarPlay stays on screen instead of being replaced ([details](docs/hmi/pdc-small-stage.md)).
@@ -225,7 +227,7 @@ cleanup retains the recovery scripts and pending transaction for a retry.
 #### Key enhancements over upstream AltScreen:
 - **30 fps instead of 15:** the frame tap reads back every decoded frame and the mirror sidecar polls every 4 ms with a one-vsync minimum period (binary patches applied by `build_sd.sh`).
 - **Steering-wheel cluster map zoom:** Each roller click sends `changeMapZoomLevel` directly to iOS via AirPlay (`CRSUIClusterZoomAction`); scrolling away zooms out, scrolling towards zooms in.
-- **Cluster map layout selector (vehicle marker centering):** GEM menu provides four selectable layouts (`AltScreen default`, `maneuver card on top`, `maneuver card on the right`, `no ETA`) to balance map layout and vehicle marker centering without obscuring navigation.
+- **Cluster map layout selector (vehicle marker centering):** GEM menu provides four selectable layouts (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`) to balance map layout and vehicle marker centering without obscuring navigation.
 - **Corrected aspect ratio & projection:** Instead of stretching or squashing the image, the mirror sidecar is rebuilt with a 1:1 aspect ratio and clean bottom crop so that maps and road geometry display with natural proportions.
 - **Removed watermarks:** Upstream advertising and promotional text watermarks are removed (`watermark.rgba` is completely transparent).
 - **OEM Audi startup logo:** Replaced third-party repository startup branding with an authentic Audi logo (`logo.rgba`).
@@ -279,7 +281,7 @@ This installs both **AltScreen** (full CarPlay cluster video stream on the Virtu
 
 **On-Car Verification & Features:**
 - **Steering-wheel zoom:** Start CarPlay with the navigation map on the Virtual Cockpit and turn the left steering-wheel roller ("away" = zoom out, "towards" = zoom in).
-- **Vehicle marker alignment:** Build a route in CarPlay, navigate to **MMI-Cockpit-Carplay -> Cluster map layout** in GEM, and test the four options (`AltScreen default`, `maneuver card on top`, `maneuver card on the right`, `no ETA`), reconnecting the phone after each to see which layout gives the most centered car marker on your cluster view (Classic / Sport).
+- **Vehicle marker alignment:** Build a route in CarPlay, navigate to **MMI-Cockpit-Carplay -> Cluster map layout** in GEM, and try the four options (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`), reconnecting the phone after each. These are iPhone layout requests, not direct control of the vehicle marker; their effect can differ by navigation app.
 - **STATUS:** Run **MMI-Cockpit-Carplay -> STATUS** in GEM to inspect system health. It reports `DIO_PRELOAD_ALTSCREEN`, `DIO_PRELOAD_RGI`, `RGI_*` status, and the live display context from `/tmp/carplay_cluster.ctx`.
 - **RESTORE ORIGINAL:** Selecting **RESTORE ORIGINAL** in GEM cleanly removes all patches and restores the stock firmware configuration from backup.
 

@@ -33,10 +33,10 @@ script
    label   "START (alias)"
 script
    value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/cluster_layout_default.sh"
-   label   "Cluster map layout: AltScreen default"
+   label   "Cluster map layout: original AltScreen"
 script
    value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/cluster_layout_top.sh"
-   label   "Cluster map layout: maneuver card on top"
+   label   "Cluster map layout: maneuver card on top (default)"
 script
    value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/cluster_layout_right.sh"
    label   "Cluster map layout: maneuver card on the right"

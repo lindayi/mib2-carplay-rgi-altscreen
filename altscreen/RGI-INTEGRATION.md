@@ -18,7 +18,10 @@ Local changes on top of upstream:
   RESTORE ORIGINAL removes them), listed in `RUNTIME_SCRIPTS`; STATUS reports the RGI state and
   the live dio_manager preloads;
 - `Toolbox/scripts/cluster_layout*.sh` + four GEM entries "Cluster map layout: ..." write
-  `/mnt/app/root/hooks/cluster_ui.url`, which the RGI Java sends to the cluster display as `showUI`;
+  `/mnt/app/root/hooks/cluster_ui.url`, which the RGI Java sends to the cluster display as `showUI`.
+  Without a saved file, Java requests `maneuverLayout=topaligned`. The original
+  AltScreen preset (legacy script argument `default`) explicitly saves the base
+  `maps:/car/instrumentcluster/map` URL rather than deleting the file;
 - `Toolbox/scripts/dump_cluster_h264.sh` + GEM entry "Dump cluster video to SD (diagnostic)"
   copy the `/carplay111_h264` ring to `MMI-Cockpit-Carplay/logs/h264/`
   (analyse with `../tools/h264_ring_analyze.py`).

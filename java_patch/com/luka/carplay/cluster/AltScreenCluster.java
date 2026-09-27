@@ -9,7 +9,7 @@
  *   Cluster UI context -> CMD_ALT_UICTX: if /mnt/app/root/hooks/cluster_ui.url holds a
  *   maps:/car/instrumentcluster URL, it is sent as "showUI" each time the video comes
  *   up, after AltScreen's own request.  The file is written by the MMI-Cockpit-Carplay
- *   GEM menu ("cluster layout"); without it AltScreen's default presentation stays.
+ *   GEM menu ("cluster layout"); without it the maneuver card is placed on top.
  */
 package com.luka.carplay.cluster;
 
@@ -24,6 +24,8 @@ public final class AltScreenCluster {
 
     private static final String TAG = "AltCluster";
     public static final String UI_URL_FILE = "/mnt/app/root/hooks/cluster_ui.url";
+    private static final String DEFAULT_UI_URL =
+        "maps:/car/instrumentcluster/map?maneuverLayout=topaligned";
     private static final String URL_PREFIX = "maps:";
     private static final int MAX_URL = 400;
 
@@ -58,7 +60,8 @@ public final class AltScreenCluster {
         FileInputStream in = null;
         try {
             File f = new File(uiUrlPath);
-            if (!f.exists() || f.length() <= 0 || f.length() > MAX_URL) return null;
+            if (!f.exists()) return DEFAULT_UI_URL;
+            if (f.length() <= 0 || f.length() > MAX_URL) return null;
             byte[] buf = new byte[(int)f.length()];
             in = new FileInputStream(f);
             int n = 0;

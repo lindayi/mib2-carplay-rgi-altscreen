@@ -97,6 +97,12 @@ FAULT
 
 new_fixture
 install
+preference=maps:/car/instrumentcluster/map?maneuverLayout=rightaligned
+printf '%s\n' "$preference" > "$H/cluster_ui.url"
+run upgrade-with-preference "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+test "$(cat "$H/cluster_ui.url")" = "$preference"
+need upgrade-with-preference 'INSTALL=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80+RGI'
+stub_mirror
 grep -Fq '"CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so"' \
     "$P/smartphone_integrator.json"
 sed -n '/^INHERITED_PRELOAD=/,/^echo "\[startup\] preload/p' "$H/carplay_startup.sh" > "$CASE_DIR/pre.sh"
