@@ -4,6 +4,10 @@ This personal native-MMI menu package requires MHI2Q_US_AUG22_P5145 / MU1316.
 The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
 No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.
 Native-menu rendering, controls and wireless-adapter behavior need in-car validation.
+Owner report (2026-09-27, last prepared test card cb64eee): navigation text and
+distance work. Google Maps centering is intermittent and can regress on later
+routes; the top-card preset is not a confirmed centering fix. This report does not
+validate the later native-menu or recovery additions.
 
 1. Copy all contents of this package directly to the root of a FAT32 SD card.
    The card root should directly contain:

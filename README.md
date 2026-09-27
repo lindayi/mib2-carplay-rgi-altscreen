@@ -6,6 +6,9 @@ Other firmware examples and vehicle reports below describe upstream history, not
 additional supported targets for this fork. The native menu has not yet been
 visually or operationally verified on the head unit.
 
+For project scope, tested build commands, deployment rules and investigation
+lessons, start with [AGENTS.md](AGENTS.md).
+
 Unified CarPlay patch set for Audi MHI2Q infotainment with Audi Virtual Cockpit.  
 Integrates **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)** (CarPlay instrument cluster video streaming) with **[mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** (3D turn-by-turn route guidance & maneuver renderer) into one single codebase and all-in-one SD card build.
 
@@ -16,6 +19,12 @@ On 2026-09-26, the owner reported a successful in-place upgrade from upstream
 MHI2Q-CarPlay-AltScreen and working operation, using a Java patch built against
 that unit's exported stock `lsd.jxe`. This confirms initial installation and
 operation, not exhaustive feature coverage or long-term reliability.
+
+**Owner follow-up, 2026-09-27:** Navigation text and next-turn distance work in the
+car. Google Maps centering remains intermittent: the first one or few navigations
+can be centered, then later navigation can return to an off-center layout. The
+trigger is not established. The last prepared test card was `cb64eee`; this report
+does not validate the later native-MMI menu or recovery additions.
 
 **Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
 
@@ -114,7 +123,8 @@ features below follow it automatically.
   the arrow, with lane guidance reserved above them. Distance uses the same stock MMI formatter
   as BAP (including imperial units); unknown values and ended routes clear the labels.
   This does not move or repurpose the cockpit's native destination-distance widget.
-  The new overlay is host-tested, not yet vehicle-verified; see
+  The owner confirmed working navigation text and distance on 2026-09-27; newer
+  appearance controls remain unverified in the car. See
   [renderer details](docs/cluster/maneuver-renderer.md#route-label-footer).
 - **Steering-wheel roller zoom for CarPlay map & stock map.** While the AltScreen CarPlay video is on
   the Virtual Cockpit, each click of the left steering-wheel roller sends the factory AirPlay
@@ -127,6 +137,9 @@ features below follow it automatically.
   *maneuver card on top (default)*, *maneuver card on the right*, and *no ETA*
   (applied on next phone reconnect). With no saved preference, the maneuver card
   defaults to the top; upgrades preserve explicitly saved layouts.
+  **Known limitation:** Google Maps may return to an off-center layout on later
+  navigations; the triggering event is unknown and the preset is not a confirmed
+  centering fix.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
   **Carplay Altscreen**. Grouped controls cover master enable, presentation/layout,

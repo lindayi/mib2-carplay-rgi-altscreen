@@ -53,6 +53,26 @@ the base URL; it does not remove the file. Upgrades leave saved choices untouche
 also observes FctID 44 visibility and FctID 54 stage for the KDK layers - see
 [kdk-geometry](../cluster/kdk-geometry.md).)
 
+## Open: Google Maps layout does not stay centered
+
+On 2026-09-27 the owner reported working navigation text/distance, but intermittent
+Google Maps centering: the first one or few navigations can be centered and later
+navigation can revert to an off-center vehicle icon. No reliable trigger is known.
+The last prepared test card was `cb64eee`; the later native-MMI build had not been
+deployed. Earlier owner feedback said Apple Maps did not have this offset.
+
+The current Java path sends the selected layout from `AltScreenCluster.onVideoReady`,
+called on a readiness edge in `ScreenModule.refreshAltScreenVideo`. It does not
+explicitly resend on every new route. A later route/UI transition while the same
+video stream remains ready is a plausible explanation, **not a confirmed cause**.
+
+Compare first/subsequent routes within one connection, recording app/iOS versions,
+video readiness, route state and `showUI` events. Compare raw second-screen video
+with the displayed crop before changing geometry. Do not assume a new route means
+a new Type-111 stream, repeatedly force `showUI` without evidence, or globally
+shift the image and break Apple Maps. The top-card preset is not a guaranteed
+centering fix.
+
 ## ⚙️ Press (OK) -> route-info toggle
 
 The raw MFW roller press (DSI key 40, `KEY_MFW_ROLLER_LEFT`) and the centre-console DDS (key 16,

@@ -1,0 +1,366 @@
+# Project knowledge and working agreements
+
+Maintain this file when discovering a durable project-specific lesson or changing
+a build/deployment invariant. Commit the update with the related project changes.
+Keep observations, hypotheses, and host versus vehicle validation clearly separate.
+Do not turn this into a raw conversation log or store credentials/private captures.
+
+## Scope
+
+- Personal project for a 2020 Audi Q5 with **MHI2Q_US_AUG22_P5145 / MU1316** and an
+  iPhone using **iOS/CarPlay**. Do not broaden work to Android Auto, other Audi models,
+  MHI2/Harman, MIB3, or a general retrofit product unless explicitly requested.
+- The menu name requested by the owner is **Carplay Altscreen**.
+- Normal-MMI preferences must never require or trigger a full MMI reboot. Apply
+  live when safe; explicitly request a CarPlay reconnect for connection-dependent
+  changes. Never silently disconnect the phone to apply a setting.
+- Initial installation of a new HMI patch still requires the documented reboot
+  sequence. This is different from changing a preference after installation.
+- Master Off must disable the extra stream on the next receiver session, not just
+  hide the map. Return control to the original Audi behavior; do not force a native
+  map or enable dual navigation. Wireless-adapter success must be tested, not assumed.
+- Keep everyday controls in normal MMI where practical. Install/uninstall, full
+  restore, firmware operations and vehicle coding are not normal-MMI menu actions.
+- English documentation only. Ukrainian READMEs were intentionally removed.
+
+## Resume here: workspace and source history
+
+The complete workspace was moved from the Windows profile to these sibling folders:
+
+| Location | Contents |
+| --- | --- |
+| `E:\Projects\mib2-carplay-rgi-altscreen` | This Git repository, ignored build outputs and package ZIPs |
+| `E:\Projects\qnx65-armv7-toolchain` | QNX cross-toolchain source |
+| `E:\Projects\carplay-build-inputs` | Private firmware, converter, Windows helpers, SD backups, build logs and records |
+
+The old project folders under `C:\Users\Dayi` no longer exist. Historical logs can
+still mention them; use the relocated paths, not those old log strings. Docker's
+managed image storage was not moved.
+The relocation was verified against hashes for every file, including hidden Git
+data. If moving again, preserve the source-equivalent private folder permissions:
+the destination drive initially inherited broader access. Robocopy's security-copy
+attempt logged `ERROR 5` yet returned zero; inspect its log and verify contents,
+not just its exit code. Do not loosen access on the shared workspace root.
+
+- `origin`: `https://github.com/lindayi/mib2-carplay-rgi-altscreen.git`
+- `upstream`: `https://github.com/Allemon/mib2-carplay-rgi-altscreen.git`
+- `rgi-upstream`: `https://github.com/luka-dev/mib2q-carplay-rgi.git`
+- Work so far is on `q5-mu1316-build-fixes`; check the actual branch, worktree and
+  remotes before changing anything. Push only to the owner's fork, never upstream.
+- Initial review compared Allemon `404ccc2` against RGI upstream `72d321c`:
+  17 additional commits, including the AltScreen import at `acfb57f`.
+
+Historical checkpoints, not instructions to reset to an old revision:
+
+| Commit | Change |
+| --- | --- |
+| `cfae41e` | Configurable Java tools path, missing SD HMI-directory fix, initial owner report |
+| `a13ac95` | Restore/cleanup/reconnect fixes and English-only READMEs |
+| `5dae369` | Custom distance/road footer and renderer tests |
+| `cb64eee` | Top-card default, explicit original-layout preset, upgrade preservation |
+| `d3a5086` | Export-only diagnostics and conservative mirror recovery |
+| `21d5b20` | Experimental native MMI menu and its runtime controls |
+
+Read `E:\Projects\carplay-build-inputs\build-status.json` for the current built
+package, input provenance, checksums and deployment record. It describes a built
+artifact, which can lag a documentation-only Git commit. `build-logs\` contains
+retained execution logs; `sd-deployment-*.json` records actual card preparation.
+Earlier JSON reports are historical, not necessarily the current build.
+
+## Vehicle evidence and the current open issue
+
+As reported by the owner on **2026-09-27**:
+
+- Navigation text and next-turn distance **work in the car**.
+- Google Maps centering is **intermittent**: the first one or few navigations can
+  be centered, but subsequent navigation can become off-center again. The exact
+  trigger/pattern is unknown. Earlier feedback said Apple Maps did not have this
+  offset problem.
+- The last SD package prepared before this test was `cb64eee`. The installed build
+  ID was not independently read back in the report. Do not attribute this feedback
+  to the later native-menu/recovery builds.
+- `21d5b20` was built and pushed, but was **not copied to the SD or tested in the
+  car** during the initial implementation session. Native MMI drawing, knob/Back
+  behavior, QNX settings persistence and wireless-adapter behavior remain unverified.
+
+### Next investigation: layout request lifetime, not a blind crop adjustment
+
+`ScreenModule.refreshAltScreenVideo()` calls
+`AltScreenCluster.onVideoReady()` on a video-ready edge. That sends one
+`CMD_ALT_UICTX`/AirPlay `showUI` request. It does not reassert the layout for every
+new navigation route. A later route/app UI change while the video stays ready
+could therefore explain the symptom, but **this is a hypothesis, not a proven cause**.
+
+Start with:
+
+- `java_patch\com\luka\carplay\core\ScreenModule.java`
+- `java_patch\com\luka\carplay\cluster\AltScreenCluster.java`
+- `java_patch\com\luka\carplay\rgd\RouteGuidance.java`
+- `hook\altcluster\alt_cluster.c`
+- `docs\input\steering-wheel.md`
+
+Compare a centered first route and off-center later route in the same connection:
+app/iOS versions, route changes, video readiness, `showUI` events and raw cluster
+video versus final crop. Capture while parked and retain private data locally.
+Do not assume every app/route change tears down Type 111. Do not spam `showUI` on
+a timer without evidence, or globally shift/crop the map and spoil Apple Maps.
+
+The top preset requests
+`maps:/car/instrumentcluster/map?maneuverLayout=topaligned`; it is not a direct
+vehicle-marker positioning API. Preserve explicit right/no-ETA/original preferences.
+The original AltScreen preset explicitly stores the base `/map` URL.
+
+## Architecture and invariants
+
+- Java HMI is long-lived; `CarplayBus` is the server on loopback **19810** and the
+  native hook is its client. `RendererServer` is the Java server on **19800**;
+  `maneuver_render` is a restartable native client.
+- Renderer commands are fixed **48-byte packets**. Update both Java/C definitions
+  and `scripts\check_local_protocols.py` together.
+- `ScreenModule` is the sole cluster-context writer:
+  **81** = custom maneuver/backings over CarPlay video,
+  **80** = custom maneuver/backings over the Audi map,
+  **74** = released/stock context. Do not add a competing `dmdt` context writer.
+- Custom displayable **98** is shared with stock backings **101/102**. Restore the
+  stock backing state when releasing control.
+- Renderer source is **328x181**, including the final ECC row. Default popup crop
+  is **59,27,210x153**; Sport in-tube can use **328x180**. Read live layout/stage
+  through `ClusterLayerController`, not guessed offsets.
+- VC FctID **54** is authoritative for stage and **44** for visibility. The Audi
+  View button does not reliably emit every model event on Classic.
+- The Sport map offset **-476,0** applies to map planes, **not** the KDK panel.
+  See `docs\cluster\kdk-geometry.md`; do not compensate for stale state with offsets.
+- `smartphone_integrator` owns the receiver PID/USB lifecycle. The wrapper must
+  **exec** `dio_manager`, not leave it behind a shell parent. Renderer monitoring
+  must not reset USB/OTG, kill the main receiver, or shorten SI's stock retry policy.
+- Gate asynchronous work by connection/lifecycle generation. Do not perform
+  blocking socket/file/process work on stock HMI/BAP callbacks.
+- Accepted maneuver/CLEAR commands are ordering barriers. Coalesce progress/labels
+  only within their maneuver; replay independent settings after reconnect. Only
+  cache successful enqueue operations.
+
+### Distance/road overlay
+
+- Numeric distance is not part of the old 3D arrow renderer. Native BAP distance
+  labels can be hidden by cockpit policy. The custom footer avoids that dependency.
+- Use the current maneuver's distance and stock `BAPDistanceFormatter`, including
+  imperial and quarter-mile encoding; do not substitute destination distance.
+- Text priority is exit/signpost, next road, then maneuver name. Never substitute
+  the current road for absent next-road text in this footer.
+- `CMD_ROUTE_LABELS` is `0x0f`: one atomic distance/road snapshot. `CMD_DISPLAY_OPTIONS`
+  is `0x10`: live distance/road/lane/progress visibility, large text and scrolling.
+- UTF-8/NFC and grapheme-safe clipping happen before transport. Road text is bounded
+  to **32 UTF-8 bytes**. Scrolling displays that bounded label, not an unlimited name.
+- Embedded font: **999 DejaVu-derived glyphs** (Latin/Greek/Cyrillic/punctuation).
+  Unsupported names are omitted with a diagnostic, not fabricated or transliterated.
+  The richer native BAP text path remains intact.
+- Retain `maneuver_render\LICENSE.DEJAVU` with renderer distributions. No runtime
+  font library or extra font asset is needed on the HU.
+- Reserve footer/lane space and invalidate framing caches when visibility/layout
+  changes. For previews, invalidate maneuver masks after changing maneuver geometry;
+  otherwise different test cases misleadingly show the previous arrow.
+
+### Native MMI menu
+
+- Entry: **NAV -> right drawer -> Navigation settings -> Carplay Altscreen**.
+- Screen **400102**, factory method
+  `NaviScreenBag8.mAPOPTNAVIGENERALSETTINGSMAIN`.
+- `tools\PatchNavigationSettings.java` validates the exact private stock class hash,
+  then makes four constructor/type substitutions. It does not rebuild a decompiled
+  OEM factory. Wrong firmware/input must fail, not bypass the guard.
+- Private references/decompiled classes live in
+  `E:\Projects\carplay-build-inputs\mmi-reference`, outside this Git repository.
+  The woven OEM class goes only into ignored build output.
+- Reuse native widgets/fonts/focus and preserve OEM rows/model bindings. Hide those
+  rows only while our submenu is open. Keep action labels and reconnect state truthful.
+- Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
+  versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
+  Save atomically with sync; invalid data takes the safe disabled path.
+- Production preference singleton construction is non-I/O; the worker loads it.
+  UI/model callbacks read snapshots and queue changes, never wait for persistence.
+- Separate preference and action workers: an export/restart must not stall preference
+  updates. Bound queue/process waits and surface failure.
+- Master Off releases Java cockpit modules live and clears project preloads/skips
+  the monitor on the **next CarPlay session**. It is not an uninstall.
+- Audi-map mode's next session retains RGI but omits the AltScreen preload.
+  Switching back from such a session needs reconnect.
+- `/tmp/carplay_menu_session` and `/tmp/carplay_supervisor.owner` distinguish the
+  requested preference from the actual receiver session. Do not report a stale
+  process/session record as active.
+- Reset preserves master enable state, Audi settings, pairing and installation.
+- Summary export is separate from confirmed private full-log export. Actions are a
+  fixed allowlist, not arbitrary shell commands. Missing runtime helpers are errors.
+- Full design/limitations: `docs\hmi\carplay-settings.md`.
+
+### Diagnostics and recovery
+
+- **EXPORT DIAGNOSTICS ONLY (no restore)** must write only a new SD export directory,
+  not stop/restart/uninstall/remount/change the installed system.
+- Export folder: `MMI-Cockpit-Carplay\logs\exports\export_<timestamp>_<pid>`.
+  Selected summary fields are separate from raw `private\` log tails, capped at
+  **256 KiB per file**. Raw logs are **not anonymized**. Never upload automatically.
+- **STORE LOGS + RESTORE** really restores; do not use it to gather logs while
+  preserving the installation.
+- Mirror startup waits asynchronously for Java context readiness; it must not delay
+  the main receiver. Initial delayed launch uses guarded same-session recovery so
+  an earlier stream request is not missed.
+- Freeze detection requires advancing input counters and calibrated presentation
+  telemetry. No input, missing telemetry, or a stationary map is not proof of a hang.
+- Identity-check a specific PID before signaling; bound `pidin`. Respect explicit
+  stop, newer generations and retry limits. Exhaustion must withdraw stale readiness.
+- Keep recovery preferences out of the initial-launch gate: disabling automatic
+  recovery must not prevent normal startup.
+- Restore launcher configuration and verify it **before deleting files it references**.
+  Keep recovery scripts/pending state on cleanup failure. Sync/remount failures must
+  not produce a successful installation result.
+
+## Builds: use the working path, not already-failed approaches
+
+### Private inputs
+
+- The real stock `lsd.jxe` is required; the old AltScreen patch JAR is not a substitute.
+- Existing durable input: `carplay-build-inputs\MU1316-stock\lsd.jxe` and
+  `MU1316-P5145-stock.jar`. The conversion contained **30,543 classes**.
+- Converter: `carplay-build-inputs\jxe2jar`. Build classpath uses its `out\` JAR,
+  OSGi framework **1.10.0**, tracker **1.5.4**, and ASM **9.7** jars under
+  `tools\uninline\lib`.
+- Use the base conversion for executable ABI checks. The un-inlined `*-final.jar`
+  pipeline is intended for decompilation and can alter synthetic/private accesses.
+- Converter needs Python **3.10+** (`match` syntax); the local converter image uses
+  **3.11** plus its declared `bitstring` dependency. QNX image Python 3.9 is insufficient.
+- Do not change sparse-checkout configuration while conversion writes inside the
+  checkout: it removed the ignored `out\` directory during an earlier conversion.
+  Keep the durable converted JAR outside the converter checkout, then copy it to `out\`.
+- If inputs are missing, ask for the owner's export. Existing Toolbox export:
+  **MQBCoding -> Dump -> Dump lsd.jxe file to SD-card**, producing
+  `H:\Dump\<firmware>\<unit-id>\LSD\lsd.jxe`. Do not select the import/link action.
+
+### Verified Windows helpers
+
+Run from PowerShell, using Git for Windows Bash:
+
+```powershell
+& 'C:\Program Files\Git\bin\bash.exe' 'E:\Projects\carplay-build-inputs\build-native-windows.sh'
+& 'C:\Program Files\Git\bin\bash.exe' 'E:\Projects\carplay-build-inputs\build-java-sd-windows.sh'
+```
+
+The first builds native artifacts; the second builds Java and stages `build\sd`.
+Neither writes the SD. Helpers resolve sibling workspace paths, so keep that layout.
+They are machine-local helpers; on another machine use the repository scripts with
+the documented toolchain/private inputs and recreate the Windows adapter if needed.
+
+- Java source/target is **1.4**, class version **48.0**, built in JDK 8. Modern Java
+  syntax belongs only in host tools/tests, not `java_patch`.
+- QNX image is `qnx65-armv7-toolchain:8.5` (also tagged `:latest` locally), ARMv7
+  QNX 6.5, EABI5/softfp. The C/C++-only image is enough; Go/Rust are unnecessary.
+- The native helper compiles in a temporary **Linux Docker volume** and copies
+  artifacts back. Old 32-bit QNX binutils fail on Windows bind-mount inode numbers:
+  `Value too large for defined data type`. Do not disable ELF/export checks to bypass it.
+- QNX toolchain source must retain Linux symlinks. For image builds on Windows,
+  use a Git archive with `core.autocrlf=false`, not a checkout whose symlinks may be
+  materialized as text. The build target is `base-env`, `BASE=base-8.5`.
+- Persist `core.autocrlf=false` locally. New Windows-created shell files can still
+  contain CRLF; normalize them before Docker execution/checksumming. A Bash error
+  about an invalid `pipefail` option has been caused by CRLF, not unsupported Bash.
+- `windows-docker.sh` disables MSYS argument rewriting and explicitly converts only
+  bind-mount host paths. Blind automatic conversion corrupts container paths inside
+  `bash -c`. With conversion disabled, use `cygpath` for native Git/Docker host paths.
+- Retain checks for the hook export allowlist, no emutls/eager RGD initialization,
+  ARM ELF and no C++ runtime dependency. Generated Screen/EGL/GLES import stubs are
+  link-time aids only; never deploy them over the real vehicle libraries.
+- `build_sd.sh` regenerates JAR size/POSIX cksum pins in INSTALL/START/STATUS and the
+  package SHA256 manifest. Never swap a JAR alone into an already-staged package.
+- Changing mirror scripts requires updating their release `SHA256SUMS` before SD
+  staging. The 30-fps binary patcher checks exact upstream binary identities.
+
+If the QNX image must be rebuilt, the tested Windows recipe is:
+
+```powershell
+$env:MSYS_NO_PATHCONV='1'
+$env:MSYS2_ARG_CONV_EXCL='*'
+Set-Location 'E:\Projects\qnx65-armv7-toolchain'
+& 'C:\Program Files\Git\bin\bash.exe' -c 'set -o pipefail; git -c core.autocrlf=false archive HEAD | docker build --platform=linux/amd64 --target base-env --build-arg BASE=base-8.5 -t qnx65-armv7-toolchain:8.5 -t qnx65-armv7-toolchain:latest -'
+```
+
+## Test workflow and evidence limits
+
+Run the smallest affected checks, then the relevant integration suites. Keep logs
+in private `carplay-build-inputs\build-logs`; don't infer success from an output file.
+
+Verified native-menu suite invocation on this machine:
+
+```powershell
+& 'C:\Program Files\Git\bin\bash.exe' -c 'set -e; source /e/Projects/carplay-build-inputs/windows-docker.sh; export TOOLS_DIR=/e/Projects/carplay-build-inputs/jxe2jar STOCK_JAR=MU1316-P5145-stock.jar; bash /e/Projects/mib2-carplay-rgi-altscreen/scripts/test_mmi_settings.sh'
+& 'C:\Program Files\Git\bin\bash.exe' 'E:\Projects\carplay-build-inputs\verify-sd-windows.sh'
+```
+
+The `/e/...` paths above are Git Bash paths; host PowerShell paths use `E:\...`.
+
+- `test_mmi_settings.sh`: preferences, exact native-factory hook equivalence,
+  strict JVM verification/native constructors, workers/timeouts, receiver bypass,
+  action allowlist, supervisor, lifecycle, then the full Java route/input/PDC suites.
+- `test_altscreen_e2e.sh` / `tests\altscreen_e2e.sh`: exact-stock fixture install,
+  upgrade preservation, strict START exit codes, restore fault injection, immutable
+  export-only behavior, summary export, and preference-aware mirror recovery.
+- `run_tests.sh`: host C/shell tests, including malformed inputs, transport and
+  flat/tree installation. In the Linux test image put `/usr/bin` before QNX tools.
+  A working host wrapper is `cc(){ command cc -D_GNU_SOURCE "$@" -ldl; }; export -f cc`
+  before `bash scripts/run_tests.sh`. `zlib1g-dev` is included in the test image.
+  Otherwise strict C99 hides clock APIs, old glibc needs explicit `libdl`, or the
+  QNX assembler is accidentally invoked with `--64`.
+- `test_route_labels.sh`: native sanitizers and real offscreen GLES rendering.
+  PNGs are in `build\route-label-previews`; actually view them. They are not photos
+  of the cockpit or native MMI page.
+- `TOOLS_DIR`, `JAVA_HOME` and explicit `SKIP_BUILD=1` support testing a known built
+  artifact in Docker. Do not silently test stale binaries.
+- Use the stock linkage audit; don't let the host JDK silently stand in for APIs
+  absent from the HU. Some isolated reconstructed-J9 probes require `-Xverify:none`;
+  that does not justify disabling strict verification of our native-menu hook.
+- The old e2e test falsely passed when a child printed `START=PASS` but the overall
+  command failed. The current suite checks return codes and final integrated result,
+  and explicitly stubs the unavailable ARM mirror only inside disposable fixtures.
+- Native HMI constructors and model tests do not emulate full Audi graphics/input.
+  No coverage percentage or exhaustive hardware-failure claim has been established.
+  Never deliberately interrupt vehicle power to test fault recovery.
+
+## SD preparation and safe deployment
+
+- Write the SD only after an explicit request and after verifying the mounted card,
+  package checksums and matching unit/export. Do not assume a remembered drive is it.
+- Before each update, snapshot all data files, including hidden files, except
+  Windows `System Volume Information`; hash-verify the copy. This is a file-level
+  backup, not a sector image. Preserve earlier backup sets.
+- Merge the **contents** of `build\sd` into the SD root. Replace matching package
+  files, add new ones, and **delete nothing else**. Do not format or use mirror/delete
+  synchronization. Preserve `MMI-Cockpit-Carplay\backup`, logs/state and `Dump`.
+- Old Ukrainian README files may remain on an existing SD because the no-deletion
+  rule takes precedence over source cleanup.
+- Verify every copied file against the source, every untouched file against the
+  pre-update manifest, and the deployed `SHA256SUMS-SD.txt`.
+- Existing Toolbox upgrade: parked, stable power, iPhone disconnected ->
+  **Update Toolbox -> INSTALL -> full MMI reboot -> START -> full MMI reboot**.
+  Reconnect afterward. Stop on FAIL; never bypass firmware checks.
+- Do not use the red software-update menu for this existing-Toolbox overlay upgrade.
+  "RESTORE ORIGINAL" restores stock configuration; it is not a downgrade to the
+  previous AltScreen release.
+- Do not assume copying a package to SD means it was installed in the car. Track
+  built, card-prepared, and owner-confirmed vehicle states separately.
+
+## Git, privacy, and research
+
+- Git Credential Manager device login worked when run in a normal PowerShell
+  terminal: `git credential-manager github login --device --username lindayi`.
+  The agent-runner attempt hid the prompt and expired. Do not ask for pasted tokens
+  or print the credential returned by `git credential fill`.
+- Push committed source to the owner's branch without force. Generated ZIPs,
+  stock JXE/JARs, private decompilation, SD backups and raw logs are not source commits.
+- Keep third-party licenses. Some imported AltScreen runtime components are
+  binary-only; do not claim complete source audits or reproducibility for them.
+- Online search summaries have fabricated issue descriptions and repeated obsolete
+  claims that MHI2Q CarPlay cluster integration is impossible. Read actual repository
+  code, issue bodies/comments and seller pages before relying on a claim.
+- Commercial advertising is not independent verification, proof of code resale, or
+  evidence that a feature works on this exact Q5.
+- For Google Maps centering, a relevant corroborating owner report is upstream
+  AltScreen issue 11, comment `5849186130`; the later intermittent behavior above is
+  this owner's direct feedback. Keep that distinction in future reports.
