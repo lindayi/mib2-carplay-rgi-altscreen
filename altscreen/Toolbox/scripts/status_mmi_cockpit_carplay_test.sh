@@ -33,6 +33,7 @@ RGI_HOOKS="$DEVICE_ROOT/mnt/app/root/hooks"
 MIRROR="$RUNTIME/bin/mirror"
 MIRROR_PID="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.pid"
 MIRROR_LOG="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.log"
+MIRROR_HEALTH="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.health"
 EXPECTED_SIZE=@CARPLAY_JAR_SIZE@
 EXPECTED_CKSUM=@CARPLAY_JAR_CKSUM@
 
@@ -229,6 +230,11 @@ grep "\[startup\] preload" "$DEVICE_ROOT/tmp/carplay_wrapper.log" 2>/dev/null | 
 # Cluster video smoothness: the mirror's real output rate.
 MIRROR_RUN=$(grep "PHASE=RUN " "$MIRROR_LOG" 2>/dev/null | tail -n 1)
 [ -n "$MIRROR_RUN" ] && echo "MIRROR_PRESENT_FPS=$(echo "$MIRROR_RUN" | sed -n 's/.*present_fps=\([0-9.]*\).*/\1/p') decoded_frames=$(echo "$MIRROR_RUN" | sed -n 's/.*decoded_frames=\([0-9]*\).*/\1/p') presented_frames=$(echo "$MIRROR_RUN" | sed -n 's/.*presented_frames=\([0-9]*\).*/\1/p')" || echo "MIRROR_PRESENT_FPS=UNKNOWN (no RUN line yet)"
+if [ -r "$MIRROR_HEALTH" ]; then
+   awk '/^HEALTH_[A-Z_]*=[A-Za-z0-9_]*$/' "$MIRROR_HEALTH"
+else
+   echo "HEALTH_STATE=UNKNOWN"
+fi
 [ -f "$DEVICE_ROOT/tmp/carplay_hook.log" ] && echo "RGI_HOOK_LOG=PRESENT" || echo "RGI_HOOK_LOG=ABSENT (hook not loaded in dio_manager this boot)"
 RGI_RENDER_PID=$(cat "$DEVICE_ROOT/tmp/carplay_maneuver_render.pid" 2>/dev/null)
 if [ -n "$RGI_RENDER_PID" ] && [ -d "$DEVICE_ROOT/proc/$RGI_RENDER_PID" ]; then echo "RGI_RENDERER=RUNNING pid=$RGI_RENDER_PID"; else echo "RGI_RENDERER=NOT_RUNNING (starts with a CarPlay session)"; fi

@@ -27,6 +27,14 @@ MMI Cockpit CarPlay AltScreen + RGI SD Package
    The SD card holds stock backups and diagnostic logs; always retain your backup card.
 8. Temporary runtime files are written to /tmp. Configuration file replacements are
    performed atomically with .carplay-stock backups maintained.
+9. EXPORT DIAGNOSTICS ONLY (no restore) saves a summary and bounded private logs to
+   MMI-Cockpit-Carplay/logs/exports/. It does not stop, restart or restore anything.
+   Raw logs may contain destinations/device details; review them before sharing.
+   STORE LOGS + RESTORE remains a separate restoration action.
+10. The mirror waits for the Java cluster controller during cold start. Calibrated
+    active-input/presentation stalls may trigger a bounded, identity-checked mirror
+    restart; USB and the main CarPlay process are not reset. Unknown/idle telemetry
+    does not trigger recovery. Retry exhaustion withdraws stale video readiness.
 
 Display pipeline, watermark removal, aspect-ratio correction, steering-wheel zoom,
 and route guidance integration have all been verified on-vehicle.

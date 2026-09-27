@@ -129,6 +129,36 @@ test ! -e "$RUNTIME/state/start.pending"
 run status "$SCRIPTS/status_mmi_cockpit_carplay_test.sh"
 for result in HMI_CONTROL_PLANE=PASS UNIVERSAL_PRELOAD_CONFIG=ARMED RGI_NATIVE=INSTALLED \
     RGI_SI_CHILD=WRAPPER RGI_DIO_IDS=5/5; do need status "$result"; done
+
+dd if=/dev/zero bs=1000 count=300 2>/dev/null | tr '\000' x > "$ROOT/tmp/carplay_java.log"
+printf '\nPRIVATE_DESTINATION_TEST\n' >> "$ROOT/tmp/carplay_java.log"
+printf 'ctx=81\nvideo=1\nnav=1\ntime_ms=123\naddress=PRIVATE_DESTINATION_TEST\n' > "$ROOT/tmp/carplay_cluster.ctx"
+printf 'HEALTH_STATE=VIDEO_PROGRESS\nHEALTH_RESTART_COUNT=0\n' > "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.health"
+run status-health "$SCRIPTS/status_mmi_cockpit_carplay_test.sh"
+need status-health 'HEALTH_STATE=VIDEO_PROGRESS'
+(cd "$ROOT" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/before-export"
+(cd "$VOL" && find . -type f ! -path './MMI-Cockpit-Carplay/logs/exports/*' -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/sd-before-export"
+run export-only "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
+need export-only 'EXPORT=PASS no_restore=YES no_restart=YES'
+absent export-only 'PRIVATE_DESTINATION_TEST'
+exports=$VOL/MMI-Cockpit-Carplay/logs/exports
+exported=$(find "$exports" -mindepth 1 -maxdepth 1 -type d)
+test -n "$exported"
+grep -Fq 'PRIVATE_DESTINATION_TEST' "$exported/private/carplay_java.log"
+test "$(wc -c < "$exported/private/carplay_java.log")" -eq 262144
+test ! -e "$exported/lsd.jxe"
+run export-again "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
+test "$(find "$exports" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2
+(cd "$ROOT" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/after-export"
+cmp "$CASE_DIR/before-export" "$CASE_DIR/after-export"
+(cd "$VOL" && find . -type f ! -path './MMI-Cockpit-Carplay/logs/exports/*' -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/sd-after-export"
+cmp "$CASE_DIR/sd-before-export" "$CASE_DIR/sd-after-export"
+# A blocked export destination must fail without changing the installed unit.
+mv "$exports" "$CASE_DIR/saved-exports"
+: > "$exports"
+expect_failure 1 export-blocked "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
+(cd "$ROOT" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/blocked-export"
+cmp "$CASE_DIR/before-export" "$CASE_DIR/blocked-export"
 run restore "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
 need restore 'RGI_NATIVE=REMOVED'
 need restore 'RESTORE=PASS integrated='
@@ -194,3 +224,4 @@ run recover-failed-install "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
 restored
 
 echo "AltScreen+RGI host e2e: strict exit codes, mirror stub, restore ordering, cleanup failures and retries PASS"
+bash /tests/mirror_health_test.sh /sd/Toolbox/carplay_alt_screen/mirror_display/release

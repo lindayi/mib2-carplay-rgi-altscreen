@@ -21,6 +21,10 @@ script
    label   "STATUS"
 
 script
+   value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/export_mmi_cockpit_diagnostics.sh"
+   label   "EXPORT DIAGNOSTICS ONLY (no restore)"
+
+script
    value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/finish_mmi_cockpit_carplay_test.sh"
    label   "STORE LOGS + RESTORE"
 

@@ -122,6 +122,14 @@ features below follow it automatically.
   (applied on next phone reconnect). With no saved preference, the maneuver card
   defaults to the top; upgrades preserve explicitly saved layouts.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
+- **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
+  health summary and bounded private log tails to the SD card without stopping,
+  restarting, restoring or uninstalling anything.
+- **Conservative mirror startup/recovery.** The mirror waits asynchronously for the
+  Java cluster controller before initializing. After observing regular presentation
+  telemetry, it can recover a stalled mirror while input video keeps advancing.
+  Recovery is bounded, checks process identity, and never resets USB or the main
+  CarPlay process. Missing telemetry or a stationary input does not trigger a restart.
 - **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up beside it,
   CarPlay stays on screen instead of being replaced ([details](docs/hmi/pdc-small-stage.md)).
 - **MMI touchpad → DPAD bridging** so finger drags navigate CarPlay menus.
@@ -318,6 +326,41 @@ Exact ownership rules, the `LD_PRELOAD`/env constraints and the MU1316 QNX-compa
 [`deploy/smartphone_integrator/README.md`](deploy/smartphone_integrator/README.md).
 
 ## 📝 Logging
+
+### Export without changing the installation
+
+While parked, select **GEM -> Customization -> MMI-Cockpit-Carplay ->
+EXPORT DIAGNOSTICS ONLY (no restore)** with the prepared SD inserted.
+It creates `MMI-Cockpit-Carplay/logs/exports/export_<timestamp>_<pid>/` containing:
+
+- `SUMMARY.txt`: selected firmware/context/readiness fields, process liveness,
+  mirror-health state, last reported frame counters and whether the installed JAR
+  matches the SD package. A readiness marker is not proof of live pixels.
+- `private/`: up to 256 KiB from each of twelve known logs. These are **raw,
+  not anonymized**; they can contain road names, destinations and device/network
+  details. Keep them local and review/redact before sharing.
+- `FILES.txt`, `PRIVACY.txt`, and `CKSUMS.txt`: missing/error inventory and integrity data.
+
+An export error leaves the current installation running. **STORE LOGS + RESTORE
+still restores the vehicle configuration; it is not the export-only action.**
+
+### Mirror recovery scope
+
+The boot launcher waits for this fork's `carplay_cluster.ctx` before executing the
+mirror; it does not delay `dio_manager`. With a live phone process but no Java
+controller, each attempt times out after 90 polls (approximately 90 seconds).
+Without a phone it may wait quietly for a later connection.
+The initial delayed launch enables the native sidecar's guarded same-session
+recovery, so a cluster-stream request arriving before HMI readiness is not missed.
+
+Live-freeze recovery requires independently changing H.264 header counters and at
+least two observed presentation-counter advances. The stall threshold is at least
+40 active-input polls and at least four times the observed reporting interval.
+Only an identity-verified mirror process may be signaled; no-input/unknown telemetry
+is not evidence of a freeze. The existing default limit of three abnormal restarts
+still applies. Exhaustion withdraws stale readiness so Java can fall back to stock
+map/RGI, and explicit STOP remains authoritative. This does not fix every possible
+decoder/HMI fault or guarantee recovery before the first frame.
 
 Everything logs to `/tmp` on the unit:
 

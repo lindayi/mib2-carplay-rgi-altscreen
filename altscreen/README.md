@@ -93,6 +93,11 @@ In the GEM **MMI-Cockpit-Carplay** menu, execute the following steps in order:
 
 ### 5. Restore Original Stock Configuration
 
+For diagnostics without restoring, use **EXPORT DIAGNOSTICS ONLY (no restore)**.
+The new SD directory under `MMI-Cockpit-Carplay/logs/exports/` has a health summary
+and bounded raw logs in `private/`; review/redact private logs before sharing.
+This action never restarts, stops, remounts or changes the installed system.
+
 1. Insert the SD card containing your `MMI-Cockpit-Carplay` backup directory.
 2. In GEM, open **MMI-Cockpit-Carplay -> RESTORE ORIGINAL** (or `STORE LOGS + RESTORE` to collect diagnostics first).
 3. Wait for `RESTORE=PASS` and `reboot_required=YES`, then fully reboot the head unit. All patches are uninstalled and stock configurations are restored.

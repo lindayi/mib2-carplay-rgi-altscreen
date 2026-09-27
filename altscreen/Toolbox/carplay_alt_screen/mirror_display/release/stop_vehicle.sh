@@ -44,7 +44,8 @@ fi
 # child must continue to see the explicit-stop decision. A future manual START
 # (RESTART_REASON empty) is the only path that clears this guard.
 rm -f "$FLAT.pid" "$FLAT.lifecycle.pid" "$FLAT.ready" "$FLAT.basevideo.ready" \
-      /tmp/mmi-mirror-basevideo.ready
+      "${ALT111_JAVA_BASE_READY_FILE:-/tmp/mmi-mirror-basevideo.ready}"
+printf 'HEALTH_STATE=STOPPED\n' > "$FLAT.health" || echo "WARN: cannot publish stopped mirror health"
 rm -f "$RECOVERY_LOCK" 2>/dev/null || true
 
 echo "MIRROR_DISPLAY=STOPPED lifecycle_watch=STOPPED context_writer=JAVA80 native_dmdt=DISABLED stop_guard=RETAINED"

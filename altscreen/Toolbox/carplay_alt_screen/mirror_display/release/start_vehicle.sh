@@ -62,6 +62,8 @@ RECOVER_CURRENT_SESSION="${ALT111_RECOVER_CURRENT_SESSION:-0}"
 export ALT111_RECOVER_CURRENT_SESSION="$RECOVER_CURRENT_SESSION"
 case "$RESTART_COUNT" in ''|*[!0-9]*) RESTART_COUNT=0 ;; esac
 case "$MAX_ABNORMAL_RESTARTS" in ''|*[!0-9]*) MAX_ABNORMAL_RESTARTS=3 ;; esac
+[ -r "$ROOT/mirror_health.sh" ] || { echo "ERROR: mirror health helper missing"; exit 2; }
+. "$ROOT/mirror_health.sh"
 
 export ALT111_MIRROR_READY_FILE="$READY"
 export ALT111_MIRROR_BASE_READY_FILE="$BASE_READY"
@@ -164,6 +166,13 @@ sidecar_is_current() {
 
 schedule_abnormal_restart() {
   WHY=$1
+  current_owner=$(cat "$PIDFILE" 2>/dev/null || true)
+  if [ -n "$current_owner" ] && [ "$current_owner" != "$PID" ]; then
+    echo "MIRROR_ABNORMAL_RESTART=SUPPRESSED reason=newer_generation"
+    return 1
+  fi
+  # Even when the retry budget is exhausted, stale readiness must not retain ctx 81.
+  rm -f "$READY" "$BASE_READY"
   if ! ( set -C; : > "$RECOVERY_LOCK" ) 2>/dev/null; then
     echo "MIRROR_ABNORMAL_RESTART=ALREADY_SCHEDULED reason=$WHY lock=$RECOVERY_LOCK"
     return 0
@@ -171,6 +180,7 @@ schedule_abnormal_restart() {
   NEXT=$((RESTART_COUNT + 1))
   if [ "$NEXT" -gt "$MAX_ABNORMAL_RESTARTS" ]; then
     echo "MIRROR_ABNORMAL_RESTART=EXHAUSTED reason=$WHY count=$RESTART_COUNT max=$MAX_ABNORMAL_RESTARTS"
+    mh_publish RECOVERY_EXHAUSTED || :
     rm -f "$RECOVERY_LOCK" 2>/dev/null || true
     return 1
   fi
@@ -198,9 +208,66 @@ schedule_abnormal_restart() {
   return 0
 }
 
+mirror_confirm_identity(){
+  sidecar_is_current || return 1
+  [ "${BIN##*/}" = carplay-alt111-mirror-display ] || return 1
+  command -v pidin >/dev/null 2>&1 || return 1
+  identity="$TMP_ROOT/MMI-Cockpit-Carplay.mirror.identity.$$"
+  (exec pidin -p "$PID" ar) > "$identity" 2>/dev/null &
+  identity_pid=$!
+  (sleep 3; kill -KILL "$identity_pid" 2>/dev/null || true) &
+  identity_timer=$!
+  identity_rc=0
+  wait "$identity_pid" || identity_rc=$?
+  kill "$identity_timer" 2>/dev/null || true
+  wait "$identity_timer" 2>/dev/null || true
+  if [ "$identity_rc" != 0 ]; then rm -f "$identity"; return 1; fi
+  matched=1
+  while read -r candidate executable rest; do
+    [ "$candidate" = "$PID" ] || continue
+    case "$executable" in "$BIN"|*/"${BIN##*/}") matched=0 ;; esac
+  done < "$identity"
+  rm -f "$identity"
+  return "$matched"
+}
+recover_stalled_mirror(){
+  [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
+  sidecar_is_current || return 1
+  rm -f "$READY" "$BASE_READY"
+  if ! mirror_confirm_identity; then
+    echo "MIRROR_STALL_RECOVERY=BLOCKED reason=unverified_identity fallback=STOCK"
+    mh_publish RECOVERY_BLOCKED || :
+    return 1
+  fi
+  [ -f "$DEMAND" ] && [ ! -f "$STOP_GUARD" ] || return 1
+  echo "MIRROR_STALL_RECOVERY=TERM pid=$PID input_advancing=YES presentation_stalled=YES"
+  kill -TERM "$PID" || return 1
+  stopped=0
+  while kill -0 "$PID" 2>/dev/null && [ "$stopped" -lt 3 ]; do
+    sleep 1; stopped=$((stopped + 1))
+  done
+  if kill -0 "$PID" 2>/dev/null; then
+    mirror_confirm_identity || { echo "MIRROR_STALL_RECOVERY=BLOCKED reason=identity_changed"; return 1; }
+    kill -KILL "$PID" || return 1
+  fi
+  schedule_abnormal_restart presentation_stalled
+}
+
 # Deliberately do not inherit the CarPlay/dio_manager preload into the sidecar.
 # Direct-display consumes SHM only and does not need any Window58 ID bridge.
-LD_PRELOAD= "$BIN" $MIRROR_ARGS >>"$LOGFILE" 2>&1 &
+(
+  if [ "$SINK_TEST_GRID_MODE" = 0 ]; then
+    mh_wait_for_hmi || exit 1
+    # HMI readiness can arrive after PHONE_REQUEST_111. The native recovery mode
+    # validates the writer PID/generation/cookie before accepting that live stream.
+    if [ -z "$RESTART_REASON" ]; then
+      ALT111_RECOVER_CURRENT_SESSION=1
+      export ALT111_RECOVER_CURRENT_SESSION
+      echo "COLD_START_RECOVER_CURRENT_SESSION=1"
+    fi
+  fi
+  LD_PRELOAD= exec "$BIN" $MIRROR_ARGS
+) >>"$LOGFILE" 2>&1 &
 PID=$!
 echo "$PID" > "$PIDFILE"
 
@@ -221,8 +288,13 @@ if [ "$SINK_TEST_GRID_MODE" = "0" ]; then
     while [ ! -f "$STOP_GUARD" ] && [ ! -f "$BASE_READY" ]; do
       trim_flat_log "$LOGFILE" 8388608
       if ! sidecar_is_current; then
-        rm -f "$WATCH_PIDFILE"
+        current_owner=$(cat "$PIDFILE" 2>/dev/null || true)
+        [ -n "$current_owner" ] && [ "$current_owner" != "$PID" ] || rm -f "$WATCH_PIDFILE"
         schedule_abnormal_restart "before_first_present" || true
+        exit 0
+      fi
+      if ! mh_poll; then
+        recover_stalled_mirror || echo "WARN: mirror recovery incomplete; main CarPlay left untouched"
         exit 0
       fi
 
@@ -252,7 +324,7 @@ if [ "$SINK_TEST_GRID_MODE" = "0" ]; then
         fi
         exit 0
       fi
-      sleep 1
+      sleep "$MH_INTERVAL"
     done
 
     sidecar_is_current || {
@@ -266,8 +338,13 @@ if [ "$SINK_TEST_GRID_MODE" = "0" ]; then
     while [ ! -f "$STOP_GUARD" ]; do
       trim_flat_log "$LOGFILE" 8388608
       if ! sidecar_is_current; then
-        rm -f "$WATCH_PIDFILE"
+        current_owner=$(cat "$PIDFILE" 2>/dev/null || true)
+        [ -n "$current_owner" ] && [ "$current_owner" != "$PID" ] || rm -f "$WATCH_PIDFILE"
         schedule_abnormal_restart "after_first_present" || true
+        exit 0
+      fi
+      if ! mh_poll; then
+        recover_stalled_mirror || echo "WARN: mirror recovery incomplete; main CarPlay left untouched"
         exit 0
       fi
       CURRENT_STOPS="$(count_tap_stops)"
@@ -301,7 +378,7 @@ if [ "$SINK_TEST_GRID_MODE" = "0" ]; then
         fi
         exit 0
       fi
-      sleep 1
+      sleep "$MH_INTERVAL"
     done
   ) >>"$LOGFILE" 2>&1 &
   WATCH_PID=$!
@@ -311,6 +388,11 @@ fi
 
 sleep 1
 if ! kill -0 "$PID" 2>/dev/null; then
+  current_owner=$(cat "$PIDFILE" 2>/dev/null || true)
+  if [ -n "$current_owner" ] && [ "$current_owner" != "$PID" ]; then
+    echo "MIRROR_DISPLAY=SUPERSEDED"
+    exit 0
+  fi
   echo "ERROR: mirror display exited during startup" >&2
   tail -80 "$LOGFILE" 2>/dev/null || true
   if [ -f "$WATCH_PIDFILE" ]; then
@@ -325,7 +407,7 @@ if ! kill -0 "$PID" 2>/dev/null; then
   exit 3
 fi
 
-echo "MIRROR_DISPLAY=STARTED pid=$PID log=$LOGFILE volatile_mode=$VOLATILE_MODE sink_test_grid=$SINK_TEST_GRID_MODE"
+echo "MIRROR_DISPLAY=STARTED_OR_WAITING_FOR_HMI pid=$PID log=$LOGFILE volatile_mode=$VOLATILE_MODE sink_test_grid=$SINK_TEST_GRID_MODE"
 if [ "$SINK_TEST_GRID_MODE" = 1 ]; then
   echo "WAITING_FOR=BASEVIDEO_ACTIVE_then_Java_CTX80 test_grid_already_presented=1"
 else
