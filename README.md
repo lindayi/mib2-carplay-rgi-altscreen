@@ -158,6 +158,10 @@ features below follow it automatically.
   Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
   recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
   reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
+- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / Raccoon / Nian**.
+  Default Off; animates along the bottom of the cluster navigation canvas, above
+  the separate text bar. No main-MMI overlay or extra maneuver-box content.
+  See [local assets, implementation and vehicle limits](docs/hmi/carplay-settings.md#optional-map-mascots).
 - **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
   health summary and bounded private log tails to the SD card without stopping,
   restarting, restoring or uninstalling anything.
@@ -178,6 +182,7 @@ features below follow it automatically.
 | `java_patch/` | The only supported Java patch source |
 | `java_resources/` | Resources packed into the jar (VC glyph-width / Unicode table `vc-text.bin`) |
 | `maneuver_render/` | GLES maneuver overlay renderer (C, plus the C++11 `scene/` engine) |
+| `mascot/` | Optional mirror-only GLES map mascot compositor; artwork is supplied privately |
 | `common/` | Shared renderer code: QNX Screen surface, GL program-binary cache, log timestamps |
 | `deploy/smartphone_integrator/` | Runtime scripts and child-process configuration for the HU |
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. custom scripts that install / remove a staged release / collect logs |
@@ -206,6 +211,9 @@ input classes. The initial menu installation requires the normal Toolbox update,
 INSTALL/reboot/START/reboot sequence; subsequent menu preferences never reboot MMI.
 Run `TOOLS_DIR=<jxe2jar> ./scripts/test_mmi_settings.sh` for the menu/storage/session
 tests and `./scripts/test_route_labels.sh` for live overlay-option previews.
+Before SD staging, generate `build/mascot-assets/mascots.rgba` from local GIFs as
+documented in [map mascots](docs/hmi/carplay-settings.md#optional-map-mascots).
+`./scripts/test_mascots.sh` exercises the compositor with host EGL/GLES2.
 
 ## 🔧 Build
 

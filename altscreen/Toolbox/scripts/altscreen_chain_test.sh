@@ -217,7 +217,7 @@ validate_runtime_sources(){
         [ -s "$src" ] || { echo "FAIL: runtime companion missing/empty: $src" >&2; return 1; }
         case "$name" in *.sh) sh -n "$src" || { echo "FAIL: runtime companion shell syntax: $name" >&2; return 1; } ;; esac
     done
-    for name in carplay-alt111-mirror-display start_vehicle.sh stop_vehicle.sh mirror_health.sh BUILD_INFO.txt logo.rgba watermark.rgba; do
+    for name in carplay-alt111-mirror-display start_vehicle.sh stop_vehicle.sh mirror_health.sh BUILD_INFO.txt logo.rgba watermark.rgba libcarplay_mascot.so mascots.rgba; do
         [ -s "$MIRROR_SD/$name" ] || { echo "FAIL: integrated direct-display sidecar missing/empty: $MIRROR_SD/$name" >&2; return 1; }
     done
     grep -Fq 'release_binary_status=PRIVATE111_DIRECT_DISPLAY_V2' "$MIRROR_SD/BUILD_INFO.txt" 2>/dev/null &&
@@ -303,7 +303,7 @@ install_runtime_scripts(){
         }
     done
     ensure_dirs "$RUNTIME_STAGE/bin/mirror" || { rm -rf "$RUNTIME_STAGE" 2>/dev/null || true; mount_app_ro >/dev/null 2>&1 || true; return 1; }
-    for name in carplay-alt111-mirror-display start_vehicle.sh stop_vehicle.sh mirror_health.sh BUILD_INFO.txt LICENSE.MMI-MIRROR SHA256SUMS logo.rgba watermark.rgba; do
+    for name in carplay-alt111-mirror-display start_vehicle.sh stop_vehicle.sh mirror_health.sh BUILD_INFO.txt LICENSE.MMI-MIRROR SHA256SUMS logo.rgba watermark.rgba libcarplay_mascot.so mascots.rgba; do
         [ -f "$MIRROR_SD/$name" ] || continue
         cp "$MIRROR_SD/$name" "$RUNTIME_STAGE/bin/mirror/$name" || {
             rm -rf "$RUNTIME_STAGE" 2>/dev/null || true
@@ -395,6 +395,10 @@ cleanup_volatile_runtime(){
                 "$tmp_root"/MMI-Cockpit-Carplay.altscreen_hook.log \
                 "$tmp_root"/altscreen_hook.log \
                 "$tmp_root"/altscreen_diag_* \
+                "$tmp_root"/carplay_mascot.control \
+                "$tmp_root"/carplay_mascot.control.new \
+                "$tmp_root"/carplay_mascot.status \
+                "$tmp_root"/carplay_mascot.status.*.new \
                 "$tmp_root"/mmi-mirror-active \
                 "$tmp_root"/mmi-mirror-basevideo.ready \
                 "$tmp_root"/mmi-mirror-controller.started \

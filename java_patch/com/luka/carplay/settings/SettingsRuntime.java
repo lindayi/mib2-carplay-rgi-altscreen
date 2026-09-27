@@ -35,6 +35,7 @@ public final class SettingsRuntime {
     private static String lastSession="";
     private static int lastLayout=-1;
     private static volatile String mirrorHealth="UNKNOWN",clusterContext="UNKNOWN";
+    private static volatile String mascotHealth="OFF";
     private static int lastEffective=-1;
     private static long lastRevision=-1;
     public interface Listener { void changed(); }
@@ -168,6 +169,15 @@ public final class SettingsRuntime {
         } else if(lastLayout>=0 && lastLayout!=s.get(Setting.LAYOUT))layoutPending=true;
         lastLayout=s.get(Setting.LAYOUT);
         boolean effective=s.on(Setting.ENABLED) && sessionEnabled && prefs.error().length()==0;
+        String mascotState;
+        try {
+            MascotControl.publish(effective && sessionVideo && s.get(Setting.MODE)!=2?s.get(Setting.MASCOT):0);
+            mascotState=ready && sessionVideo?MascotControl.status():"NOT_RUNNING";
+        } catch(IOException e) {
+            mascotState="CONTROL_ERROR";
+            if(!mascotState.equals(mascotHealth))Log.e("Settings","Map mascot unavailable",e);
+        }
+        if(!mascotState.equals(mascotHealth)){mascotHealth=mascotState;changed();}
         CarPlayApp.setGuidanceEnabled(s.get(Setting.MODE)!=1);
         ScreenModule.setVideoAllowed(s.get(Setting.MODE)!=2 && sessionVideo);
         CarPlayApp.setFeaturesEnabled(effective);
@@ -288,6 +298,7 @@ public final class SettingsRuntime {
             "Apply state: "+(reconnectPending()?"Reconnect CarPlay":"Session setting matches"),
             "Cockpit integration: "+(CarPlayApp.isActive()?"Active":"Inactive"),
             "Mirror health: "+mirrorHealth,
+            "Map mascot renderer: "+mascotHealth,
             "Last cluster context: "+clusterContext,
             "Video marker: "+(readyMarker?"Present (not pixel proof)":"Absent"),
             error.length()==0?"Preferences: valid":"Preferences error: "+error,

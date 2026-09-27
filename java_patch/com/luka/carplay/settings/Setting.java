@@ -5,8 +5,9 @@ public final class Setting {
     public static final int ENABLED=0, MODE=1, LAYOUT=2, DISTANCE=3, ROAD=4, LANES=5,
         PROGRESS=6, TEXT_SIZE=7, ROAD_SCROLL=8, BACKGROUND=9, ZOOM=10, ZOOM_SPEED=11,
         TOUCHPAD=12, TOUCH_SENSITIVITY=13, RECOVERY=14, VERBOSE=15,
-        INFO_DEFAULT=16, INFO_ROAD=17, INFO_RETURN=18, PRESET=19;
+        INFO_DEFAULT=16, INFO_ROAD=17, INFO_RETURN=18, PRESET=19, MASCOT=20;
     public static final int VERSION_1_COUNT=16;
+    public static final int VERSION_2_COUNT=20;
     private static final String[] SWITCH={"Off","On"};
     public static final Setting[] ALL={
         new Setting("enabled","Enabled",SWITCH,1,true),
@@ -28,7 +29,8 @@ public final class Setting {
         new Setting("info_default","Default information page",new String[]{"Road / exit","Trip summary"},0,false),
         new Setting("info_road","Information-bar road text",new String[]{"Next road / exit","Current road"},0,false),
         new Setting("info_return","Information-page selection",new String[]{"Return to default after 20 seconds","Keep until OK or route ends"},0,false),
-        new Setting("preset","Overlay appearance preset",new String[]{"Custom","Minimal","Standard","Large text"},0,false)
+        new Setting("preset","Overlay appearance preset",new String[]{"Custom","Minimal","Standard","Large text"},0,false),
+        new Setting("mascot","Map mascot",new String[]{"Off","Raccoon","Nian"},0,false)
     };
     public final String key, label;
     public final String[] choices;

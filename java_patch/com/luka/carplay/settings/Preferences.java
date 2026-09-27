@@ -69,7 +69,7 @@ public final class Preferences {
             if(equals<=0 || equals!=line.lastIndexOf('='))throw new IOException("Invalid setting line");
             String key=line.substring(0,equals), raw=line.substring(equals+1);
             if(key.equals("format")) {
-                if(format!=0 || !raw.equals("1") && !raw.equals("2"))
+                if(format!=0 || !raw.equals("1") && !raw.equals("2") && !raw.equals("3"))
                     throw new IOException("Unsupported settings format");
                 format=Integer.parseInt(raw);continue;
             }
@@ -83,9 +83,10 @@ public final class Preferences {
             values[id]=value;seen[id]=true;
         }
         if(format==0)throw new IOException("Missing settings format");
+        int count=format==1?Setting.VERSION_1_COUNT:format==2?Setting.VERSION_2_COUNT:values.length;
         for(int i=0;i<seen.length;i++) {
-            if(format==1 && i>=Setting.VERSION_1_COUNT) {
-                if(seen[i])throw new IOException("Version 2 setting in version 1 file");
+            if(i>=count) {
+                if(seen[i])throw new IOException("Setting not supported by declared version");
             } else if(!seen[i])throw new IOException("Missing setting: "+Setting.ALL[i].key);
         }
         return values;
@@ -104,7 +105,7 @@ public final class Preferences {
         return values;
     }
     static String encode(int[] values) {
-        StringBuffer out=new StringBuffer("format=2\n");
+        StringBuffer out=new StringBuffer("format=3\n");
         for(int i=0;i<values.length;i++)out.append(Setting.ALL[i].key).append('=').append(values[i]).append('\n');
         return out.toString();
     }

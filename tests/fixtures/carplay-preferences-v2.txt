@@ -1,4 +1,4 @@
-format=3
+format=2
 enabled=0
 mode=0
 layout=0
@@ -19,4 +19,3 @@ info_default=0
 info_road=0
 info_return=0
 preset=0
-mascot=0

@@ -31,7 +31,7 @@ public final class MenuModel {
         if(page.startsWith("choice:")) {
             int id=Integer.parseInt(page.substring(7));
             if(id==Setting.MODE)return "root";
-            if(id==Setting.PRESET)return "appearance";
+            if(id==Setting.PRESET || id==Setting.MASCOT)return "appearance";
             if(id>=Setting.INFO_DEFAULT)return "information";
             if(id<=Setting.LAYOUT)return "presentation";
             if(id<=Setting.PROGRESS)return "guidance";
@@ -70,8 +70,9 @@ public final class MenuModel {
         }
         else if(page.equals("guidance"))settings(rows,new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS},prefs);
         else if(page.equals("appearance")) {
-            settings(rows,new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND},prefs);
+            settings(rows,new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND,Setting.MASCOT},prefs);
             rows.add(new Row("Custom is retained; editing a preset creates new Custom","",-1,0,true,false,false));
+            rows.add(new Row("Mascots appear only on the CarPlay cluster map","",-1,0,true,false,false));
         }
         else if(page.equals("controls"))settings(rows,new int[]{Setting.ZOOM,Setting.ZOOM_SPEED,Setting.TOUCHPAD,Setting.TOUCH_SENSITIVITY},prefs);
         else if(page.equals("diagnostics")) {

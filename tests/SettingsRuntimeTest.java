@@ -35,8 +35,13 @@ public final class SettingsRuntimeTest {
         SettingsRuntime.set(Setting.TEXT_SIZE,1);
         check(System.currentTimeMillis()-start<500,"MMI callback blocked on persistence");
         awaitValue(Setting.TEXT_SIZE,1);
+        awaitFile(Paths.get("/tmp/carplay_mascot.control"));
+        check(Preferences.read(new File("/tmp/carplay_mascot.control"),96).startsWith("MASCOT2 0 0 "),
+            "inactive session must not enable the mascot");
         SettingsRuntime.action("export_summary");
         awaitFile(Paths.get("/tmp/menu-short-started"));
+        SettingsRuntime.set(Setting.MASCOT,2);
+        awaitValue(Setting.MASCOT,2);
         SettingsRuntime.set(Setting.TEXT_SIZE,0);
         awaitValue(Setting.TEXT_SIZE,0);
         long wait=System.currentTimeMillis()+5000;

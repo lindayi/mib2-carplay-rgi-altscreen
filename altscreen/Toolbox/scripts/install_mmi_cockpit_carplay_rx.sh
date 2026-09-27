@@ -56,6 +56,9 @@ EXPECTED_CKSUM=@CARPLAY_JAR_CKSUM@
 [ -s "$MIRROR_INFO" ] || { echo "FAIL: V2 Mirror BUILD_INFO missing: $MIRROR_INFO"; exit 1; }
 [ -s "$MIRROR_RELEASE/logo.rgba" ] || { echo "FAIL: second-screen logo asset missing"; exit 1; }
 [ -s "$MIRROR_RELEASE/watermark.rgba" ] || { echo "FAIL: watermark asset missing (kept as a placeholder, rendered fully transparent)"; exit 1; }
+for mascot_file in libcarplay_mascot.so mascots.rgba; do
+    [ -s "$MIRROR_RELEASE/$mascot_file" ] || { echo "FAIL: map mascot artifact missing: $mascot_file"; exit 1; }
+done
 grep -Fq 'release_binary_status=PRIVATE111_DIRECT_DISPLAY_V2' "$MIRROR_INFO" 2>/dev/null &&
 grep -Fq 'vehicle_zip_status=READY_FOR_VEHICLE_TEST' "$MIRROR_INFO" 2>/dev/null || {
     echo "FAIL: this package is not an approved rebuilt V2 vehicle release"
@@ -130,6 +133,9 @@ MIRROR_RUNTIME="$DEVICE_ROOT/mnt/app/root/carplay-altscreen/bin/mirror"
 [ -x "$MIRROR_RUNTIME/start_vehicle.sh" ] || fail "integrated direct-display launcher was not staged"
 [ -s "$MIRROR_RUNTIME/logo.rgba" ] || fail "second-screen logo asset was not staged"
 [ -s "$MIRROR_RUNTIME/watermark.rgba" ] || fail "watermark asset was not staged (kept as a placeholder, rendered fully transparent)"
+for mascot_file in libcarplay_mascot.so mascots.rgba; do
+    cmp "$MIRROR_RELEASE/$mascot_file" "$MIRROR_RUNTIME/$mascot_file" >/dev/null 2>&1 || fail "map mascot artifact was not staged correctly: $mascot_file"
+done
 
 mount_app_rw || fail "cannot mount /mnt/app writable"
 APP_RW=1

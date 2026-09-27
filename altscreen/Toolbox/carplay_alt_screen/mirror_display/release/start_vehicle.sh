@@ -255,7 +255,17 @@ recover_stalled_mirror(){
       echo "COLD_START_RECOVER_CURRENT_SESSION=1"
     fi
   fi
-  LD_PRELOAD= exec "$BIN" $MIRROR_ARGS
+  mascot_preload=
+  if [ -d /proc/boot ]; then
+    if [ -s "$ROOT/libcarplay_mascot.so" ] && [ -s "$ROOT/mascots.rgba" ]; then
+      mascot_preload="$ROOT/libcarplay_mascot.so"
+      CARPLAY_MASCOT_ATLAS="$ROOT/mascots.rgba"
+      export CARPLAY_MASCOT_ATLAS
+    else
+      echo "MASCOT=UNAVAILABLE missing_optional_renderer_or_assets"
+    fi
+  fi
+  LD_PRELOAD="$mascot_preload" exec "$BIN" $MIRROR_ARGS
 ) >>"$LOGFILE" 2>&1 &
 PID=$!
 echo "$PID" > "$PIDFILE"

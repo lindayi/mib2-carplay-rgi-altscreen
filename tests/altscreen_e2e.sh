@@ -70,6 +70,9 @@ install(){
     run install "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
     need install 'INSTALL=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80+RGI'
     need install 'RGI_COMPANION=PASS'
+    for mascot_file in libcarplay_mascot.so mascots.rgba; do
+        cmp "$VOL/Toolbox/carplay_alt_screen/mirror_display/release/$mascot_file" "$RUNTIME/bin/mirror/$mascot_file"
+    done
     stub_mirror
 }
 stock_configs(){
@@ -102,6 +105,13 @@ need wrong-firmware 'requires MHI2Q_US_AUG22_P5145'
 stock_configs
 test ! -e "$RUNTIME"
 echo "Current train = MHI2Q_US_AUG22_P5145" > "$ROOT/dev/shmem/version.txt"
+atlas="$VOL/Toolbox/carplay_alt_screen/mirror_display/release/mascots.rgba"
+mv "$atlas" "$atlas.saved"
+expect_failure 1 missing-mascot "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need missing-mascot 'map mascot artifact missing'
+stock_configs
+test ! -e "$RUNTIME"
+mv "$atlas.saved" "$atlas"
 install
 preference=maps:/car/instrumentcluster/map?maneuverLayout=rightaligned
 printf '%s\n' "$preference" > "$H/cluster_ui.url"

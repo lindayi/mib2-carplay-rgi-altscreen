@@ -183,8 +183,9 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.
-- New saves use format 2 (20 settings); accept complete format 1 (16 settings) with
-  explicit new defaults, but never mixed/incomplete schemas. Reads do not migrate
+- New saves use format 3 (21 settings); accept complete formats 1 (16 settings)
+  and 2 (20 settings) with explicit new defaults, including mascot Off, but never
+  mixed/incomplete schemas. Reads do not migrate
   files on disk. Presets compute effective values without overwriting Custom;
   an individual appearance edit materializes the active preset into new Custom.
 - The lower VC information bar is FctID 19, not the small renderer footer. Its
@@ -215,6 +216,27 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Summary export is separate from confirmed private full-log export. Actions are a
   fixed allowlist, not arbitrary shell commands. Missing runtime helpers are errors.
 - Full design/limitations: `docs\hmi\carplay-settings.md`.
+
+### Optional map mascots
+
+- Optional map mascots belong inside displayable 3's existing video canvas, not
+  in FctID 19's text-only bar or displayable 98's small maneuver panel. Do not
+  invent displayable IDs. `libcarplay_mascot.so` interposes EGL only in the mirror
+  sidecar; preserve its explicit isolation from receiver preloads.
+- Mascot control is a worker-written `MASCOT2 <selection> <pid> <expiry-ms>` RAM
+  lease, bound to the current mirror and video-ready marker. Asset/control/status
+  file I/O stays on workers, not HMI or GL callbacks; no extra swaps/telemetry or stall masking.
+  Keep Off a no-GL path, restore caller state/alpha, and clear cached GL names on
+  context destruction (EGL handles can be reused).
+- Build the bounded runtime atlas from private local GIFs with
+  `tools/build_mascot_assets.py`; keep artwork/derived PNGs out of Git. Native
+  build output and generated atlas are both required at SD staging, included in
+  both checksum manifests and the installer's explicit mirror copy list.
+  Retained local inputs are `carplay-build-inputs\mascot-assets\raccoon.gif` and
+  `nian.gif`; source URLs/hashes are recorded in that private directory.
+- `scripts/test_mascots.sh` covers real host GLES/state/failure/interposition
+  behavior. View its previews. This is not verification of QNX EGL interposition,
+  vehicle placement, or full binary-only mirror source.
 
 ### Diagnostics and recovery
 

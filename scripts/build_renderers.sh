@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the QNX/ARMv7 cluster maneuver renderer in Docker.
+# Build the QNX/ARMv7 maneuver renderer and mirror mascot compositor in Docker.
 #
 # Uses the self-contained image `qnx65-armv7-toolchain`
 # (https://github.com/luka-dev/qnx65-armv7-toolchain, GCC 8.5).
@@ -7,7 +7,7 @@
 #   ./scripts/build_renderers.sh            # build maneuver_render
 #   ./scripts/build_renderers.sh grid       # maneuver_render with -DCR_DEBUG_GRID
 #
-# Outputs: build/maneuver_render  (written via the mount).
+# Outputs: build/maneuver_render, build/libcarplay_mascot.so (written via the mount).
 #
 # BSP note: libscreen / libEGL / libGLESv2 export their client API only on the unit
 # (generic SDP lacks them).  We synthesize IMPORT STUBS (symbol names, empty bodies,
@@ -75,8 +75,21 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   fi
   echo "  built build/maneuver_render + build/libmaneuver_scene.a (C ABI, no C++ runtime)"
 
+  echo "--- mirror mascot overlay ---"
+  cd /src/mascot
+  MASCOT_SRCS="assets.c draw.c hook.c"
+  gen_stub libEGL.so.1 "\begl[A-Z][A-Za-z0-9]+" $MASCOT_SRCS
+  gen_stub libGLESv2.so.1 "\bgl[A-Z][A-Za-z0-9]+" $MASCOT_SRCS
+  $CC -O2 -std=gnu99 -Wall -Wextra -fPIC -fvisibility=hidden -shared \
+      -I"$ABI_INCLUDE" $MASCOT_SRCS -o /src/build/libcarplay_mascot.so \
+      -Wl,--allow-shlib-undefined -Wl,-soname,libcarplay_mascot.so \
+      -L/tmp -l:libEGL.so.1 -l:libGLESv2.so.1 -lm
+  exports=$(arm-unknown-nto-qnx6.5.0eabi-nm -D --defined-only /src/build/libcarplay_mascot.so |
+      awk "\$2==\"T\" && \$3!~/^(_init|_fini|_btext)$/ {print \$3}" | sort | tr "\n" " ")
+  [ "$exports" = "eglDestroyContext eglSwapBuffers " ] || { echo "Unexpected mascot exports: $exports"; exit 1; }
+
   echo "--- verify (ARM ELF, no emutls) ---"
-  for b in maneuver_render; do
+  for b in maneuver_render libcarplay_mascot.so; do
     B=/src/build/$b
     m=$(arm-unknown-nto-qnx6.5.0eabi-readelf -h "$B" | awk -F: "/Machine/{print \$2}" | tr -d " ")
     e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls || true)

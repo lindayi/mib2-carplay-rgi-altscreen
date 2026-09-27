@@ -21,13 +21,15 @@ ASM=/tools/tools/uninline/lib/asm-9.7.jar:/tools/tools/uninline/lib/asm-tree-9.7
 mkdir -p /src/build/mmi-tests
 javac -cp "$CP:$ASM" -d /tmp /src/tests/PreferencesTest.java /src/tests/NativeMenuVerificationTest.java \
     /src/tools/PatchNavigationSettings.java /src/tests/PatchNavigationSettingsTest.java \
-    /src/tests/JavaStockLinkageAudit.java /src/tests/TouchpadControllerTest.java /src/tests/SettingsRuntimeTest.java
+    /src/tests/JavaStockLinkageAudit.java /src/tests/TouchpadControllerTest.java /src/tests/SettingsRuntimeTest.java \
+    /src/tests/MascotControlTest.java
 java -cp /tmp:$CP com.luka.carplay.settings.PreferencesTest /src/build/mmi-tests/preferences /src/tests/fixtures/carplay-preferences.txt
 java -cp /tmp:$ASM PatchNavigationSettingsTest /tools/out/$STOCK_JAR_NAME
 java -Xverify:all -cp /tmp:$CP NativeMenuVerificationTest
 java -Xmx1g -cp /tmp:$ASM JavaStockLinkageAudit /src/build/carplay_hook.jar /tools/out/$STOCK_JAR_NAME \
     /tools/libs/org.osgi.framework-1.10.0.jar /tools/libs/org.osgi.util.tracker-1.5.4.jar
 java -cp /tmp:$CP TouchpadControllerTest
+java -cp /tmp:$CP com.luka.carplay.settings.MascotControlTest
 java -cp /tmp:$CP com.luka.carplay.settings.SettingsRuntimeTest
 bash /src/tests/settings_runtime_test.sh /src
 bash /src/scripts/test_supervisor_lifecycle.sh

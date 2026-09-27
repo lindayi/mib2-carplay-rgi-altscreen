@@ -12,6 +12,7 @@
 #                       GEM menu, MIB2 Toolbox) with @CARPLAY_JAR_SIZE@/@CARPLAY_JAR_CKSUM@
 #                       placeholders where its scripts pin the HMI JAR identity
 #          build/       carplay_hook.jar, libcarplay_hook.so, maneuver_render (built here)
+#                       libcarplay_mascot.so and locally generated mascot-assets/mascots.rgba
 #          deploy/      the RGI wrapper/supervisor scripts; deploy/altscreen/carplay_child.json
 # Output:  build/sd/    copy its contents onto the SD root
 #
@@ -37,7 +38,8 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     bash "$PROJECT_DIR/scripts/build_hook.sh"
     bash "$PROJECT_DIR/scripts/build_renderers.sh"
 fi
-for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render"; do
+for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
+    "$PROJECT_DIR/build/libcarplay_mascot.so" "$PROJECT_DIR/build/mascot-assets/mascots.rgba"; do
     [ -s "$f" ] || { echo "ERROR: missing build artifact $f"; exit 1; }
 done
 
@@ -69,6 +71,10 @@ if [ "${ALTSCREEN_FULL_FPS:-1}" = 1 ]; then
 else
     ALTS_FPS="stock (15 fps)"
 fi
+cp "$PROJECT_DIR/build/libcarplay_mascot.so" "$PROJECT_DIR/build/mascot-assets/mascots.rgba" "$OUT/$ALTS_MIRROR_DIR/"
+chmod 755 "$OUT/$ALTS_MIRROR_DIR/libcarplay_mascot.so"
+if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
+(cd "$OUT/$ALTS_MIRROR_DIR"; $MSHA libcarplay_mascot.so mascots.rgba >> SHA256SUMS; $MSHA -c SHA256SUMS >/dev/null)
 
 # RGI native half, installed by Toolbox/scripts/rgi_companion.sh from AltScreen INSTALL.
 mkdir -p "$OUT/$RGI_DIR"

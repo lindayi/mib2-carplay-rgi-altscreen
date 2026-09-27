@@ -1,0 +1,152 @@
+#include "mascot.h"
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+typedef struct {
+    GLint program, buffer, active, texture, unpack, scissor_box[4];
+    GLint blend_src_rgb, blend_dst_rgb, blend_src_alpha, blend_dst_alpha, equation_rgb, equation_alpha;
+    GLint attribute_enabled, attribute_size, attribute_type, attribute_normalized, attribute_stride, attribute_buffer;
+    void *attribute_pointer;
+    GLboolean blend, depth, stencil, scissor, cull, mask[4];
+} saved_state;
+
+static void save(saved_state *s) {
+    glGetIntegerv(GL_CURRENT_PROGRAM,&s->program);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING,&s->buffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE,&s->active);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D,&s->texture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT,&s->unpack);
+    glGetIntegerv(GL_SCISSOR_BOX,s->scissor_box);
+    glGetIntegerv(GL_BLEND_SRC_RGB,&s->blend_src_rgb);glGetIntegerv(GL_BLEND_DST_RGB,&s->blend_dst_rgb);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA,&s->blend_src_alpha);glGetIntegerv(GL_BLEND_DST_ALPHA,&s->blend_dst_alpha);
+    glGetIntegerv(GL_BLEND_EQUATION_RGB,&s->equation_rgb);glGetIntegerv(GL_BLEND_EQUATION_ALPHA,&s->equation_alpha);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_ENABLED,&s->attribute_enabled);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_SIZE,&s->attribute_size);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_TYPE,&s->attribute_type);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_NORMALIZED,&s->attribute_normalized);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_STRIDE,&s->attribute_stride);
+    glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING,&s->attribute_buffer);
+    glGetVertexAttribPointerv(0,GL_VERTEX_ATTRIB_ARRAY_POINTER,&s->attribute_pointer);
+    s->blend=glIsEnabled(GL_BLEND);s->depth=glIsEnabled(GL_DEPTH_TEST);
+    s->stencil=glIsEnabled(GL_STENCIL_TEST);s->scissor=glIsEnabled(GL_SCISSOR_TEST);s->cull=glIsEnabled(GL_CULL_FACE);
+    glGetBooleanv(GL_COLOR_WRITEMASK,s->mask);
+}
+static void enabled(GLenum cap,GLboolean on) {if(on)glEnable(cap);else glDisable(cap);}
+static void restore(const saved_state *s) {
+    glBindBuffer(GL_ARRAY_BUFFER,s->attribute_buffer);
+    glVertexAttribPointer(0,s->attribute_size,s->attribute_type,s->attribute_normalized,s->attribute_stride,s->attribute_pointer);
+    if(s->attribute_enabled)glEnableVertexAttribArray(0);else glDisableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER,s->buffer);
+    glBindTexture(GL_TEXTURE_2D,s->texture);glActiveTexture(s->active);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,s->unpack);
+    glUseProgram(s->program);
+    glBlendFuncSeparate(s->blend_src_rgb,s->blend_dst_rgb,s->blend_src_alpha,s->blend_dst_alpha);
+    glBlendEquationSeparate(s->equation_rgb,s->equation_alpha);
+    enabled(GL_BLEND,s->blend);enabled(GL_DEPTH_TEST,s->depth);enabled(GL_STENCIL_TEST,s->stencil);
+    enabled(GL_SCISSOR_TEST,s->scissor);enabled(GL_CULL_FACE,s->cull);
+    glScissor(s->scissor_box[0],s->scissor_box[1],s->scissor_box[2],s->scissor_box[3]);
+    glColorMask(s->mask[0],s->mask[1],s->mask[2],s->mask[3]);
+}
+static GLuint shader(GLenum type,const char *source) {
+    GLuint id=glCreateShader(type);
+    if(!id)return 0;
+    glShaderSource(id,1,&source,NULL);glCompileShader(id);
+    GLint good=0;glGetShaderiv(id,GL_COMPILE_STATUS,&good);
+    if(!good) {
+        char log[512];GLsizei length=0;
+        glGetShaderInfoLog(id,sizeof(log),&length,log);
+        fprintf(stderr,"MASCOT=SHADER_ERROR %.*s\n",(int)length,log);
+        glDeleteShader(id);return 0;
+    }
+    return id;
+}
+void mascot_graphics_destroy(mascot_graphics *g) {
+    glDeleteTextures(MASCOT_COUNT*MASCOT_MAX_FRAMES,&g->textures[0][0]);
+    if(g->buffer)glDeleteBuffers(1,&g->buffer);
+    if(g->program)glDeleteProgram(g->program);
+    memset(g,0,sizeof(*g));
+}
+static int initialize(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT]) {
+    GLuint probe=0;
+    const char *vertex="attribute vec4 point;uniform vec4 rectangle;varying vec2 uv;"
+        "void main(){gl_Position=vec4(rectangle.xy+point.xy*rectangle.zw,0.,1.);uv=point.zw;}";
+    const char *fragment="precision mediump float;uniform sampler2D image;varying vec2 uv;"
+        "void main(){gl_FragColor=texture2D(image,uv);}";
+    GLuint vs=shader(GL_VERTEX_SHADER,vertex),fs=shader(GL_FRAGMENT_SHADER,fragment);
+    if(vs && fs) {
+        g->program=glCreateProgram();
+        if(g->program) {
+            glAttachShader(g->program,vs);glAttachShader(g->program,fs);
+            glBindAttribLocation(g->program,0,"point");glLinkProgram(g->program);
+        }
+    }
+    if(vs)glDeleteShader(vs);
+    if(fs)glDeleteShader(fs);
+    GLint good=0;
+    if(g->program)glGetProgramiv(g->program,GL_LINK_STATUS,&good);
+    if(!good)goto fail;
+    g->rectangle=glGetUniformLocation(g->program,"rectangle");g->sampler=glGetUniformLocation(g->program,"image");
+    if(g->rectangle<0 || g->sampler<0)goto fail;
+    glGenBuffers(1,&g->buffer);
+    if(!g->buffer)goto fail;
+    const GLfloat points[]={0,0,0,1, 1,0,1,1, 0,1,0,0, 1,1,1,0};
+    glBindBuffer(GL_ARRAY_BUFFER,g->buffer);glBufferData(GL_ARRAY_BUFFER,sizeof(points),points,GL_STATIC_DRAW);
+    GLint bytes=0;
+    glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&bytes);
+    if(bytes!=(GLint)sizeof(points))goto fail;
+    glGenFramebuffers(1,&probe);
+    if(!probe)goto fail;
+    glBindFramebuffer(GL_FRAMEBUFFER,probe);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+    for(unsigned i=0;i<MASCOT_COUNT;i++)for(unsigned f=0;f<a[i].count;f++) {
+        glGenTextures(1,&g->textures[i][f]);
+        if(!g->textures[i][f])goto fail;
+        glBindTexture(GL_TEXTURE_2D,g->textures[i][f]);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,a[i].width,a[i].height,0,GL_RGBA,GL_UNSIGNED_BYTE,
+            a[i].pixels+(size_t)f*a[i].width*a[i].height*4);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,g->textures[i][f],0);
+        if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)goto fail;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER,0);glDeleteFramebuffers(1,&probe);
+    g->initialized=1;
+    return 1;
+fail:
+    if(probe){glBindFramebuffer(GL_FRAMEBUFFER,0);glDeleteFramebuffers(1,&probe);}
+    fprintf(stderr,"MASCOT=GRAPHICS_ERROR initialization failed\n");
+    mascot_graphics_destroy(g);
+    return 0;
+}
+int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsigned selected,uint64_t elapsed_ms) {
+    if(selected==0)return 1;
+    if(selected>MASCOT_COUNT)return 0;
+    GLint viewport[4],framebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING,&framebuffer);glGetIntegerv(GL_VIEWPORT,viewport);
+    if(framebuffer!=0 || viewport[2]<128 || viewport[3]<64)return 0;
+    saved_state state;save(&state);
+    int good=g->initialized || initialize(g,a);
+    if(good) {
+        const mascot_animation *sprite=&a[selected-1];
+        float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+sprite->width);
+        float x=selected==1?travel-sprite->width:viewport[2]-travel;
+        glUseProgram(g->program);glUniform1i(g->sampler,0);
+        glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,8.f/viewport[3]-1.f,
+            2.f*sprite->width/viewport[2],2.f*sprite->height/viewport[3]);
+        glBindTexture(GL_TEXTURE_2D,g->textures[selected-1][mascot_frame(sprite,elapsed_ms)]);
+        glBindBuffer(GL_ARRAY_BUFFER,g->buffer);
+        glVertexAttribPointer(0,4,GL_FLOAT,GL_FALSE,0,0);glEnableVertexAttribArray(0);
+        glEnable(GL_BLEND);glBlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
+        glDisable(GL_DEPTH_TEST);glDisable(GL_STENCIL_TEST);glDisable(GL_CULL_FACE);
+        glEnable(GL_SCISSOR_TEST);glScissor(viewport[0],viewport[1],viewport[2],viewport[3]);
+        glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+        glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+    }
+    restore(&state);
+    return good;
+}
