@@ -83,6 +83,15 @@ Do not enable a live shortcut until a parked-car trace and observation establish
 
 ## Observe-only evidence
 
+The returned `5a3a292` trial on 2026-09-28 proves raw roller press/release and
+long states 3/4, encoder steps, right-menu key 100 and Back key 41 reach the HU.
+The owner reports short/long presses both changing the tiny Road/Trip bar,
+rotation zooming the map, and right/Back controlling Audi's drawer; main CarPlay
+did not react. Crucially, every logged Fct54 left/right-menu flag stayed false
+despite that visible drawer. The trace establishes delivery, **not consumption,
+exclusive ownership or a reliable native-drawer dismissal signal**. The live
+panel remains disabled; another identical trace alone will not resolve this gate.
+
 With existing verbose diagnostics enabled, Java now logs `[VcInput]` records:
 
 - `RAW_KEY`: only relevant MFW navigation keys, including long/repeat states.

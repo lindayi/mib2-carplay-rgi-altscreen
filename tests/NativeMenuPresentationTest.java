@@ -2,6 +2,7 @@ package com.luka.carplay.settings;
 
 import de.esolutions.hmi.widgets.audi.base.AbstractWidget;
 import de.esolutions.hmi.widgets.audi.base.StringUtility;
+import de.esolutions.hmi.widgets.audi.base.eal.IWrappedNode3D;
 import de.esolutions.hmi.widgets.audi.evo.widgets.LabelController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.LayoutContainerController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.RadioButtonController;
@@ -37,6 +38,7 @@ public final class NativeMenuPresentationTest {
             protected boolean isAsia(){return false;}
         };
         FontFixture(LabelController label){super(label);this.label=label;}
+        void node(IWrappedNode3D value){node=value;}
         public int getFontHeight(){return fontHeight;}
         public int getNumberOfRows(int width){return lines(width).length;}
         String[] lines(int width) {
@@ -122,6 +124,9 @@ public final class NativeMenuPresentationTest {
         FontFixture font=new FontFixture(text);
         Field renderer=CarplayMenuChrome.class.getDeclaredField("renderer");renderer.setAccessible(true);renderer.set(chrome,font);
         text.setRenderer(font);
+        Map<String,Object[]> clipping=new HashMap<>();
+        font.node((IWrappedNode3D)Proxy.newProxyInstance(NativeMenuPresentationTest.class.getClassLoader(),
+            new Class[]{IWrappedNode3D.class},(p,m,a)->{clipping.put(m.getName(),a);return null;}));
         for(String name:pages) {
             MenuModel.Page page=MenuModel.page(name,prefs,status,message);
             chrome.show(page,0,page.document?150:50,"Saved",true);
@@ -133,6 +138,12 @@ public final class NativeMenuPresentationTest {
                 menu.getY()+menu.getHeight()<text.getY(),"text overlaps controls");
             check(font.calculatedRenderedLines(font.lines(text.getWidth())).length<=text.getHeight()/font.getLineHeight(),
                 "renderer leaks lines into controls");
+            font.clipText();
+            check(Arrays.equals(clipping.get("setClippingRectangle"),
+                new Object[]{0f,0f,(float)text.getWidth(),(float)text.getHeight()}),"native clip differs from page bounds");
+            check(clipping.get("setClipping")[0].equals(true)
+                && clipping.get("useClippingRectangle")[0].equals(true)
+                && clipping.get("setClippingInheritance")[0].equals(17),"glyph nodes can escape information layer");
             for(String line:font.lines(text.getWidth()))
                 check(font.metrics.getStringWidth(line)<=text.getWidth(),"native wrapped text exceeds its width");
         }
@@ -153,6 +164,11 @@ public final class NativeMenuPresentationTest {
         check(chrome.show(details,999,150,"Saved",false)==count-1,"stale page not bounded");
         chrome.show(root,0,50,message,true);
         check(text.getModel().toString().contains("Failed") && text.getModel().toString().contains("Reconnect"),"failure/reconnect lost");
+        chrome.show(root,0,50,"",false);check(!text.isVisible(),"expired notice remains visible");
+        chrome.show(root,0,50,"",true);
+        check(text.isVisible() && text.getModel().equals("Reconnect CarPlay to apply"),"expiry hides reconnect requirement");
+        chrome.close();chrome.show(root,0,50,"",false);
+        check(!text.isVisible(),"reopening menu resurrected an expired notice");
         MenuModel.Page confirmation=MenuModel.page("confirm:reset",prefs,status,message);
         MenuModel.Page tooLong=new MenuModel.Page(confirmation.title,longText.toString(),
             new ArrayList<>(Arrays.asList(confirmation.rows)),true,false);

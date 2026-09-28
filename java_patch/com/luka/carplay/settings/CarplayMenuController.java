@@ -183,7 +183,7 @@ public class CarplayMenuController extends MenuController implements SettingsRun
                 int count=view.document?generated.size():1;
                 for(int i=0;i<count;i++)controlsHeight+=
                     ((CarplayMenuItem)generated.get(i)).getPreferredHeight(false,getLayout().getContentWidth())+gap;
-                textPage=chrome.show(view,textPage,controlsHeight,SettingsRuntime.result(),SettingsRuntime.reconnectPending());
+                textPage=chrome.show(view,textPage,controlsHeight,SettingsRuntime.notice(),SettingsRuntime.reconnectPending());
                 for(int i=0;i<generated.size();i++) {
                     CarplayMenuItem item=(CarplayMenuItem)generated.get(i);
                     if(item.row().target.startsWith("text:"))item.setEnabled(chrome.pageCount()>1);

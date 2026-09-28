@@ -128,15 +128,19 @@ int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     GLint viewport[4],framebuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING,&framebuffer);glGetIntegerv(GL_VIEWPORT,viewport);
     if(framebuffer!=0 || viewport[2]<128 || viewport[3]<64)return 0;
+    const mascot_animation *sprite=&a[selected-1];
+    float width=2.f*sprite->width,height=2.f*sprite->height;
+    /* Trial clearance for the VC-local street/Trip overlay, not a measured bar boundary. */
+    float bottom=ceilf(viewport[3]*0.20f)+4.f;
+    if(bottom+height>viewport[3])return 0;
     saved_state state;save(&state);
     int good=g->initialized || initialize(g,a);
     if(good) {
-        const mascot_animation *sprite=&a[selected-1];
-        float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+sprite->width);
-        float x=selected==1?travel-sprite->width:viewport[2]-travel;
+        float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+width);
+        float x=selected==1?travel-width:viewport[2]-travel;
         glUseProgram(g->program);glUniform1i(g->sampler,0);
-        glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,8.f/viewport[3]-1.f,
-            2.f*sprite->width/viewport[2],2.f*sprite->height/viewport[3]);
+        glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,2.f*bottom/viewport[3]-1.f,
+            2.f*width/viewport[2],2.f*height/viewport[3]);
         glBindTexture(GL_TEXTURE_2D,g->textures[selected-1][mascot_frame(sprite,elapsed_ms)]);
         glBindBuffer(GL_ARRAY_BUFFER,g->buffer);
         glVertexAttribPointer(0,4,GL_FLOAT,GL_FALSE,0,0);glEnableVertexAttribArray(0);

@@ -2,6 +2,8 @@ package com.luka.carplay.settings;
 
 import de.esolutions.hmi.widgets.audi.base.AbstractWidget;
 import de.esolutions.hmi.widgets.audi.base.StringUtility;
+import de.esolutions.hmi.widgets.audi.base.eal.IWrappedNode3D;
+import de.esolutions.hmi.widgets.audi.evo.high.RedrawContextHigh;
 import de.esolutions.hmi.widgets.audi.evo.high.widgets.MultiLineLabelRendererHigh;
 import de.esolutions.hmi.widgets.audi.evo.widgets.LabelController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.TitleBarWidget;
@@ -19,6 +21,18 @@ final class CarplayMenuChrome {
             String[] visible=new String[visibleLines];
             System.arraycopy(remaining,0,visible,0,visibleLines);
             return visible;
+        }
+        protected void applyProperties(RedrawContextHigh context) {
+            super.applyProperties(context);
+            clipText();
+        }
+        void clipText() {
+            if(node==null)return;
+            node.setClippingRectangle(0,0,controller.getWidth(),controller.getHeight());
+            node.useClippingRectangle(true);
+            node.setClippingInheritance(IWrappedNode3D.CLIPPING_TYPE_INHERIT_FROM_ANCESTOR
+                | IWrappedNode3D.CLIPPING_TYPE_INHERIT_TO_CHILDREN);
+            node.setClipping(true);
         }
     }
     private final CarplayMenuController menu;
@@ -84,12 +98,14 @@ final class CarplayMenuChrome {
             view.document?y:y+height-textHeight,textWidth,textHeight);
         menu.setBounds(x,view.document?y+textHeight+gap:y,width,height-textHeight-gap);
         renderer.setFirstVisibleLine(0);
-        String content=view.document?view.information:notice+(reconnect?"\nReconnect CarPlay to apply":"");
+        String content=view.document?view.information:notice+
+            (reconnect?(notice.length()==0?"":"\n")+"Reconnect CarPlay to apply":"");
         text.setText(content.replace('\r',' '));
         int lines=renderer.getNumberOfRows(textWidth);
         if(!view.document && lines>visibleLines) {
             String summary=notice.startsWith("Not saved")?"Not saved - see Last result":
-                notice.toLowerCase().indexOf("fail")>=0?"Failed - see Last result":"See Last result in diagnostics";
+                notice.toLowerCase().indexOf("fail")>=0?"Failed - see Last result":
+                notice.startsWith("Saved:")?"Saved just now - see Last result":"See Last result in diagnostics";
             text.setText(summary+(reconnect?"\nReconnect CarPlay to apply":""));
             if(renderer.getNumberOfRows(textWidth)>visibleLines)
                 throw new IllegalStateException("Native notice does not fit");
@@ -99,7 +115,7 @@ final class CarplayMenuChrome {
             throw new IllegalStateException("Confirmation warning does not fit");
         int current=Math.max(0,Math.min(requestedPage,pageCount-1));
         renderer.setFirstVisibleLine(current*visibleLines);
-        renderer.setVisibleLines(visibleLines);text.setVisible(true);
+        renderer.setVisibleLines(visibleLines);text.setVisible(content.length()!=0);
         title.setText("Carplay Altscreen");
         breadcrumb.setText(view.title.equals("Carplay Altscreen")?"":view.title+
             (view.paginated?" ("+(current+1)+"/"+pageCount+")":""));

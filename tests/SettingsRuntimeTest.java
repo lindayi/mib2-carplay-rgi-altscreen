@@ -35,6 +35,26 @@ public final class SettingsRuntimeTest {
         SettingsRuntime.set(Setting.TEXT_SIZE,1);
         check(System.currentTimeMillis()-start<500,"MMI callback blocked on persistence");
         awaitValue(Setting.TEXT_SIZE,1);
+        long saveWait=System.currentTimeMillis()+4000;
+        while(!SettingsRuntime.result().startsWith("Saved:") && System.currentTimeMillis()<saveWait)Thread.sleep(10);
+        String saved=SettingsRuntime.result();
+        check(saved.contains("Overlay text size") && saved.contains("Large"),"save notice lacks changed setting");
+        Field savedAt=SettingsRuntime.class.getDeclaredField("savedAt");savedAt.setAccessible(true);
+        long savedTime=savedAt.getLong(null);
+        check(SettingsRuntime.notice(savedTime+4999).equals(saved),"save notice expired too early");
+        check(SettingsRuntime.notice(savedTime+5000).equals(""),"old save remains in footer");
+        check(SettingsRuntime.notice(savedTime-1).equals(""),"clock rollback resurrects notice");
+        check(SettingsRuntime.result().equals(saved),"expiry erased Last result");
+        java.util.concurrent.CountDownLatch expired=new java.util.concurrent.CountDownLatch(1);
+        SettingsRuntime.Listener listener=()->{if(SettingsRuntime.notice().equals(""))expired.countDown();};
+        SettingsRuntime.addListener(listener);
+        check(expired.await(7,java.util.concurrent.TimeUnit.SECONDS),"worker did not publish notice expiry");
+        SettingsRuntime.removeListener(listener);
+        SettingsRuntime.set(Setting.TEXT_SIZE,1);
+        saveWait=System.currentTimeMillis()+4000;
+        while((!SettingsRuntime.result().startsWith("Saved:") || SettingsRuntime.notice().equals(""))
+                && System.currentTimeMillis()<saveWait)Thread.sleep(10);
+        check(SettingsRuntime.notice().equals(saved),"same setting cannot show a fresh save");
         awaitFile(Paths.get(MascotControl.CONTROL));
         check(Preferences.read(new File(MascotControl.CONTROL),96).startsWith("MASCOT2 0 0 "),
             "inactive session must not enable the mascot");
@@ -56,6 +76,8 @@ public final class SettingsRuntimeTest {
         while(SettingsRuntime.busy() && System.currentTimeMillis()<wait)Thread.sleep(20);
         check(SettingsRuntime.result().contains("Action failed:") && !SettingsRuntime.result().contains("helper"),
             "manual layout uses local worker and reports inactive-video failure: "+SettingsRuntime.result());
+        check(SettingsRuntime.notice(System.currentTimeMillis()+60000).equals(SettingsRuntime.result()),
+            "failure expired like a successful save");
         SettingsRuntime.action("export_full");
         awaitFile(Paths.get("/tmp/menu-long-started"));
         SettingsRuntime.set(Setting.ZOOM,0);

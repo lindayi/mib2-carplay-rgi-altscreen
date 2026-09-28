@@ -105,6 +105,16 @@ public final class AltScreenLayoutLifecycleTest {
                 AltScreenCluster.flushLayout();
             }
             quiet(peer, "distance, maneuver, foreground and duplicate replay must not force layout");
+            AltScreenCluster.onPresentation(false);
+            AltScreenCluster.flushLayout(); quiet(peer, "initial presentation is only a baseline");
+            AltScreenCluster.onPresentation(true);
+            AltScreenCluster.onPresentation(false);
+            AltScreenCluster.onPresentation(true);
+            AltScreenCluster.flushLayout(); quiet(peer, "View burst must settle before layout");
+            Thread.sleep(360);
+            flush(peer, TOP);
+            for(int i=0;i<10;i++){AltScreenCluster.onPresentation(true);AltScreenCluster.flushLayout();}
+            quiet(peer, "duplicate presentation or worker polling must not repeat View request");
 
             // Later route, same video readiness; then a native reset hidden by debounce.
             route(peer, "route_state:n:0\n");
@@ -138,6 +148,7 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.flushLayout(); quiet(peer, "disconnect cancels pending route");
 
             AltScreenCluster.setVideoReady(false);
+            AltScreenCluster.onPresentation(false);
             route(peer, "route_generation:n:104\nroute_state:n:1\n");
             AltScreenCluster.flushLayout(); quiet(peer, "route without video");
             AltScreenCluster.setVideoReady(true);
@@ -170,6 +181,8 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.flushLayout(); quiet(peer, "retired module callback");
 
             int oldConnection = bus.connectionGeneration();
+            AltScreenCluster.onPresentation(false);
+            AltScreenCluster.onPresentation(true);
             Socket old = peer; peer = connect(); old.close();
             try { AltScreenCluster.reapplyLayout(); throw new AssertionError("manual action reused old receiver URL"); }
             catch (java.io.IOException expected) { }
@@ -186,6 +199,8 @@ public final class AltScreenLayoutLifecycleTest {
                 flush(peer, selected);
                 route(peer, "route_state:n:1\nroute_generation:n:1\n"); flush(peer, selected);
                 route(peer, "route_generation:n:2\n"); flush(peer, selected);
+                AltScreenCluster.onPresentation(false);AltScreenCluster.onPresentation(true);
+                Thread.sleep(360);flush(peer,selected);
             }
 
             Constructor<Preferences> constructor = Preferences.class.getDeclaredConstructor(File.class, File.class);
@@ -235,6 +250,8 @@ public final class AltScreenLayoutLifecycleTest {
             quiet(peer, "stale file lookup leaked through stop/start");
             flush(peer, TOP);
             route(peer, "route_state:n:1\n");
+            AltScreenCluster.onPresentation(false);
+            AltScreenCluster.onPresentation(true);
             AltScreenCluster.stop();
             AltScreenCluster.flushLayout(); quiet(peer, "Master Off cancels pending layout");
             check(primaryCalls >= 75, "layout observer stole route frames from primary listener");
@@ -245,6 +262,6 @@ public final class AltScreenLayoutLifecycleTest {
             Files.deleteIfExists(nativePreference); Files.deleteIfExists(preference); Files.delete(root);
         }
         System.out.println("AltScreenLayoutLifecycleTest: repeated routes on live video, generations, reroutes, sources, "
-            + "no polling spam, explicit presets, reconnect, cancellation and nonblocking callbacks PASS");
+            + "coalesced View edges, no polling spam, explicit presets, reconnect, cancellation and nonblocking callbacks PASS");
     }
 }

@@ -21,6 +21,8 @@ public final class SettingsRuntime {
     private static Thread settingsThread;
     private static volatile Process actionProcess;
     private static volatile String result="Ready";
+    private static volatile long savedAt;
+    private static String lastNotice="";
     private static volatile boolean busy;
     private static boolean actionBusy,syncPending;
     private static String pendingAction;
@@ -80,6 +82,15 @@ public final class SettingsRuntime {
     public static void addListener(Listener l){synchronized(LOCK){if(!listeners.contains(l))listeners.add(l);}}
     public static void removeListener(Listener l){synchronized(LOCK){listeners.remove(l);}}
     public static String result(){return result;}
+    public static String notice(){return notice(System.currentTimeMillis());}
+    static String notice(long now) {
+        synchronized(LOCK) {
+            String message=result;
+            if(message.equals("Ready"))return "";
+            if(message.startsWith("Saved:") && (now<savedAt || now-savedAt>=5000L))return "";
+            return message;
+        }
+    }
     public static boolean busy(){
         synchronized(LOCK){return busy || actionBusy || !jobs.isEmpty() || pendingAction!=null || syncPending;}
     }
@@ -200,6 +211,8 @@ public final class SettingsRuntime {
             synchronized(LOCK){syncPending=true;}
             changed();
         }
+        String notice=notice();
+        if(!notice.equals(lastNotice)){lastNotice=notice;changed();}
     }
     private static void loop(int run){
         while(current(run)) {
@@ -209,7 +222,10 @@ public final class SettingsRuntime {
                 try {
                     if(job.action==null) {
                         Preferences.get().set(job.id,job.value);
-                        result=Setting.ALL[job.id].reconnect?"Saved - reconnect CarPlay to apply":"Saved";
+                        synchronized(LOCK) {
+                            savedAt=System.currentTimeMillis();
+                            result="Saved: "+Setting.ALL[job.id].label+" - "+Setting.ALL[job.id].choices[job.value];
+                        }
                         if(job.id==Setting.LAYOUT)layoutPending=true;
                     } else if(job.action.equals("reapply_layout")) {
                         com.luka.carplay.cluster.AltScreenCluster.reapplyLayout();

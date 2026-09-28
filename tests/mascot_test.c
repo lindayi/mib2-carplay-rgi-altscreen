@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static int fail_shader,fail_texture;
 GLuint __real_glCreateShader(GLenum type);
@@ -34,7 +35,7 @@ static void bounds(int changed_expected) {
         int p=(y*512+x)*4;
         assert(before[p+3]==after[p+3]);
         if(memcmp(before+p,after+p,4)) {
-            assert(x>=31 && x<351 && y>=23 && y<63);changed++;
+            assert(x>=31 && x<351 && y>=55 && y<135);changed++;
         }
     }
     assert(!changed_expected || changed>40);
@@ -121,6 +122,7 @@ int main(int argc,char **argv) {
     GLint bound;glGetIntegerv(GL_FRAMEBUFFER_BINDING,&bound);assert((GLuint)bound==blocked);
     glBindFramebuffer(GL_FRAMEBUFFER,0);glDeleteFramebuffers(1,&blocked);
     glViewport(0,0,50,50);assert(!mascot_draw(&g,a,1,3000));assert(!g.initialized);
+    glViewport(0,0,320,100);assert(!mascot_draw(&g,a,1,3000));assert(!g.initialized);
     glViewport(31,19,320,160);
     for(int failure=1;failure<=2;failure++) {
         fail_shader=failure==1;fail_texture=failure==2;
@@ -141,6 +143,27 @@ int main(int argc,char **argv) {
             assert(mascot_draw(&g,a,mascot,t));pixels(after);bounds(0);
         }
     }
+    mascot_graphics_destroy(&g);
+    unsigned char solid[20*40*4];memset(solid,255,sizeof(solid));
+    mascot_animation fixture[2]={{.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid},
+        {.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid}};
+    for(unsigned selected=1;selected<=2;selected++) {
+        glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
+        glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
+        assert(mascot_draw(&g,fixture,selected,3000));pixels(after);
+        int changed=0,minx=512,maxx=-1,miny=256,maxy=-1;
+        for(int y=0;y<256;y++)for(int x=0;x<512;x++)if(memcmp(before+(y*512+x)*4,after+(y*512+x)*4,4)) {
+            changed++;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
+        }
+        assert(changed==40*80 && maxx-minx+1==40 && maxy-miny+1==80);
+        assert(miny==55 && minx==(selected==1?135:207));
+        snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
+    }
+    glViewport(0,0,1440,455);
+    assert(mascot_draw(&g,fixture,1,3000));
+    GLfloat rectangle[4];glGetUniformfv(g.program,g.rectangle,rectangle);
+    assert(fabsf((rectangle[1]+1)*455/2-95)<0.001f);
+    assert(fabsf(rectangle[2]*1440/2-40)<0.001f && fabsf(rectangle[3]*455/2-80)<0.001f);
     mascot_graphics_destroy(&g);mascot_free(a);glUseProgram(0);glDeleteProgram(program);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(d,c));assert(eglDestroySurface(d,surface));assert(eglTerminate(d));

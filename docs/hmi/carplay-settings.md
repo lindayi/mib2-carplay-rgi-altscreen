@@ -6,9 +6,11 @@ Target: this owner's 2020 Q5, MHI2Q_US_AUG22_P5145 / MU1316 only.
 > card produced no mascot and `CONTROL_ERROR`; the owner reported the whole MMI
 > freezing, including physical buttons. Boot logs show failed control-file
 > publication and native HMI rendering attempted from the settings worker
-> (`EGL_BAD_CONTEXT`). The threading/filesystem repairs were copied to SD in
-> `03d0b8d`; installation and vehicle behavior have not been confirmed. The menu
-> presentation changes below are later work, not part of that earlier card.
+> (`EGL_BAD_CONTEXT`). The returned `5a3a292` trial on 2026-09-28 matches the
+> installed/card JAR pins and confirms stable menu use, working mascots and full
+> diagnostic export. System-status overflow, stale Saved feedback, mascot size/
+> occlusion and occasional Google Maps drift remain. The new corrections described
+> below have not yet been deployed or confirmed in the car.
 > Avoid the custom settings page on `c8ec3e7`; mascot Off alone does not correct
 > its worker-thread repaint problem. Host results are not vehicle validation.
 
@@ -43,13 +45,17 @@ disabled or label-shaped menu options.
   selection, and status notifications preserve focus when a switch changes.
 - Explanations use Audi's native focused-item infoline. Reconnect instructions
   are help/notice text, not suffixes appended to selectable labels.
-- A separate, non-menu native label below the list shows the last result and
-  any pending CarPlay reconnect. A long result directs the owner to
+- A separate, non-menu native label below the list shows save/action feedback and
+  any pending CarPlay reconnect. Successful saves name the setting/value and
+  disappear after five seconds; failures and reconnect requirements do not expire.
+  A long result directs the owner to
   **Status & diagnostics -> Last result**, where the complete message remains
   available, including failures.
 - **System status** and **Last result** use a read-only text area above their
   Back/Previous page/Next page controls. Page numbers appear in the title bar.
   Previous/Next wrap around, and are disabled when there is only one page.
+  The native text-node subtree is clipped to that area's bounds, including after
+  paging/resizing; widget bounds alone do not constrain native glyph drawing.
 - Confirmation warnings occupy the read-only area, separately from **Cancel**
   and the specifically named action. Initial focus is Cancel. A warning that
   cannot fit the native viewport is an extension error, not silently clipped.
@@ -86,7 +92,7 @@ uninstalls the patch. The initial patch installation still needs the normal
 installation reboot.
 
 The phone-map URL is latched per receiver connection and reapplied on later
-route transitions, including in map-only mode. A live route change or video
+route transitions and settled View-size changes, including in map-only mode. A live route change or video
 restart does not silently apply a newly saved layout; reconnect CarPlay for that
 change. This addresses missing layout requests, not direct vehicle-marker
 positioning. Google Maps alignment still needs vehicle confirmation; see
@@ -117,8 +123,13 @@ selection, mascot, input or recovery.
 ### Optional map mascots
 
 **Overlay appearance -> Map mascot** selects Off, Raccoon or Nian. A transparent,
-40-video-pixel-high animation travels along the bottom of the navigation canvas,
-four pixels above its edge. The separate Audi text bar is untouched. The raccoon
+80-video-pixel-high animation (twice the former width and height) travels across
+the lower navigation canvas. Its bottom reserves 20% of the current video height,
+rounded up, plus four pixels: 95 pixels in the logged 1440x455 mirror viewport.
+This is a trial clearance, not a measured boundary of Audi's full-width street/
+Trip bar. That bar is composed in the VC after the video and cannot be outranked
+by changing draw order inside the mirror. The map crop and Audi bar are untouched.
+Placement in both View sizes still needs vehicle confirmation. The raccoon
 travels right and Nian travels left, matching their artwork. The white exterior
 of the raccoon reference is removed without erasing its enclosed white face.
 
@@ -233,6 +244,9 @@ against that contract; nonzero/timeout action output must remain diagnosable.
 semantics, initial/restored focus, separate text/control bounds, all pages of
 long status messages, confirmation-fit rejection, OEM title/bounds restoration
 and a stable parent child list across repeated disconnect/reconnect cycles.
+It also checks the native clip rectangle/inheritance and expired-notice visibility;
+runtime checks cover fresh/repeated saves, expiry notification, retained results
+and non-expiring failures.
 Its font metrics are simulated; it does not emulate Audi's graphics service or
 establish final vehicle readability. The production renderer uses native fonts
 and wrapping. Deferred fallback cleanup also has an HMI-thread regression.
@@ -246,20 +260,22 @@ package installation, preservation, diagnostic actions and recovery.
 
 `./scripts/test_mascots.sh` uses the local generated atlas and host EGL/GLES2.
 It checks bounded parsing, real rendered pixels, viewport clipping, destination
-alpha, caller graphics state, frame/wrap timing, injected graphics failures,
+alpha, exact doubled dimensions/raised bounds using opaque fixtures, caller
+graphics state, frame/wrap timing, injected graphics failures,
 actual EGL interposition, missing assets, stale PID/expiry/readiness controls,
 context recreation, swap-failure forwarding and the absence of extra swaps.
 It also tests the production `/ramdisk` paths with `/tmp` rename unavailable,
 precise/rate-limited status-write failures, and a blocked control reader whose
 render lease must expire. `run_tests.sh` checks native bounded log rotation when
 rename returns `ENOSYS`.
-The generated PNGs are host composites, not cockpit photographs. QNX dynamic
-interposition, final placement/readability and vehicle performance remain
-unverified until a parked-car test.
+The generated PNGs are host composites, not cockpit photographs. The `5a3a292`
+trial confirms animation on the HU; the enlarged/raised version's placement,
+readability and performance remain unverified in the vehicle.
 
 There is no host emulator of the complete Audi native HMI graphics/input service.
-The native page's final rendering, focus/Back behavior, driver-lock behavior,
-persistence on QNX, and adapter compatibility remain **unverified in the car**.
+The owner confirmed stable basic menu use in `5a3a292`, while reporting status
+overflow. The new clipping/notice changes, driver-lock behavior, persistence across
+reboots and adapter compatibility are not established by that report.
 Do not describe the host tests as full vehicle validation.
 
 ## Proposed Virtual Cockpit access

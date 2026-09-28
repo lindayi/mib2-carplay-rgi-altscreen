@@ -69,6 +69,28 @@ Earlier JSON reports are historical, not necessarily the current build.
 
 ## Vehicle evidence and the current open issue
 
+### Returned repaired-menu trial: 2026-09-28
+
+- The full export matches installed/card JAR pins `1799993018 324187` from
+  `5a3a292`. The owner confirms menu stability, both animated mascots and full
+  diagnostic export. This supersedes the unconfirmed status of those repairs,
+  not the failed historical `c8ec3e7` trial. Private capture:
+  `carplay-build-inputs\vehicle-menu-test-20260928-1913` (139 hash-verified files).
+- Remaining owner observations: System status text overlaps the controls;
+  permanent Saved text is confusing; mascots are tiny and almost entirely covered
+  by Audi's full-width street/Trip bar; occasional Google Maps drift follows a
+  View change and route stop/start recenters without reconnect.
+- Wheel trace proves roller press/release/long states, rotation, right drawer and
+  Back delivery. The owner observed short/long both toggling Road/Trip, rotation
+  zooming, and right/Back controlling Audi's drawer, without affecting main CarPlay.
+  Every recorded Fct54 drawer flag was false despite the visible drawer: these
+  flags cannot establish exclusive ownership or dismissal. Keep the VC panel disabled.
+- New source changes below are not part of the tested card. Status text now has
+  an explicit native-node clip; successful saves name the setting and expire after
+  five seconds without erasing Last result, failures or the reconnect requirement.
+  Double-size mascots reserve the lower fifth of the video plus four pixels as
+  trial clearance. This is not a measured Audi-bar boundary or proven vehicle fix.
+
 ### Failed mascot/native-menu trial: 2026-09-27 evening
 
 - The owner reported no mascot, `CONTROL_ERROR`, and the whole main MMI including
@@ -106,8 +128,8 @@ Earlier JSON reports are historical, not necessarily the current build.
 
 ### Platform-contract corrections after that trial
 
-- Source repairs are host-verified, not card-deployed or vehicle-confirmed.
-  The failed `c8ec3e7` card package must not be confused with corrected source.
+- The `5a3a292` trial above confirms the menu/mascot/export repairs for the reported
+  use. The failed `c8ec3e7` card package must not be confused with corrected source.
 - Native menu notifications use stock `RunnableEvent` and the HMI
   `EventDispatcher`; coalesce per connected-menu generation. Never rebuild in
   `managePaint`, or repaint during a row's failure callback. Queue cleanup too.
@@ -150,7 +172,7 @@ As reported by the owner on **2026-09-27**:
 The earlier implementation sent `CMD_ALT_UICTX`/AirPlay `showUI` only on a
 video-ready edge. `AltScreenCluster` now observes live RGI independently of the
 primary `RouteGuidance` listener, so map-only mode also gets route reapplication.
-The existing screen worker drains coalesced video/route requests, gated by
+The existing screen worker drains coalesced video/route/View requests, gated by
 receiver connection and module generation; callbacks do not read files or write
 sockets. Keep this separate from `ScreenModule.setNavActive`: that is the BAP
 presentation latch, not route identity, and can stay active across route changes.
@@ -161,6 +183,12 @@ or a changed reported source while settled. Do not treat distance, maneuver,
 `visible_in_app` or duplicate replay as new routes. No successful request is
 resent by a timer. Cache the URL per receiver connection so new preferences
 still require reconnect, including across video/module restarts.
+
+The repaired-menu export contains View-size edges without layout requests, matching
+the owner's remaining drift trigger. Source now records actual Fct54 size changes
+after the stock callback, ignores the initial/duplicate state, and waits 350 ms
+after the latest edge before draining one coalesced request. This is an event
+settling delay, not periodic reassertion. Its centering effect remains unverified.
 
 `AltScreenLayoutLifecycleTest` uses real bus frames and delayed settings reads;
 `AltScreenContextTest` exercises the actual context worker. Host verification
@@ -260,7 +288,10 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Stock `MultiLineLabelRendererHigh` defaults to no wrapping; select
   `StringUtility.WRAP_MODE_STANDARD`. It applies `maxLines` before `firstVisibleLine`.
   For complete status paging, keep `maxLines=0` and window the wrapped lines afterward;
-  use native font/row measurements to prevent text overlapping the controls.
+  use native font/row measurements and an explicit native-node clip. Stock drawing
+  tests each line's origin, not its full glyph bounds. Clip the label subtree to
+  its own rectangle while inheriting ancestor clipping; a widget-height assertion
+  alone did not catch the vehicle's System-status overflow.
 - Native radio rows compare their model value with their widget ID, not Boolean 1.
   Preserve focus by action/setting identity, not by the switch's changing value.
   Presentation tests use simulated font metrics; they are not Audi graphics validation.

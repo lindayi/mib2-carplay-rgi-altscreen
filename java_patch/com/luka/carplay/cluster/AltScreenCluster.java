@@ -8,7 +8,7 @@
  *
  *   Cluster UI context -> CMD_ALT_UICTX: if /mnt/app/root/hooks/cluster_ui.url holds a
  *   maps:/car/instrumentcluster URL, it is sent as "showUI" when video comes up and
- *   when a route settles/changes in that stream. The screen worker performs I/O;
+ *   when a route settles/changes or the VC changes map size. The screen worker performs I/O;
  *   route callbacks only publish intent, independently of the BAP/renderer mode.
  */
 package com.luka.carplay.cluster;
@@ -36,12 +36,14 @@ public final class AltScreenCluster {
     private static String uiUrlPath = UI_URL_FILE;
 
     private static final Object LOCK = new Object();
-    private static final int VIDEO = 1, ROUTE = 2;
+    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4;
     private static boolean enabled, video;
     private static int connection = -1;
     private static int pending;
     private static int lifecycle;
     private static long revision;
+    private static int presentation = -1;
+    private static long viewChangedAt;
     private static int routeState = -1, sourceSupportsRg = -1;
     private static long routeGeneration = -1L;
     private static String sourceName;
@@ -60,6 +62,7 @@ public final class AltScreenCluster {
             enabled = true;
             video = false;
             connection = -1;
+            presentation = -1;
             pending = 0;
             revision++;
             resetRoute();
@@ -95,6 +98,7 @@ public final class AltScreenCluster {
     private static void useConnection(int generation) {
         if (connection == generation) return;
         connection = generation;
+        presentation = -1;
         resetRoute();
         pending = video && generation >= 0 ? VIDEO : 0;
         revision++;
@@ -147,6 +151,22 @@ public final class AltScreenCluster {
         }
     }
 
+    /** Actual Fct54 size edges only; duplicate status and drawer changes do not request layout. */
+    public static void onPresentation(boolean large) {
+        synchronized (LOCK) {
+            if (!enabled) return;
+            useConnection(CarplayBus.getInstance().connectionGeneration());
+            int next = large ? 1 : 0;
+            if (presentation == next) return;
+            boolean edge = presentation != -1;
+            presentation = next;
+            if (!edge || !video || connection < 0) return;
+            pending |= VIEW;
+            viewChangedAt = System.currentTimeMillis();
+            revision++;
+        }
+    }
+
     /** Only the persistent screen worker calls this. No successful request is retried on a timer. */
     public static void flushLayout() {
         int generation;
@@ -158,6 +178,8 @@ public final class AltScreenCluster {
             generation = CarplayBus.getInstance().connectionGeneration();
             useConnection(generation);
             if (!video || generation < 0 || pending == 0) return;
+            long now = System.currentTimeMillis();
+            if ((pending & VIEW) != 0 && now >= viewChangedAt && now - viewChangedAt < 350L) return;
             request = revision;
             load = urlConnection != generation;
             url = sessionUrl;
@@ -176,11 +198,14 @@ public final class AltScreenCluster {
                 return;
             }
             int reasons = pending;
+            String reason = (reasons & VIDEO) != 0 ? "video" : "";
+            if ((reasons & ROUTE) != 0) reason += (reason.length() == 0 ? "" : "+") + "route";
+            if ((reasons & VIEW) != 0) reason += (reason.length() == 0 ? "" : "+") + "view";
             boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes, generation);
             if (sent) pending = 0;
             Log.i(TAG, "cluster showUI " + (sent ? "queued" : "not queued")
                 + " connection=" + generation
-                + " reason=" + (reasons == VIDEO ? "video" : reasons == ROUTE ? "route" : "video+route")
+                + " reason=" + reason
                 + " route_generation=" + routeGeneration + " route_state=" + routeState + " url=" + url);
         }
     }

@@ -70,6 +70,11 @@ later route/UI transition while the same video stream remains ready could lose
 that selection without another request. This missing reapplication is confirmed
 in the code; its connection to the observed offset is **not yet vehicle-proven**.
 
+The 2026-09-28 `5a3a292` trial narrows the remaining symptom: occasional drift
+after a View change, corrected by stopping/restarting the route without reconnect.
+The private export confirms View-size changes without a selected-layout request.
+The source correction below adds that event; its effect is not yet car-confirmed.
+
 `AltScreenCluster` now observes live RGI frames alongside, not instead of,
 `RouteGuidance`. It also works when the custom maneuver overlay is disabled
 (CarPlay map-only mode). It requests the existing session layout when:
@@ -80,6 +85,9 @@ in the code; its connection to the observed offset is **not yet vehicle-proven**
 - `route_generation` changes while settled, catching a native route reset even
   when debounce hides the intervening `NO_ROUTE_SET`.
 - The reported navigation source changes while settled.
+- Fct54 map size actually changes after its initial observation. The worker waits
+  350 ms after the latest size edge and coalesces a burst into one request.
+  Duplicate status and drawer-flag changes alone do not trigger it.
 
 The screen worker coalesces overlapping events and waits for ready video.
 Distance, maneuver, foreground-visibility and duplicate replay updates do not
@@ -91,14 +99,14 @@ top preset, receiver restart or automatic phone disconnect.
 
 `AltScreenLayoutLifecycleTest` exercises real bus packets for repeated routes on
 unchanged ready video, hidden route resets, reroutes, source changes, explicit
-presets, reconnects and cancellation during a delayed settings read.
+presets, View-edge settling/coalescing, reconnects and cancellation during a delayed settings read.
 `AltScreenContextTest` covers the actual screen worker and context lifecycle.
 These are host checks, not proof that Google Maps honors `showUI` or centers
 its vehicle marker.
 
 Compare first/subsequent routes within one connection, recording app/iOS versions,
 video readiness, route state and `showUI` events. With verbose logging enabled for
-the test connection, Java records the request reason (`video`, `route`, or both),
+the test connection, Java records the request reason (`video`, `route`, `view`, or a combination),
 connection and route generations, route state and selected URL. **Queued** means
 accepted by the local bus, not acknowledged by the phone; correlate it with the
 native hook's `showUI` result. Retain exports privately.
