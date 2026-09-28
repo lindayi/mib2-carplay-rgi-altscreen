@@ -69,6 +69,41 @@ Earlier JSON reports are historical, not necessarily the current build.
 
 ## Vehicle evidence and the current open issue
 
+### Failed mascot/native-menu trial: 2026-09-27 evening
+
+- The owner reported no mascot, `CONTROL_ERROR`, and the whole main MMI including
+  physical buttons freezing; an attempted diagnostic export also froze. Do not
+  describe the mascot release as vehicle-working or recommend another trial
+  without repairing the failures below. Mascot Off does not fix the menu repaint bug.
+- The returned card still matched all 60 `c8ec3e7` package hashes. No export folder
+  or summary was present, but automatic boot logs captured the failures. A private
+  hash-verified copy of 126 log files is in
+  `carplay-build-inputs\vehicle-mascot-failure-20260927-2235`.
+  Boot names/timestamps reset to 1970 and some names were reused across boots;
+  compare content to the pre-vehicle manifest rather than sorting by timestamp.
+- Java logged `Cannot publish map mascot control`: `File.renameTo()` failed for
+  the `/tmp` control snapshot. The mirror worker ran on the HU but logged
+  `CONTROL_STALE` and repeated `STATUS_WRITE_ERROR`, not a rendered mascot.
+  `/tmp` is QNX shared-memory-backed, not Linux `/tmp`; host rename success is not
+  proof that the HU supports the snapshot publication mechanism. The native
+  status error lacks errno/stage detail, so do not invent its exact syscall cause.
+- In boot `boot_19700101_000006_380970`, the J9 process logged eight
+  `EGL_BAD_CONTEXT` events on TID 97, independently named `carplay-settings` by
+  heartbeat logs, and a `ScreenWidget#paint` illegal-state error. This is strong
+  evidence for the whole-MMI freeze, not merely a mirror-side drawing failure.
+- Exact-stock bytecode confirms `triggerRepaint()` -> `doCheckedRepaint()` ->
+  `RootWindowQNX.repaint()` -> `paintGUI()` is synchronous. Never call widget
+  repaint/rebuild from settings/action workers. Dispatch coalesced updates onto
+  Audi's HMI event thread, gate them by the connected menu generation, and keep
+  widget-tree mutation out of an active paint traversal.
+- The action helper logged exit 1, but its detailed output was logged at INFO and
+  then deleted; normal verbosity did not retain it. Preserve bounded failure
+  diagnostics at error severity and include them in export coverage.
+- Existing host tests missed both the HU filesystem behavior and native graphics
+  thread affinity. Add explicit regression coverage before rebuilding. The exact
+  installed JAR build ID was not captured; installed mascot artifacts and execution
+  are established, while the card package identity is independently verified.
+
 As reported by the owner on **2026-09-27**:
 
 - Navigation text and next-turn distance **work in the car**.

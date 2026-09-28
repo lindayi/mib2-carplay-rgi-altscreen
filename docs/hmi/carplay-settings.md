@@ -2,6 +2,15 @@
 
 Target: this owner's 2020 Q5, MHI2Q_US_AUG22_P5145 / MU1316 only.
 
+> **Vehicle failure reported 2026-09-27:** the mascot release on the `c8ec3e7`
+> card produced no mascot and `CONTROL_ERROR`; the owner reported the whole MMI
+> freezing, including physical buttons. Boot logs show failed control-file
+> publication and native HMI rendering attempted from the settings worker
+> (`EGL_BAD_CONTEXT`). These failures are not repaired yet. Avoid this custom
+> settings page pending a corrected build; mascot Off alone does not correct
+> the worker-thread repaint problem. The host results below remain host evidence,
+> not evidence that this release works in the vehicle.
+
 ## Entry and implementation
 
 NAV -> right drawer -> Navigation settings -> **Carplay Altscreen**.
