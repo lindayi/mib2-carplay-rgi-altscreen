@@ -269,6 +269,19 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   Existing MFW DDS_SELECT suppression protects CarPlay only, not native VC UI.
   Do not enable a live panel gesture until ownership/dismissal are demonstrated.
   See `docs/hmi/vc-quick-settings.md` for the parked evidence gate.
+- Road/Trip and CarPlay zoom are project-controlled actions, not evidence that
+  arbitrary VC-local input must first be globally grabbed. Raw state 1 calls
+  `ScreenModule.onSteeringWheelOkPressed` -> `RouteGuidance.requestInfoModeToggle`;
+  it fires before a long hold is recognized. A hold shortcut must defer the short
+  action until release and suppress its opening gesture's later release.
+- Zoom enters our `ScreenCombiBAPListener.setMapScale`: it calls the CarPlay zoom
+  handler and then stock zoom. Exact MU1316 stock code mutates map context 400476/
+  auto-zoom before protected `updateMapScale()` reports the scale. A local menu
+  router can bypass both zoom actions but retain the current-scale status reply.
+  This seam is source/bytecode-verified, not a vehicle-tested menu interception.
+  Use one movement source: raw encoder and BAP scale duplicate detents with
+  opposite signs in the returned trace. Native drawer/focus and dismissal are
+  separate remaining gates, not proof that these two project actions cannot be gated.
 - Screen **400102**, factory method
   `NaviScreenBag8.mAPOPTNAVIGENERALSETTINGSMAIN`.
 - `tools\PatchNavigationSettings.java` validates the exact private stock class hash,

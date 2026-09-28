@@ -41,7 +41,51 @@ The background is a schematic fixture, not captured CarPlay video or a cockpit
 photograph. The regular native build also produces
 `build/libvc_menu_prototype.a`, deliberately not linked or deployed.
 
-## Unresolved input-ownership gate
+## Project-owned actions and remaining input gate
+
+The observed Road/Trip toggle and CarPlay zoom are implemented by this project,
+not proof of unavoidable VC-local actions. Source and exact MU1316 bytecode
+inspection after the owner's clarification establishes these control points:
+
+| Action | Current path | Candidate menu routing |
+| --- | --- | --- |
+| Road/Trip toggle | `SteeringWheelInputModule.RawKeyListener.updateKey2` handles raw roller state 1, then `ScreenModule.onSteeringWheelOkPressed` calls `RouteGuidance.requestInfoModeToggle` | Defer a short action until release; a recognized long hold can open the panel without first toggling Road/Trip. While the panel is active, route a new short press to selection instead. |
+| CarPlay map zoom | `ScreenCombiBAPListener.setMapScale` -> `AltScreenCluster.onMapScaleSteps` -> `CMD_ALT_ZOOM` -> native `alt_on_zoom` -> AirPlay `changeMapZoomLevel` | Route the unscaled BAP steps to menu navigation instead of sending the zoom command. The existing zoom preference already gates the CarPlay command. |
+| Audi map zoom behind the video | The same override calls stock `super.setMapScale(steps)` | Stock increments map-context value 400476 and may change auto-zoom, then calls protected `updateMapScale()`. An owned-menu branch can call the latter directly to report the unchanged scale without applying those changes. Preserve its initialized-scale/status behavior; do not simply discard the BAP request. |
+| Main-CarPlay Select copy | `consumeCollapsedSelect` filters raw-wheel-origin pressed/released `DDS_SELECT` events in `CarplayDSILifecycleController` | Preserve wheel/centre-knob separation. Long/repeat states require their own review; the existing filter is not a general input grab. |
+
+Both short and long presses currently toggle Road/Trip because the action runs
+at state 1, before state 3 identifies a long hold. Long states are traced but
+do not invoke a separate action. This behavior does not establish that the VC
+itself toggled the information page.
+
+A global exclusive keyboard API is therefore **not a prerequisite for gating
+these project-controlled actions**. The candidate is one local router with
+explicit closed/opening/active/closing state and a renderer-acknowledged,
+generation-bound ownership lease. Use one source for menu movement: raw encoder
+and BAP scale describe the same detents, and the returned trace has opposite
+signs between them. Do not apply both or apply the user's map-zoom speed multiplier
+to menu navigation.
+
+This is an implementation approach, not an enabled feature or verified native
+drawer integration. It still needs activation eligibility, press/release/hold
+arbitration, loss-of-renderer recovery and dismissal tests. In particular:
+
+- Existing map-tab fallback checks connection/RGI state, not authoritative VC
+  focus; map-only sessions must not inherit the active-RGI requirement blindly.
+- Right/left drawer, Back and tab keys can request local dismissal without
+  suppressing Audi's actions, but their observation does not detect an already-open
+  native drawer or prove that no other cluster-local selection occurs.
+- Preserve native map-scale status replies, normal closed-menu behavior and the
+  centre-console knob. A delayed callback from an old connection or closed panel
+  must not reactivate menu ownership.
+- A long-roller custom panel is distinct from inserting a new entry inside
+  Audi's existing right drawer. No arbitrary OEM drawer-entry mechanism has been
+  demonstrated here.
+
+The next step can be a disabled-by-default local routing/renderer integration
+with host state-machine tests, followed by a bounded parked-car interaction test.
+Another identical event-delivery trace, by itself, is not the missing mechanism.
 
 The exact stock `org.dsi.ifc.keypanel.Constants` defines:
 
@@ -54,12 +98,11 @@ The exact stock `org.dsi.ifc.keypanel.Constants` defines:
 | Double press / long press | 2 / 3 |
 | Further long-press states | 4 / 5 |
 
-Knowing these codes does not establish that every event reaches the head unit,
-nor that the head unit can consume the cluster's local action. `DSIKeyPanel`
+The returned trace establishes delivery of the tested keys, but not consumption
+of arbitrary cluster-local actions. `DSIKeyPanel`
 listeners observe events; they do not return a consumed flag. Existing raw
 roller suppression addresses its later CarPlay `DDS_SELECT` copy, not arbitrary
-stock VC behavior. A long-roller shortcut would also need to defer the existing
-short-press Road/Trip action; simply reacting to state 3 would be insufficient.
+stock VC behavior.
 
 Navigation BAP FctID 54 reports large-map and left/right drawer-open flags.
 The stock handler stores/acknowledges these flags and updates map size; this
@@ -69,11 +112,12 @@ The optional `IMMICombiScreenChangeManager` is not a dependable service on this
 configuration. `ScreenModule` video/RGI flags alone are not proof of the active
 VC tab or input focus.
 
-Do not enable a live shortcut until a parked-car trace and observation establish:
+Before declaring a live shortcut usable, host integration and parked-car
+observation must establish:
 
-- Which press, release, long-press and roller events actually arrive.
+- Correct arbitration of the observed press, release, long-press and roller events.
 - Whether the native drawer or zoom UI acts before the head unit sees them.
-- How to establish and revoke exclusive input ownership without a competing
+- How to establish and revoke scoped menu input ownership without a competing
   display-context writer, fake map option or global button suppression.
 - Dismissal on Back, native drawer opening, tab/View changes, camera/parking
   takeover, disconnect, missing renderer acknowledgement and stale generations.
@@ -85,12 +129,13 @@ Do not enable a live shortcut until a parked-car trace and observation establish
 
 The returned `5a3a292` trial on 2026-09-28 proves raw roller press/release and
 long states 3/4, encoder steps, right-menu key 100 and Back key 41 reach the HU.
-The owner reports short/long presses both changing the tiny Road/Trip bar,
+The owner reports short/long presses both changing the project-controlled Road/Trip bar,
 rotation zooming the map, and right/Back controlling Audi's drawer; main CarPlay
 did not react. Crucially, every logged Fct54 left/right-menu flag stayed false
 despite that visible drawer. The trace establishes delivery, **not consumption,
 exclusive ownership or a reliable native-drawer dismissal signal**. The live
-panel remains disabled; another identical trace alone will not resolve this gate.
+panel remains disabled. The controllable HU actions above narrow this gate; the
+false flags still prevent treating BAP drawer status as an authoritative focus signal.
 
 With existing verbose diagnostics enabled, Java now logs `[VcInput]` records:
 
