@@ -218,3 +218,11 @@ There is no host emulator of the complete Audi native HMI graphics/input service
 The native page's final rendering, focus/Back behavior, driver-lock behavior,
 persistence on QNX, and adapter compatibility remain **unverified in the car**.
 Do not describe the host tests as full vehicle validation.
+
+## Proposed Virtual Cockpit access
+
+The separate [VC quick-settings prototype](vc-quick-settings.md) removes hints
+and status text from the selectable list and explores a right-aligned,
+Audi-inspired panel. It is not linked into the vehicle runtime: live wheel
+ownership must be established before enabling an opening shortcut. The current
+Navigation Settings entry remains the installed access path.

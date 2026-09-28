@@ -23,7 +23,8 @@ gcc -shared -fPIC /src/tests/qnx_tmp_contract.c -ldl -o /tmp/qnx-tmp-contract.so
 javac -cp "$CP:$ASM" -d /tmp /src/tests/PreferencesTest.java /src/tests/NativeMenuVerificationTest.java \
     /src/tools/PatchNavigationSettings.java /src/tests/PatchNavigationSettingsTest.java \
     /src/tests/JavaStockLinkageAudit.java /src/tests/TouchpadControllerTest.java /src/tests/SettingsRuntimeTest.java \
-    /src/tests/MascotControlTest.java /src/tests/NativeMenuThreadTest.java /src/tests/JavaLogRotationTest.java
+    /src/tests/MascotControlTest.java /src/tests/NativeMenuThreadTest.java /src/tests/JavaLogRotationTest.java \
+    /src/tests/SteeringWheelTraceTest.java
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP JavaLogRotationTest
 java -cp /tmp:$CP com.luka.carplay.settings.PreferencesTest /src/build/mmi-tests/preferences /src/tests/fixtures/carplay-preferences.txt
 java -cp /tmp:$ASM PatchNavigationSettingsTest /tools/out/$STOCK_JAR_NAME
@@ -32,6 +33,7 @@ java -Xverify:all -cp /tmp:$CP:$ASM NativeMenuThreadTest
 java -Xmx1g -cp /tmp:$ASM JavaStockLinkageAudit /src/build/carplay_hook.jar /tools/out/$STOCK_JAR_NAME \
     /tools/libs/org.osgi.framework-1.10.0.jar /tools/libs/org.osgi.util.tracker-1.5.4.jar
 java -cp /tmp:$CP TouchpadControllerTest
+java -cp /tmp:$CP SteeringWheelTraceTest
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP com.luka.carplay.settings.MascotControlTest
 java -cp /tmp:$CP com.luka.carplay.settings.SettingsRuntimeTest
 bash /src/tests/settings_runtime_test.sh /src

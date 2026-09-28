@@ -75,6 +75,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   fi
   echo "  built build/maneuver_render + build/libmaneuver_scene.a (C ABI, no C++ runtime)"
 
+  echo "--- VC panel prototype (not linked into vehicle runtime) ---"
+  $CC -O2 -std=gnu99 -Wall -Wextra -Werror -I"$ABI_INCLUDE" \
+      -c /src/vc_menu/panel.c -o /src/build/vc_menu_panel.o
+  $AR rcs /src/build/libvc_menu_prototype.a /src/build/vc_menu_panel.o
+
   echo "--- mirror mascot overlay ---"
   cd /src/mascot
   MASCOT_SRCS="assets.c draw.c hook.c"

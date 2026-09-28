@@ -52,6 +52,7 @@ public final class SteeringWheelInputModule implements Module {
     private volatile IMMICombiScreenChangeManager combiManager;
     private ServiceRegistration listenerRegistration;
     private volatile boolean running;
+    private boolean encoderTraceSubscribed;
 
     public String name() { return "mfw-input"; }
 
@@ -94,6 +95,11 @@ public final class SteeringWheelInputModule implements Module {
             registration = fw.serviceManager().registerDSIListener(
                 DSI_INSTANCE, DSIKeyPanelListener.class.getName(), listener);
             panel.setNotification(DSIKeyPanel.ATTR_KEY2, listener);
+            try {
+                panel.setNotification(DSIKeyPanel.ATTR_ENCODER2,listener);
+                encoderTraceSubscribed=true;
+            } catch(RuntimeException e){Log.w(TAG,"optional wheel encoder trace unavailable: "+e);}
+            catch(LinkageError e){Log.w(TAG,"optional wheel encoder trace linkage unavailable: "+e);}
 
             keyPanelHandle = handle;
             combiManagerHandle = combiHandle;
@@ -108,6 +114,10 @@ public final class SteeringWheelInputModule implements Module {
         } catch (Throwable t) {
             try { panel.clearNotification(DSIKeyPanel.ATTR_KEY2, listener); }
             catch (Throwable ignored) { }
+            if(encoderTraceSubscribed)try{panel.clearNotification(DSIKeyPanel.ATTR_ENCODER2,listener);}
+            catch(RuntimeException e){Log.w(TAG,"encoder trace cleanup failed: "+e);}
+            catch(LinkageError e){Log.w(TAG,"encoder trace cleanup linkage failed: "+e);}
+            encoderTraceSubscribed=false;
             if (registration != null) {
                 try { fw.serviceManager().unregisterService(registration); }
                 catch (Throwable ignored) { }
@@ -135,7 +145,11 @@ public final class SteeringWheelInputModule implements Module {
         if (panel != null) {
             try { panel.clearNotification(DSIKeyPanel.ATTR_KEY2, listener); }
             catch (Throwable t) { Log.w(TAG, "clear notification failed: " + t); }
+            if(encoderTraceSubscribed)try{panel.clearNotification(DSIKeyPanel.ATTR_ENCODER2,listener);}
+            catch(RuntimeException e){Log.w(TAG,"encoder trace unsubscribe failed: "+e);}
+            catch(LinkageError e){Log.w(TAG,"encoder trace unsubscribe linkage failed: "+e);}
         }
+        encoderTraceSubscribed=false;
         if (registration != null) {
             try { registration.unregister(); }
             catch (Throwable t) { Log.w(TAG, "unregister failed: " + t); }
@@ -207,6 +221,13 @@ public final class SteeringWheelInputModule implements Module {
         public void updateKey2(int keyboardId, int keyCode, int keyState,
                                int timeStamp, int validFlag) {
             if (!running || validFlag != ATTR_VALID) return;
+            if((keyboardId==KBD_MFW || keyboardId==KBD_MFW_3GP)
+                    && (keyCode==40 || keyCode==41 || keyCode==99 || keyCode==100
+                        || keyCode>=36 && keyCode<=39)) {
+                Log.i("VcInput","RAW_KEY board="+keyboardId+" key="+keyCode+" state="+keyState
+                    +" stamp="+timeStamp+" video="+ScreenModule.isAltScreenVideo()
+                    +" rgi="+ScreenModule.isNavActive()+" input_owner=UNVERIFIED");
+            }
 
             if (keyCode == KEY_DDS) {
                 clearCollapsedSelect(keyState);
@@ -226,7 +247,12 @@ public final class SteeringWheelInputModule implements Module {
         }
 
         public void asyncException(int errorCode, String errorString, int requestType) { }
-        public void updateEncoder2(int keyboardId, int keyCode, int steps, int subSteps, int validFlag) { }
+        public void updateEncoder2(int keyboardId, int keyCode, int steps, int subSteps, int validFlag) {
+            if(running && validFlag==ATTR_VALID && keyCode==KEY_MFW_ROLLER_LEFT
+                    && (keyboardId==KBD_MFW || keyboardId==KBD_MFW_3GP))
+                Log.i("VcInput","RAW_ENCODER board="+keyboardId+" key="+keyCode
+                    +" steps="+steps+" substeps="+subSteps+" input_owner=UNVERIFIED");
+        }
         public void updateDisplayTurnMechStatus(int state, int validFlag) { }
         public void updateRecognizerLanguage2(int keyboardId, String language, int languageCode, int validFlag) { }
         public void updateRecognizerMode(int keyboardId, int mode, int validFlag) { }

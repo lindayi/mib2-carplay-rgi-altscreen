@@ -52,11 +52,14 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScale(int steps) {
+        com.luka.carplay.framework.Log.i("VcInput","BAP_MAP_SCALE steps="+steps+" route=STOCK_AND_EXISTING_ALTSCREEN");
         com.luka.carplay.cluster.AltScreenCluster.onMapScaleSteps(steps);
         super.setMapScale(steps);
     }
 
     public void setMapPresentation(boolean largeMapView, boolean leftMenu, boolean rightMenu) {
+        com.luka.carplay.framework.Log.i("VcInput","BAP_PRESENTATION large="+largeMapView
+            +" left_menu="+leftMenu+" right_menu="+rightMenu+" input_owner=UNVERIFIED");
         com.luka.carplay.cluster.ClusterLayerController.onVcPresentation(largeMapView);
         super.setMapPresentation(largeMapView, leftMenu, rightMenu);
     }

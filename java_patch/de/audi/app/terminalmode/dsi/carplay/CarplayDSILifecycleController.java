@@ -871,10 +871,15 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
              * it remains a VC-only key.  The centre-console knob is never marked. */
             if (Key.DDS_SELECT.is(key)
                     && SteeringWheelInputModule.consumeCollapsedSelect(keystate)) {
+                com.luka.carplay.framework.Log.i("VcInput","CARPLAY_KEY key="+key+" state="+keystate
+                    +" route=EXISTING_MFW_SELECT_SUPPRESSION");
                 this.this$0.logger.log(
                     1000000, "[%1.updateKey] suppress MFW DDS_SELECT for CarPlay", LOGCLASS);
                 return;
             }
+            if(Key.DDS_SELECT.is(key) || Key.BACK.is(key) || Key.SOFTKEY_EAST.is(key))
+                com.luka.carplay.framework.Log.i("VcInput","CARPLAY_KEY key="+key+" state="+keystate
+                    +" route=STOCK_PATH");
 
             /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
              * CarPlay Main UI — it falls through to postButtonEvent below.  Never swallow it

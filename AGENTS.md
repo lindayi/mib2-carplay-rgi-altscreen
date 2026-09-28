@@ -232,6 +232,15 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 ### Native MMI menu
 
 - Entry: **NAV -> right drawer -> Navigation settings -> Carplay Altscreen**.
+- The proposed VC panel is currently an isolated prototype (`vc_menu/`), not
+  linked or deployed. Its title/help/footer are not focusable rows. Keep the main
+  MMI on CarPlay as the access-design goal, not a claimed implemented feature.
+- MU1316 raw MFW keys: roller 40, cancel 41, side-menu left/right 99/100.
+  Raw state 2 is **double press**, 3 is long press (4/5 further long states).
+  DSI observation and BAP drawer-open flags do not grant exclusive wheel input.
+  Existing MFW DDS_SELECT suppression protects CarPlay only, not native VC UI.
+  Do not enable a live panel gesture until ownership/dismissal are demonstrated.
+  See `docs/hmi/vc-quick-settings.md` for the parked evidence gate.
 - Screen **400102**, factory method
   `NaviScreenBag8.mAPOPTNAVIGENERALSETTINGSMAIN`.
 - `tools\PatchNavigationSettings.java` validates the exact private stock class hash,
