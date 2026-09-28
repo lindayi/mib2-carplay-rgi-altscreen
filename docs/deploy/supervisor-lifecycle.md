@@ -33,7 +33,7 @@ sequenceDiagram
     participant R as maneuver_render
     participant D as dio_manager (+hook)
     SI->>W: spawn (phone connect)
-    W->>W: preflight, PID -> /tmp/carplay_supervisor.owner
+    W->>W: preflight, PID -> /ramdisk/carplay_supervisor.owner
     W->>M: start in background (LD_PRELOAD cleared)
     W->>D: exec dio_manager (same PID, LD_PRELOAD=libcarplay_hook.so)
     M->>R: adopt / start at once (unhealthy adoption: re-check 2 s, then replace)
@@ -72,8 +72,9 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
   `carplay_monitor.sh` and `carplay_processes.sh` must exist, else the wrapper logs and exits 127.
 - The wrapper **`exec`s** `dio_manager` so SI tracks the exact dio PID (keeping the shell as parent
   made SI kill/relaunch wrappers and the cluster never rose).
-- **Generation ownership:** the wrapper writes its PID to `/tmp/carplay_supervisor.owner` atomically
-  (stage file + `mv`). A monitor acts only while `monitor_current` holds - the owner file names its
+- **Generation ownership:** the wrapper writes its PID to `/ramdisk/carplay_supervisor.owner` atomically
+  (stage file + `mv` on the existing QNX4 RAM filesystem, not shared-memory `/tmp`).
+  A monitor acts only while `monitor_current` holds - the owner file names its
   dio PID **and** that PID is alive. A newer generation overwrites the file, so an older monitor
   goes quiet at once instead of fighting over the renderer.
 - The monitor adopts or starts `maneuver_render` **immediately** (no settle sleeps: the renderer never
@@ -91,7 +92,7 @@ closes when RGI is inactive. So process identity - not a socket probe - is the h
 (`cp_renderer_healthy`); treating the closed listener as "unhealthy" would kill/recreate the EGL
 context every reconnect.
 
-The PID lives in `/tmp/carplay_maneuver_render.pid`. The steady path is one `/proc/<pid>` lookup
+The PID lives in `/ramdisk/carplay_maneuver_render.pid`. The steady path is one `/proc/<pid>` lookup
 (`cp_renderer_running`); only a missing or stale entry costs a `pidin ar` scan
 (`cp_renderer_adopt`). Identity is `pidin -p <pid> ar` (`cp_renderer_identity`: match, different
 process, or unknown). An adopted renderer that fails the identity check is re-checked after 2 s and

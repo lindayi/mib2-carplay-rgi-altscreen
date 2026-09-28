@@ -2,21 +2,26 @@ package com.luka.carplay.settings;
 
 import com.luka.carplay.framework.Log;
 import de.esolutions.hmi.widgets.audi.base.AbstractWidget;
-import de.esolutions.hmi.widgets.audi.base.RedrawContext;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuController;
+import de.audi.atip.hmi.event.EventDispatcher;
+import de.audi.atip.hmi.event.RunnableEvent;
 import java.util.ArrayList;
 
 /** Decorates only the stock front Navigation Settings menu. OEM rows stay bound. */
-public final class CarplayMenuController extends MenuController implements SettingsRuntime.Listener {
+public class CarplayMenuController extends MenuController implements SettingsRuntime.Listener {
     private final ArrayList original=new ArrayList();
     private final ArrayList generated=new ArrayList();
     private CarplayMenuItem entry;
-    private String page="";
-    private volatile boolean pending;
+    private volatile String page="";
+    private boolean pending;
     private boolean rebuilding;
-    private boolean pageChanged;
-    private boolean front;
-    private boolean failed;
+    private volatile boolean pageChanged;
+    private volatile boolean front;
+    private volatile boolean failed;
+    private final Object updateLock=new Object();
+    private long generation;
+    private boolean updateQueued;
+    private volatile EventDispatcher dispatcher;
 
     protected void initializeWidget() {
         super.initializeWidget();
@@ -28,6 +33,11 @@ public final class CarplayMenuController extends MenuController implements Setti
     private void initializeExtension() {
         front=getTerminalImpl().getTerminalID()==0;
         if(!front)return;
+        if(hmiService==null || hmiService.getEventDispatcher()==null)
+            throw new IllegalStateException("HMI event dispatcher unavailable");
+        dispatcher=hmiService.getEventDispatcher();
+        requireDispatchThread();
+        synchronized(updateLock){generation++;updateQueued=false;}
         if(entry==null) {
             Object[] children=getChildren().toArray();
             for(int i=0;i<children.length;i++)if(super.isMenuItem((AbstractWidget)children[i]))original.add(children[i]);
@@ -49,9 +59,17 @@ public final class CarplayMenuController extends MenuController implements Setti
         failed=true;front=false;page="";pending=false;
         SettingsRuntime.removeListener(this);
         Log.e("SettingsMenu","native extension disabled; original Navigation Settings retained",error);
-        try {clearAllCaches();relayout();triggerRepaint();}
-        catch(RuntimeException cleanup){Log.w("SettingsMenu","fallback relayout failed: "+cleanup);}
-        catch(LinkageError cleanup){Log.w("SettingsMenu","fallback linkage failed: "+cleanup);}
+        final EventDispatcher target=dispatcher;
+        final long run;
+        synchronized(updateLock){run=++generation;updateQueued=false;}
+        if(target==null)return;
+        try {target.postEvent(new RunnableEvent(new Runnable(){public void run(){
+            synchronized(updateLock){if(run!=generation || target!=dispatcher)return;}
+            try {requireDispatchThread();clearAllCaches();relayout();triggerRepaint();}
+            catch(RuntimeException cleanup){Log.e("SettingsMenu","fallback relayout failed",cleanup);}
+            catch(LinkageError cleanup){Log.e("SettingsMenu","fallback linkage failed",cleanup);}
+        }}));}
+        catch(RuntimeException cleanup){Log.e("SettingsMenu","cannot queue fallback relayout",cleanup);}
     }
     public void back(){if(isOpen())show(MenuModel.parent(page));}
     public void activate(MenuModel.Row row) {
@@ -67,11 +85,47 @@ public final class CarplayMenuController extends MenuController implements Setti
         } catch(RuntimeException e){fail(e);}
     }
     private void show(String next) {
-        page=next;pageChanged=true;pending=true;rebuild();triggerRepaint();
+        requireDispatchThread();
+        page=next;pageChanged=true;changed();
     }
-    public void changed(){if(front && isOpen()){pending=true;triggerRepaint();}}
+    public void changed() {
+        final EventDispatcher target=dispatcher;
+        final long run;
+        synchronized(updateLock) {
+            if(!front || failed || !isOpen() && !pageChanged || target==null || updateQueued)return;
+            run=generation;updateQueued=true;
+        }
+        try {
+            target.postEvent(new RunnableEvent(new Runnable(){public void run(){
+                synchronized(updateLock) {
+                    if(run!=generation || target!=dispatcher)return;
+                    updateQueued=false;
+                }
+                if(!front || failed)return;
+                refreshMenu();
+            }}));
+        } catch(RuntimeException e) {
+            synchronized(updateLock){if(run==generation)updateQueued=false;}
+            Log.e("SettingsMenu","Cannot queue HMI update",e);
+        }
+    }
+    private void requireDispatchThread() {
+        if(dispatcher==null || !dispatcher.isDispatchThread())
+            throw new IllegalStateException("Native menu operation outside HMI event thread");
+    }
+    protected void refreshMenu() {
+        requireDispatchThread();
+        pending=true;rebuild();
+        if(!failed)triggerRepaint();
+    }
+    protected void disconnectUpdates() {
+        SettingsRuntime.removeListener(this);
+        page="";pending=false;front=false;
+        synchronized(updateLock){generation++;updateQueued=false;dispatcher=null;}
+    }
     private void rebuild() {
         if(!front || rebuilding || !pending)return;
+        requireDispatchThread();
         rebuilding=true;pending=false;
         try {
             int focus=getFocusedIndex()==null?-1:getMenuItemID(getFocusedIndex());
@@ -84,6 +138,7 @@ public final class CarplayMenuController extends MenuController implements Setti
                 for(int i=0;i<rows.length;i++) {
                     CarplayMenuItem item=new CarplayMenuItem(this,rows[i],990001+i);
                     generated.add(item);add(item);
+                    if(failed)return;
                 }
             }
             clearAllCaches();relayout();
@@ -99,10 +154,8 @@ public final class CarplayMenuController extends MenuController implements Setti
         catch(LinkageError error){fail(error);}
         finally {rebuilding=false;}
     }
-    public void managePaint(RedrawContext context) {rebuild();super.managePaint(context);}
     public void disconnecting() {
-        SettingsRuntime.removeListener(this);
-        page="";pending=false;front=false;
+        disconnectUpdates();
         super.disconnecting();
     }
 }

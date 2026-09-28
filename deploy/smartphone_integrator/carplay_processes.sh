@@ -9,7 +9,7 @@ PATH=${PATH:+$PATH:}$CP_QNX_PATH
 export PATH
 unset CP_QNX_PATH
 
-CP_MANEUVER_PID_FILE=${CP_MANEUVER_PID_FILE:-/tmp/carplay_maneuver_render.pid}
+CP_MANEUVER_PID_FILE=${CP_MANEUVER_PID_FILE:-/ramdisk/carplay_maneuver_render.pid}
 CP_LOG_MAX_BYTES=${CP_LOG_MAX_BYTES:-524288}
 
 cp_renderer_pid_file()

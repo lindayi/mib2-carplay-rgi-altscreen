@@ -6,10 +6,10 @@ Target: this owner's 2020 Q5, MHI2Q_US_AUG22_P5145 / MU1316 only.
 > card produced no mascot and `CONTROL_ERROR`; the owner reported the whole MMI
 > freezing, including physical buttons. Boot logs show failed control-file
 > publication and native HMI rendering attempted from the settings worker
-> (`EGL_BAD_CONTEXT`). These failures are not repaired yet. Avoid this custom
-> settings page pending a corrected build; mascot Off alone does not correct
-> the worker-thread repaint problem. The host results below remain host evidence,
-> not evidence that this release works in the vehicle.
+> (`EGL_BAD_CONTEXT`). The source corrections below have host regression coverage,
+> but have not been deployed to the card or confirmed in the car. Avoid the custom
+> settings page in the installed release; mascot Off alone does not correct its
+> worker-thread repaint problem. Host results are not vehicle validation.
 
 ## Entry and implementation
 
@@ -94,13 +94,22 @@ Animation therefore pauses if real video presentation pauses; it cannot conceal
 a decoder stall by advancing mirror telemetry. Off performs no mascot GL work.
 Graphics state, viewport bounds and destination alpha are preserved.
 
-The settings worker publishes a PID-bound, four-second RAM-file lease
+The settings worker publishes a PID-bound, four-second RAM-file lease at
+`/ramdisk/carplay_mascot.control`; native status is
+`/ramdisk/carplay_mascot.status`. `/ramdisk` is the existing QNX4 RAM filesystem,
+not shared-memory `/tmp`, where rename-based publication failed on the vehicle.
+There is no fallback to persistent flash or delete-before-rename publication.
+The control format is
 (`MASCOT2 <selection> <mirror-pid> <expiry-ms>`). The native worker requires that
 lease and the mirror's video-ready marker. Old-process, expired, master-disabled,
 bypass and Audi-map sessions cannot enable it. Normal-MMI Status shows the
 reported renderer state, not proof of visible vehicle pixels. Asset/control/GL
 failures are logged; asset failure disables only the mascot for that mirror
-process, and GL failures retry at most once every five seconds.
+process, and GL failures retry at most once every five seconds. A stalled control
+worker loses its render-side lease after one second. Native status-write errors
+include operation, errno and path, with repeated identical errors limited to once
+per 30 seconds. `CONTROL_ERROR` and `STATUS_ERROR` distinguish Java publication
+from status-reading failures.
 
 GIF decoding and background removal happen on the host, not the HU. Supply the
 owner's local GIFs to `tools/build_mascot_assets.py` (Python/Pillow):
@@ -158,6 +167,19 @@ reconnect requirements. Actions are an allowlist, never shell commands from labe
 The native menu does not expose install, restore, firmware updates or arbitrary
 process control.
 
+Worker notifications post coalesced stock `RunnableEvent`s to Audi's HMI event
+dispatcher. Widget changes and synchronous repaint run only on that thread;
+disconnect invalidates queued updates. Row replacement happens before repaint,
+never inside `managePaint`. Error cleanup is deferred too, so a failing row's
+connection callback cannot re-enter an unfinished rebuild.
+
+Owner, receiver-session, renderer-PID, mirror-health and boot-token snapshots
+also use `/ramdisk`. Logs/readiness markers stay in `/tmp`; Java and native log
+rotation copy bounded archive tails and truncate rather than renaming shared
+memory files. Failed menu actions retain an 8-KiB output tail at error severity
+and in `/tmp/carplay_menu_action.failure.log`. Confirmed full exports include
+that private failure detail and rotated Java/hook logs; summary exports do not.
+
 ## Tests and limitations
 
 `TOOLS_DIR=... STOCK_JAR=MU1316-P5145-stock.jar ./scripts/test_mmi_settings.sh`
@@ -165,7 +187,12 @@ checks every preference choice, v1/v2 migration/v3 strictness, preset preservati
 malformed files, atomic-save failure, reset,
 guarded factory patch equivalence, strict class verification, real native widget
 constructors, OEM-row retention, nonblocking action handling/timeouts, live
-lifecycle gates, and launcher preload behavior.
+lifecycle gates, and launcher preload behavior. Regressions exercise actual
+stock `RunnableEvent` dispatch, worker-thread isolation, coalescing, close and
+reconnect generations, queue rejection, and prohibit tree updates inside paint.
+A filesystem fault fixture rejects `/tmp` rename while allowing ordinary
+read/write. Java logger rotation and production shell snapshot paths are tested
+against that contract; nonzero/timeout action output must remain diagnosable.
 
 Existing Java/renderer tests cover overlay option messages, reconnect replay and
 input behavior. `./scripts/test_route_labels.sh` renders real GLES previews of
@@ -179,6 +206,10 @@ It checks bounded parsing, real rendered pixels, viewport clipping, destination
 alpha, caller graphics state, frame/wrap timing, injected graphics failures,
 actual EGL interposition, missing assets, stale PID/expiry/readiness controls,
 context recreation, swap-failure forwarding and the absence of extra swaps.
+It also tests the production `/ramdisk` paths with `/tmp` rename unavailable,
+precise/rate-limited status-write failures, and a blocked control reader whose
+render lease must expire. `run_tests.sh` checks native bounded log rotation when
+rename returns `ENOSYS`.
 The generated PNGs are host composites, not cockpit photographs. QNX dynamic
 interposition, final placement/readability and vehicle performance remain
 unverified until a parked-car test.

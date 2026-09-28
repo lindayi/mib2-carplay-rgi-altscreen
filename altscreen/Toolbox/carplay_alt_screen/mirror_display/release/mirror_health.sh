@@ -1,19 +1,21 @@
 #!/bin/sh
 # Sourced by start_vehicle.sh. No USB, dio_manager, HMI or context writes.
 MH_CONTEXT="$TMP_ROOT/carplay_cluster.ctx"
-MH_OWNER="$TMP_ROOT/carplay_supervisor.owner"
-MH_STATUS="$TMP_ROOT/MMI-Cockpit-Carplay.mirror.health"
+MH_STATE_ROOT=/ramdisk
 MH_RING=/dev/shmem/carplay111_h264
 MH_INTERVAL=1
 MH_READY_LIMIT=90
 MH_STALL_LIMIT=40
 if [ "${ALTSCREEN_CHAIN_TESTING:-0}" = 1 ]; then
     case "$TMP_ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid health test root"; exit 2 ;; esac
+    MH_STATE_ROOT="${ALT111_STATE_ROOT:-$TMP_ROOT}"
     MH_RING="$TMP_ROOT/carplay111_h264"
     MH_INTERVAL=${ALT111_TEST_INTERVAL:-0.05}
     MH_READY_LIMIT=${ALT111_TEST_READY_LIMIT:-6}
     MH_STALL_LIMIT=${ALT111_TEST_STALL_LIMIT:-6}
 fi
+MH_OWNER="$MH_STATE_ROOT/carplay_supervisor.owner"
+MH_STATUS="$MH_STATE_ROOT/MMI-Cockpit-Carplay.mirror.health"
 MH_LAST_INPUT=""; MH_LAST_PRESENT=""; MH_STALLED=0
 MH_SAMPLES=0; MH_REPORT_GAP=0; MH_MAX_REPORT_GAP=0
 MH_SETTINGS_HELPER=${ALT111_SETTINGS_HELPER:-/mnt/app/root/hooks/carplay_settings.sh}
@@ -29,7 +31,7 @@ mh_video_wanted(){
     enabled=$(mh_setting enabled 1) || return 1
     mode=$(mh_setting mode 0) || return 1
     [ "$enabled" = 1 ] && [ "$mode" != 2 ] || return 1
-    session="$TMP_ROOT/carplay_menu_session"
+    session="$MH_STATE_ROOT/carplay_menu_session"
     session_pid=""
     [ ! -r "$session" ] || session_pid=$(sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' "$session")
     case "$session_pid" in ''|*[!0-9]*|0|1) return 1 ;; esac

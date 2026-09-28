@@ -90,7 +90,7 @@ test ! -e "$TEST_MONITOR"
 # Normal MMI video actions use only tmp control files and the existing mirror launcher.
 ROOT="$T/unit";VOL="$T/sd";RUNTIME="$ROOT/mnt/app/root/carplay-altscreen"
 mkdir -p "$RUNTIME/bin/mirror" "$RUNTIME/state" "$ROOT/mnt/app/root/hooks" \
-    "$ROOT/mnt/persist/var/app/carplay_altscreen" "$ROOT/tmp" "$VOL/Toolbox"
+    "$ROOT/mnt/persist/var/app/carplay_altscreen" "$ROOT/tmp" "$ROOT/ramdisk" "$VOL/Toolbox"
 cp "$T/hooks/carplay_settings.sh" "$ROOT/mnt/app/root/hooks/"
 cp "$T/good" "$ROOT/mnt/persist/var/app/carplay_altscreen/preferences"
 export ALTSCREEN_CHAIN_TESTING=1 ALTSCREEN_CHAIN_ROOT="$ROOT" ALTSCREEN_CHAIN_VOLUME="$VOL"
@@ -107,8 +107,8 @@ sh "$SCRIPT" sync_mirror
 test "$(cat "$ROOT/actions")" = stop
 if sh "$SCRIPT" restart_video; then echo "FAIL: disabled restart accepted"; exit 1; fi
 sed 's/enabled=0/enabled=1/' "$T/good" > "$ROOT/mnt/persist/var/app/carplay_altscreen/preferences"
-printf 'pid=%s\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\n' "$$" > "$ROOT/tmp/carplay_menu_session"
-echo "$$" > "$ROOT/tmp/carplay_supervisor.owner"
+printf 'pid=%s\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\n' "$$" > "$ROOT/ramdisk/carplay_menu_session"
+echo "$$" > "$ROOT/ramdisk/carplay_supervisor.owner"
 touch "$RUNTIME/state/basevideo3.enabled"
 sh "$SCRIPT" sync_mirror
 test -f "$ROOT/tmp/mmi-mirror-active"

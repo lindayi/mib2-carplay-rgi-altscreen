@@ -118,7 +118,7 @@ support - it supplies a genuinely absent case. *(RE-derived; not re-checkable fr
   and the renderer it launches run with `LD_PRELOAD=` cleared (the renderer also with
   `GRAPHICS_ROOT=/proc/boot`). This is the operational mitigation for the fail-open process gate below.
 - [x] **Supervisor grace race closed** - generation ownership is an atomic owner token
-  (`/tmp/carplay_supervisor.owner`, stage + `mv`); an old monitor goes quiet as soon as the file names
+  (`/ramdisk/carplay_supervisor.owner`, stage + `mv` on the QNX4 RAM filesystem); an old monitor goes quiet as soon as the file names
   another PID, and no monitor stops renderers on dio exit. See [supervisor-lifecycle](../deploy/supervisor-lifecycle.md).
 - [x] **PID reuse** - the steady check is `/proc/<pid>` existence, but any signal is preceded by an exe
   identity check (`pidin -p <pid> ar`, `cp_renderer_identity`), and an unknown answer keeps the process.

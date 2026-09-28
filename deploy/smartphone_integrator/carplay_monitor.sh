@@ -4,7 +4,7 @@
 
 H=${H:-/mnt/app/root/hooks}
 WLOG=${WLOG:-/tmp/carplay_wrapper.log}
-OWNER_FILE=${OWNER_FILE:-/tmp/carplay_supervisor.owner}
+OWNER_FILE=${OWNER_FILE:-/ramdisk/carplay_supervisor.owner}
 DIO_PID=${1:-}
 
 case "$DIO_PID" in

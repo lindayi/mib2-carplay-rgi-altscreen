@@ -89,26 +89,53 @@ static const char* level_str(log_level_t level) {
     }
 }
 
-static void rotate_logs(void) {
-    if (!g_log.config.log_path || g_log.config.max_files <= 0) return;
+static int copy_log_tail(const char *from, const char *to) {
+    int input=open(from,O_RDONLY);
+    if(input<0)return errno==ENOENT?0:-1;
+    struct stat st;
+    if(fstat(input,&st)!=0) {close(input);return -1;}
+    if(g_log.config.max_size && (size_t)st.st_size>g_log.config.max_size &&
+            lseek(input,st.st_size-(off_t)g_log.config.max_size,SEEK_SET)<0) {
+        close(input);return -1;
+    }
+    int output=open(to,O_WRONLY|O_CREAT|O_TRUNC,0644);
+    if(output<0){close(input);return -1;}
+    char bytes[4096];
+    int good=1;
+    for(;;) {
+        ssize_t n=read(input,bytes,sizeof(bytes));
+        if(n<0 && errno==EINTR)continue;
+        if(n<0){good=0;break;}
+        if(!n)break;
+        ssize_t sent=0;
+        while(sent<n) {
+            ssize_t written=do_write(output,bytes+sent,(size_t)(n-sent));
+            if(written<0 && errno==EINTR)continue;
+            if(written<=0){good=0;break;}
+            sent+=written;
+        }
+        if(!good)break;
+    }
+    close(input);
+    if(close(output)!=0)good=0;
+    return good?0:-1;
+}
+
+static int rotate_logs(void) {
+    if (!g_log.config.log_path || g_log.config.max_files <= 0) return 0;
 
     char old_path[256], new_path[256];
 
-    /* Remove oldest */
-    snprintf(old_path, sizeof(old_path), "%s.%d",
-             g_log.config.log_path, g_log.config.max_files);
-    (void)unlink(old_path);
-
-    /* Rotate existing */
+    /* /tmp is QNX shared memory: copy bounded archives, never rename there. */
     for (int i = g_log.config.max_files - 1; i >= 1; i--) {
         snprintf(old_path, sizeof(old_path), "%s.%d", g_log.config.log_path, i);
         snprintf(new_path, sizeof(new_path), "%s.%d", g_log.config.log_path, i + 1);
-        (void)rename(old_path, new_path);
+        if(copy_log_tail(old_path,new_path)!=0)return -1;
     }
 
     /* Current becomes .1 */
     snprintf(new_path, sizeof(new_path), "%s.1", g_log.config.log_path);
-    (void)rename(g_log.config.log_path, new_path);
+    return copy_log_tail(g_log.config.log_path,new_path);
 }
 
 static void check_rotation(void) {
@@ -124,8 +151,12 @@ static void check_rotation(void) {
     if (fstat(g_log.fd, &st) == 0 && (size_t)st.st_size >= g_log.config.max_size) {
         close(g_log.fd);
         g_log.fd = -1;
-        rotate_logs();
-        g_log.fd = open(g_log.config.log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        int archived=rotate_logs();
+        g_log.fd = open(g_log.config.log_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if(archived!=0 && g_log.fd>=0) {
+            const char error[]="LOG_ROTATION=ARCHIVE_FAILED previous tail could not be retained\n";
+            (void)do_write(g_log.fd,error,sizeof(error)-1);
+        }
     }
 }
 

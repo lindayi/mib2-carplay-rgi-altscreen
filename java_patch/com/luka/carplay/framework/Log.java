@@ -11,6 +11,8 @@ package com.luka.carplay.framework;
 import java.io.FileOutputStream;
 import java.io.File;
 import java.io.PrintStream;
+import java.io.RandomAccessFile;
+import java.io.IOException;
 
 public final class Log {
     public static final int E = 0, W = 1, I = 2, D = 3;
@@ -198,9 +200,27 @@ public final class Log {
         fileBytes = 0L;
     }
 
-    private static void rotateFiles(File current) {
+    private static void rotateFiles(File current) throws IOException {
         File old = new File(FILE_OLD);
-        if (old.exists()) old.delete();
-        if (current.exists()) current.renameTo(old);
+        if (!current.exists()) return;
+        String failure=null;
+        try {copyArchive(current,old);}
+        catch(IOException e){failure="LOG_ROTATION=ARCHIVE_FAILED "+e+"\n";}
+        FileOutputStream empty=new FileOutputStream(current);
+        try {if(failure!=null)empty.write(failure.getBytes("UTF-8"));}
+        finally {empty.close();}
+    }
+    private static void copyArchive(File current,File old) throws IOException {
+        /* QNX /tmp is shared memory, not a filesystem supporting rename. */
+        RandomAccessFile input=new RandomAccessFile(current,"r");
+        try {
+            input.seek(Math.max(0L,input.length()-MAX_FILE_BYTES));
+            FileOutputStream output=new FileOutputStream(old);
+            try {
+                byte[] bytes=new byte[4096];
+                for(int n;(n=input.read(bytes))!=-1;)output.write(bytes,0,n);
+                output.flush();
+            } finally {output.close();}
+        } finally {input.close();}
     }
 }

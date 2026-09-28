@@ -4,7 +4,8 @@ import java.io.*;
 
 /** Expiring RAM-file control, written only by the settings worker. */
 public final class MascotControl {
-    private static String path="/tmp/carplay_mascot.control";
+    static final String CONTROL="/ramdisk/carplay_mascot.control";
+    static final String STATUS="/ramdisk/carplay_mascot.status";
     private MascotControl(){}
     public static void publish(int selected) throws IOException {
         if(selected<0 || selected>2)throw new IOException("Invalid map mascot");
@@ -16,14 +17,15 @@ public final class MascotControl {
             if(pid<=1)throw new IOException("Invalid mirror owner");
             if(!new File("/proc/"+pid).isDirectory()){selected=0;pid=0;}
         } else selected=0;
-        File file=new File(path), temporary=new File(path+".new");
+        File file=new File(CONTROL), temporary=new File(CONTROL+".new");
+        if(!file.getParentFile().isDirectory())throw new IOException("Mascot RAM filesystem unavailable");
         byte[] bytes=("MASCOT2 "+selected+" "+pid+" "+(System.currentTimeMillis()+4000L)+"\n").getBytes("US-ASCII");
         FileOutputStream output=new FileOutputStream(temporary);
         try {output.write(bytes);output.flush();}finally{output.close();}
-        if(!temporary.renameTo(file))throw new IOException("Cannot publish map mascot control");
+        if(!temporary.renameTo(file))throw new IOException("Cannot publish map mascot control on /ramdisk");
     }
     public static String status() throws IOException {
-        File status=new File("/tmp/carplay_mascot.status");
+        File status=new File(STATUS);
         File owner=new File("/tmp/MMI-Cockpit-Carplay.mirror.pid");
         if(!status.isFile() || !owner.isFile())return "NOT_RUNNING";
         BufferedReader reader=new BufferedReader(new StringReader(Preferences.read(status,256)));

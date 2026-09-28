@@ -26,7 +26,7 @@ public final class SettingsRuntimeTest {
         String script="#!/bin/sh\nexec > \"$2\" 2>&1\ncase \"$1\" in\n"
             +"sync_mirror) exit 0;;\n"
             +"export_summary) touch /tmp/menu-short-started; sleep 2; echo done;;\n"
-            +"export_full) touch /tmp/menu-long-started; exec sleep 60;;\n"
+            +"export_full) touch /tmp/menu-long-started; echo EXPORT_STAGE=fixture-wait; exec sleep 60;;\n"
             +"*) exit 2;;\nesac\n";
         Files.write(helper,script.getBytes("UTF-8"));
         Preferences.get().set(Setting.ENABLED,0);
@@ -35,8 +35,8 @@ public final class SettingsRuntimeTest {
         SettingsRuntime.set(Setting.TEXT_SIZE,1);
         check(System.currentTimeMillis()-start<500,"MMI callback blocked on persistence");
         awaitValue(Setting.TEXT_SIZE,1);
-        awaitFile(Paths.get("/tmp/carplay_mascot.control"));
-        check(Preferences.read(new File("/tmp/carplay_mascot.control"),96).startsWith("MASCOT2 0 0 "),
+        awaitFile(Paths.get(MascotControl.CONTROL));
+        check(Preferences.read(new File(MascotControl.CONTROL),96).startsWith("MASCOT2 0 0 "),
             "inactive session must not enable the mascot");
         SettingsRuntime.action("export_summary");
         awaitFile(Paths.get("/tmp/menu-short-started"));
@@ -63,6 +63,21 @@ public final class SettingsRuntimeTest {
         wait=System.currentTimeMillis()+50000;
         while(SettingsRuntime.busy() && System.currentTimeMillis()<wait)Thread.sleep(50);
         check(!SettingsRuntime.busy() && SettingsRuntime.result().contains("timed out"),"action timeout not surfaced");
+        String failure=Preferences.read(new File("/tmp/carplay_menu_action.failure.log"),16384);
+        check(failure.contains("action=export_full") && failure.contains("timed out")
+            && failure.contains("EXPORT_STAGE=fixture-wait"),"timeout output was discarded");
+        Files.write(helper,("#!/bin/sh\nexec > \"$2\" 2>&1\necho EXPORT_ERROR=fixture_sd_readonly\nexit 7\n").getBytes("UTF-8"));
+        SettingsRuntime.action("export_summary");
+        wait=System.currentTimeMillis()+4000;
+        while(SettingsRuntime.busy() && System.currentTimeMillis()<wait)Thread.sleep(20);
+        failure=Preferences.read(new File("/tmp/carplay_menu_action.failure.log"),16384);
+        check(failure.contains("action=export_summary") && failure.contains("returned 7")
+            && failure.contains("EXPORT_ERROR=fixture_sd_readonly"),"nonzero output was discarded");
+        Path huge=Paths.get("/tmp/menu-huge-output");
+        byte[] oversized=new byte[20000];java.util.Arrays.fill(oversized,(byte)'x');
+        Files.write(huge,oversized);
+        check(SettingsRuntime.actionTail(huge.toFile()).length()<8300,"action output tail is unbounded");
+        Files.delete(huge);
         SettingsRuntime.stop();
         Thread.sleep(250);
         Field worker=SettingsRuntime.class.getDeclaredField("settingsThread");worker.setAccessible(true);

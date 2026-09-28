@@ -11,7 +11,7 @@ import java.util.ArrayList;
 
 /** One bounded command worker; native MMI callbacks never wait on files/processes. */
 public final class SettingsRuntime {
-    private static final String SESSION="/tmp/carplay_menu_session";
+    private static final String SESSION="/ramdisk/carplay_menu_session";
     private static final String HELPER="/mnt/app/root/carplay-altscreen/bin/carplay_mmi_action.sh";
     private static final Object LOCK=new Object();
     private static final ArrayList jobs=new ArrayList();
@@ -132,7 +132,7 @@ public final class SettingsRuntime {
         }
         if(pid<=1 || enabled<0 || enabled>1 || video<0 || video>1 || verbose<0 || verbose>1
                 || configError<0 || configError>1)throw new IOException("Incomplete session status");
-        File owner=new File("/tmp/carplay_supervisor.owner");
+        File owner=new File("/ramdisk/carplay_supervisor.owner");
         boolean known=new File("/proc/"+pid).isDirectory() && owner.isFile()
             && Preferences.read(owner,32).trim().equals(Integer.toString(pid));
         return new boolean[]{known,known && enabled==1 && configError==0,
@@ -157,7 +157,7 @@ public final class SettingsRuntime {
         if(refreshLog)Log.refreshLevel();
         boolean ready=new File("/tmp/mmi-mirror-basevideo.ready").exists();
         if(ready!=readyMarker){readyMarker=ready;changed();}
-        String health=readStatusField("/tmp/MMI-Cockpit-Carplay.mirror.health","HEALTH_STATE",mirrorHealth);
+        String health=readStatusField("/ramdisk/MMI-Cockpit-Carplay.mirror.health","HEALTH_STATE",mirrorHealth);
         String context=readStatusField("/tmp/carplay_cluster.ctx","ctx",clusterContext);
         if(!health.equals(mirrorHealth) || !context.equals(clusterContext)) {
             mirrorHealth=health;clusterContext=context;changed();
@@ -172,7 +172,11 @@ public final class SettingsRuntime {
         String mascotState;
         try {
             MascotControl.publish(effective && sessionVideo && s.get(Setting.MODE)!=2?s.get(Setting.MASCOT):0);
-            mascotState=ready && sessionVideo?MascotControl.status():"NOT_RUNNING";
+            try {mascotState=ready && sessionVideo?MascotControl.status():"NOT_RUNNING";}
+            catch(IOException e) {
+                mascotState="STATUS_ERROR";
+                if(!mascotState.equals(mascotHealth))Log.e("Settings","Cannot read map mascot status",e);
+            }
         } catch(IOException e) {
             mascotState="CONTROL_ERROR";
             if(!mascotState.equals(mascotHealth))Log.e("Settings","Map mascot unavailable",e);
@@ -247,7 +251,10 @@ public final class SettingsRuntime {
                 if(!current(run))return;
                 String message=runHelper(action,run);
                 if(current(run) && !action.equals("sync_mirror"))result=message;
-            } catch(IOException e){result="Action failed: "+e.getMessage();Log.e("Settings",result,e);}
+            } catch(IOException e){
+                if(current(run))result="Action failed: "+e.getMessage();
+                Log.e("Settings","action="+action+" failed: "+e.getMessage(),e);
+            }
             finally {synchronized(LOCK){actionBusy=false;LOCK.notifyAll();}changed();}
         }},"carplay-settings-action");
         worker.setDaemon(true);
@@ -255,11 +262,11 @@ public final class SettingsRuntime {
         catch(RuntimeException e){synchronized(LOCK){actionBusy=false;}result="Cannot start action worker";Log.e("Settings",result,e);changed();}
     }
     private static String runHelper(String action,int run) throws IOException {
-        if(!new File(HELPER).isFile())throw new IOException("Matching runtime helper is not installed");
         Process process=null;
         File output;
         synchronized(LOCK){output=new File("/tmp/carplay_menu_action."+(++actionSequence)+".log");}
         try {
+            if(!new File(HELPER).isFile())throw new IOException("Matching runtime helper is not installed");
             process=Runtime.getRuntime().exec(new String[]{"/bin/sh",HELPER,action,output.getPath()});
             if(!current(run))throw new IOException("Settings service stopped");
             actionProcess=process;
@@ -275,16 +282,44 @@ public final class SettingsRuntime {
                     Thread.sleep(100);
                 }
             }
-            String text=output.isFile()?Preferences.read(output,16384):"No action output";
+            String text=actionTail(output);
             Log.i("Settings","action="+action+" rc="+rc+" "+text);
             if(rc!=0)throw new IOException("Runtime helper returned "+rc+"; see diagnostics");
             return action.startsWith("export_")?"Diagnostics saved to SD: MMI-Cockpit-Carplay/logs/exports":"Cockpit video request completed";
-        } catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException("Action interrupted");}
+        } catch(InterruptedException e){
+            Thread.currentThread().interrupt();
+            retainActionFailure(action,output,"Action interrupted");
+            throw new IOException("Action interrupted");
+        } catch(IOException e) {
+            retainActionFailure(action,output,e.getMessage());
+            throw e;
+        }
         finally {
             if(actionProcess==process)actionProcess=null;
             if(process!=null){process.destroy();try{process.getInputStream().close();process.getErrorStream().close();}catch(IOException e){Log.w("Settings","process stream close failed");}}
             if(output.exists() && !output.delete())Log.w("Settings","could not remove action output");
         }
+    }
+    static String actionTail(File output) throws IOException {
+        if(!output.isFile())return "No action output";
+        RandomAccessFile input=new RandomAccessFile(output,"r");
+        try {
+            long length=input.length();
+            int size=(int)Math.min(length,8192L);
+            input.seek(length-size);
+            byte[] bytes=new byte[size];input.readFully(bytes);
+            return (length>size?"[output tail]\n":"")+new String(bytes,"UTF-8");
+        } finally {input.close();}
+    }
+    private static void retainActionFailure(String action,File output,String reason) {
+        String detail="action="+action+" failure="+reason+"\n";
+        try {detail+=actionTail(output);}
+        catch(IOException e){detail+="Cannot read action output: "+e.getMessage();}
+        Log.e("Settings",detail);
+        try {
+            FileOutputStream saved=new FileOutputStream("/tmp/carplay_menu_action.failure.log");
+            try {saved.write(detail.getBytes("UTF-8"));saved.flush();}finally{saved.close();}
+        } catch(IOException e){Log.e("Settings","Cannot retain action failure",e);}
     }
     public static String[] status() {
         String error=Preferences.get().error();

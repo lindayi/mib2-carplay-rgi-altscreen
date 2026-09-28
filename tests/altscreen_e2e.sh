@@ -149,7 +149,11 @@ for result in HMI_CONTROL_PLANE=PASS UNIVERSAL_PRELOAD_CONFIG=ARMED RGI_NATIVE=I
 dd if=/dev/zero bs=1000 count=300 2>/dev/null | tr '\000' x > "$ROOT/tmp/carplay_java.log"
 printf '\nPRIVATE_DESTINATION_TEST\n' >> "$ROOT/tmp/carplay_java.log"
 printf 'ctx=81\nvideo=1\nnav=1\ntime_ms=123\naddress=PRIVATE_DESTINATION_TEST\n' > "$ROOT/tmp/carplay_cluster.ctx"
-printf 'HEALTH_STATE=VIDEO_PROGRESS\nHEALTH_RESTART_COUNT=0\n' > "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.health"
+mkdir -p "$ROOT/ramdisk"
+printf 'HEALTH_STATE=VIDEO_PROGRESS\nHEALTH_RESTART_COUNT=0\n' > "$ROOT/ramdisk/MMI-Cockpit-Carplay.mirror.health"
+printf 'action=export_full failure=fixture\nPRIVATE_FAILURE_DETAIL\n' > "$ROOT/tmp/carplay_menu_action.failure.log"
+printf 'PRIVATE_ROTATED_LOG\n' > "$ROOT/tmp/carplay_java.log.1"
+printf 'pid=123\nstate=QUEUED\nexpires=123\nprivate=PRIVATE_FAILURE_DETAIL\n' > "$ROOT/ramdisk/carplay_mascot.status"
 run status-health "$SCRIPTS/status_mmi_cockpit_carplay_test.sh"
 need status-health 'HEALTH_STATE=VIDEO_PROGRESS'
 (cd "$ROOT" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/before-export"
@@ -157,10 +161,14 @@ need status-health 'HEALTH_STATE=VIDEO_PROGRESS'
 run export-only "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
 need export-only 'EXPORT=PASS no_restore=YES no_restart=YES'
 absent export-only 'PRIVATE_DESTINATION_TEST'
+absent export-only 'PRIVATE_FAILURE_DETAIL'
+need export-only 'MASCOT_REPORTED_STATE=QUEUED'
 exports=$VOL/MMI-Cockpit-Carplay/logs/exports
 exported=$(find "$exports" -mindepth 1 -maxdepth 1 -type d)
 test -n "$exported"
 grep -Fq 'PRIVATE_DESTINATION_TEST' "$exported/private/carplay_java.log"
+grep -Fq 'PRIVATE_FAILURE_DETAIL' "$exported/private/carplay_menu_action.failure.log"
+grep -Fq 'PRIVATE_ROTATED_LOG' "$exported/private/carplay_java.log.1"
 test "$(wc -c < "$exported/private/carplay_java.log")" -eq 262144
 test ! -e "$exported/lsd.jxe"
 run export-again "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"

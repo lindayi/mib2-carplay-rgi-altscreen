@@ -64,15 +64,24 @@ summary(){
     marker MIRROR_ENABLED "$STATE/basevideo3.enabled"
     marker VIDEO_DEMAND "$ROOT/tmp/mmi-mirror-active"
     marker FIRST_PRESENT_MARKER "$ROOT/tmp/mmi-mirror-basevideo.ready"
+    marker MASCOT_RAMDISK "$ROOT/ramdisk"
+    marker MASCOT_CONTROL "$ROOT/ramdisk/carplay_mascot.control"
+    marker MASCOT_STATUS "$ROOT/ramdisk/carplay_mascot.status"
+    if [ -r "$ROOT/ramdisk/carplay_mascot.status" ]; then
+        tail -c 256 "$ROOT/ramdisk/carplay_mascot.status" | awk \
+            '/^state=(OFF|CONTROL_STALE|QUEUED|RACCOON|NIAN|ASSET_ERROR|GRAPHICS_ERROR)$/ {
+                print "MASCOT_REPORTED_STATE=" substr($0,7)
+            }'
+    fi
     marker EXPLICIT_STOP "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.stop.requested"
     marker RGI_HOOK "$ROOT/mnt/app/root/hooks/libcarplay_hook.so"
     pid_state MIRROR "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.pid"
-    pid_state MANEUVER_RENDERER "$ROOT/tmp/carplay_maneuver_render.pid"
+    pid_state MANEUVER_RENDERER "$ROOT/ramdisk/carplay_maneuver_render.pid"
     if [ -r "$ROOT/tmp/carplay_cluster.ctx" ]; then
         awk '/^(ctx|video|nav|time_ms)=[0-9]+$/' "$ROOT/tmp/carplay_cluster.ctx"
     else echo "CLUSTER_CONTEXT=UNKNOWN"; fi
-    if [ -r "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.health" ]; then
-        sed -n '/^HEALTH_[A-Z_]*=[A-Za-z0-9_]*$/p' "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.health"
+    if [ -r "$ROOT/ramdisk/MMI-Cockpit-Carplay.mirror.health" ]; then
+        sed -n '/^HEALTH_[A-Z_]*=[A-Za-z0-9_]*$/p' "$ROOT/ramdisk/MMI-Cockpit-Carplay.mirror.health"
     else echo "HEALTH_STATE=UNKNOWN"; fi
     if [ -r "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.log" ]; then
         tail -c 65536 "$ROOT/tmp/MMI-Cockpit-Carplay.mirror.log" | awk '
@@ -109,7 +118,8 @@ Missing logs are reported explicitly and may be normal for a quiet or new sessio
 PRIVACY
 [ "$?" -eq 0 ] || { echo "FAIL: cannot write privacy notice"; exit 1; }
 : > "$OUT/FILES.txt" || { echo "FAIL: cannot write file inventory"; exit 1; }
-LOGS="carplay_java.log carplay_hook.log maneuver_render.log carplay_wrapper.log \
+LOGS="carplay_java.log carplay_java.log.1 carplay_hook.log carplay_hook.log.1 \
+    carplay_menu_action.failure.log maneuver_render.log carplay_wrapper.log \
     MMI-Cockpit-Carplay.altscreen_hook.log altscreen_hook.log CinemoDioManager.log \
     MMI-Cockpit-Carplay.mirror.log MMI-Cockpit-Carplay.mirror.autorestart.log \
     MMI-Cockpit-Carplay.mirror.autostart.log MMI-Cockpit-Carplay.boot_entry.log mmi-mirror-controller.log"
@@ -131,7 +141,7 @@ for name in $LOGS; do
 done
 printf 'LOGS_COPIED=%s\nLOGS_MISSING=%s\nLOG_ERRORS=%s\n' "$COPIED" "$MISSING" "$ERRORS" >> "$OUT/SUMMARY.txt" || exit 1
 (cd "$OUT" && cksum SUMMARY.txt PRIVACY.txt FILES.txt > CKSUMS.txt &&
-    for file in private/*.log; do [ ! -f "$file" ] || cksum "$file" >> CKSUMS.txt || exit 1; done) ||
+    for file in private/*; do [ ! -f "$file" ] || cksum "$file" >> CKSUMS.txt || exit 1; done) ||
     { echo "FAIL: cannot checksum export"; exit 1; }
 sync || { echo "FAIL: export sync failed; keep the SD card inserted"; exit 1; }
 cat "$OUT/SUMMARY.txt"

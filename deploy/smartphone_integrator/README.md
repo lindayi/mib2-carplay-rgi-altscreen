@@ -36,14 +36,14 @@ Lifecycle semantics:
   fail to the disabled path. Session ownership/options are published atomically
   for the Java menu; changing negotiation requires a new CarPlay session, not MMI reboot.
 - `carplay_startup.sh` checks `dio_manager`, the hook and both helper scripts,
-  atomically writes its PID to `/tmp/carplay_supervisor.owner`, starts
+  atomically writes its PID to `/ramdisk/carplay_supervisor.owner`, starts
   `carplay_monitor.sh` in the background with `LD_PRELOAD` cleared, then `exec`s
   `dio_manager`, so smartphone_integrator tracks the exact dio PID;
 - the monitor acts only while the owner file names its dio PID and that PID is
   alive; a newer generation takes over by rewriting the file;
 - if `maneuver_render` already exists it is adopted, not restarted; an adopted
   renderer that fails the identity check is re-checked after 2 s, then replaced;
-- the renderer PID is kept in `/tmp/carplay_maneuver_render.pid`; one finite
+- the renderer PID is kept in `/ramdisk/carplay_maneuver_render.pid`; one finite
   `pidin ar` scan adopts a renderer from an older generation, then the monitor uses
   constant-time `/proc/<pid>` checks every 2 s;
 - only a missing/crashed renderer is restarted, after a 5 s backoff;

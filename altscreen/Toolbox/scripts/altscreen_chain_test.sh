@@ -387,10 +387,16 @@ cleanup_volatile_runtime(){
         }
     fi
     tmp_root="$(p /tmp)"
+    ram_root="$(p /ramdisk)"
     for path in "$tmp_root"/MMI-Cockpit-Carplay.mirror.* \
                 "$tmp_root"/MMI-Cockpit-Carplay.diag.* \
                 "$tmp_root"/MMI-Cockpit-Carplay.startup.* \
                 "$tmp_root"/MMI-Cockpit-Carplay.lock.boot_token* \
+                "$ram_root"/MMI-Cockpit-Carplay.lock.boot_token* \
+                "$ram_root"/MMI-Cockpit-Carplay.mirror.health* \
+                "$ram_root"/carplay_menu_session* \
+                "$ram_root"/carplay_supervisor.owner* \
+                "$ram_root"/carplay_maneuver_render.pid* \
                 "$tmp_root"/MMI-Cockpit-Carplay.boot_entry.log \
                 "$tmp_root"/MMI-Cockpit-Carplay.altscreen_hook.log \
                 "$tmp_root"/altscreen_hook.log \
@@ -399,6 +405,10 @@ cleanup_volatile_runtime(){
                 "$tmp_root"/carplay_mascot.control.new \
                 "$tmp_root"/carplay_mascot.status \
                 "$tmp_root"/carplay_mascot.status.*.new \
+                "$ram_root"/carplay_mascot.control \
+                "$ram_root"/carplay_mascot.control.new \
+                "$ram_root"/carplay_mascot.status \
+                "$ram_root"/carplay_mascot.status.*.new \
                 "$tmp_root"/mmi-mirror-active \
                 "$tmp_root"/mmi-mirror-basevideo.ready \
                 "$tmp_root"/mmi-mirror-controller.started \
@@ -414,7 +424,7 @@ cleanup_volatile_runtime(){
             return 1
         }
     done
-    echo "VOLATILE_RUNTIME_CLEANUP=PASS path=/tmp project_files_and_legacy_directory"
+    echo "VOLATILE_RUNTIME_CLEANUP=PASS paths=/tmp,/ramdisk project_files_and_legacy_directory"
     return 0
 }
 

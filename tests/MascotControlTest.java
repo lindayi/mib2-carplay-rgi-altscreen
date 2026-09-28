@@ -15,7 +15,10 @@ public final class MascotControlTest {
     public static void main(String[] args) throws Exception {
         check(new File("/.dockerenv").exists() && !new File("/proc/boot").exists(),"Docker only");
         Path owner=Paths.get("/tmp/MMI-Cockpit-Carplay.mirror.pid");
-        Path control=Paths.get("/tmp/carplay_mascot.control"),status=Paths.get("/tmp/carplay_mascot.status");
+        Path control=Paths.get(MascotControl.CONTROL),status=Paths.get(MascotControl.STATUS);
+        Files.createDirectories(control.getParent());
+        check(!control.toString().startsWith("/tmp/") && !status.toString().startsWith("/tmp/"),
+            "atomic snapshots cannot use QNX shared memory");
         check(!Files.exists(owner) && !Files.exists(status),"fixture paths occupied");
         String pid=ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
         try {

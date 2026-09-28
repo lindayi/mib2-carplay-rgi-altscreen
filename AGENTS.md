@@ -104,6 +104,33 @@ Earlier JSON reports are historical, not necessarily the current build.
   installed JAR build ID was not captured; installed mascot artifacts and execution
   are established, while the card package identity is independently verified.
 
+### Platform-contract corrections after that trial
+
+- Source repairs are host-verified, not card-deployed or vehicle-confirmed.
+  The failed `c8ec3e7` card package must not be confused with corrected source.
+- Native menu notifications use stock `RunnableEvent` and the HMI
+  `EventDispatcher`; coalesce per connected-menu generation. Never rebuild in
+  `managePaint`, or repaint during a row's failure callback. Queue cleanup too.
+  Strict native-constructor tests alone do not establish thread affinity.
+- The vehicle has an existing `/ramdisk` QNX4 RAM filesystem. Atomic volatile
+  snapshots belong there: mascot control/status, supervisor owner, receiver
+  session, renderer PID, mirror health and operation-lock boot token. Keep all
+  producers, readers, status/export and cleanup paths aligned. Do not fall back
+  to `/tmp` rename, delete-before-rename, persistent flash, or runtime remounts.
+- Ordinary `/tmp` logs use bounded copy/truncate rotation, not rename; archive
+  failures must leave an explicit diagnostic rather than allow unbounded growth.
+  Persistent preferences and cover-art publication are on regular filesystems
+  and retain their atomic rename contracts.
+- Mascot status-write diagnostics include stage/errno/path and throttle identical
+  failures to 30 seconds. A blocked control worker must lose its render-side
+  lease after one second; a live video stream cannot keep a stale selection alive.
+- Retain failed action output at ERROR and in a bounded private failure log,
+  including timeouts/nonzero exits. Full export includes it and rotated logs;
+  summary export must not leak that detail.
+- Regression fixtures explicitly reject `/tmp` rename/move, exercise actual
+  stock `RunnableEvent`s, stale queued generations and a stalled control reader.
+  Linux `/tmp` success is not evidence of the QNX shared-memory contract.
+
 As reported by the owner on **2026-09-27**:
 
 - Navigation text and next-turn distance **work in the car**.
@@ -244,7 +271,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   the monitor on the **next CarPlay session**. It is not an uninstall.
 - Audi-map mode's next session retains RGI but omits the AltScreen preload.
   Switching back from such a session needs reconnect.
-- `/tmp/carplay_menu_session` and `/tmp/carplay_supervisor.owner` distinguish the
+- `/ramdisk/carplay_menu_session` and `/ramdisk/carplay_supervisor.owner` distinguish the
   requested preference from the actual receiver session. Do not report a stale
   process/session record as active.
 - Reset preserves master enable state, Audi settings, pairing and installation.

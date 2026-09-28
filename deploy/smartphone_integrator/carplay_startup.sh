@@ -6,10 +6,10 @@
 DIODIR=${DIODIR:-/mnt/app/eso/bin/apps}
 H=${H:-/mnt/app/root/hooks}
 WLOG=${WLOG:-/tmp/carplay_wrapper.log}
-OWNER_FILE=${OWNER_FILE:-/tmp/carplay_supervisor.owner}
+OWNER_FILE=${OWNER_FILE:-/ramdisk/carplay_supervisor.owner}
 DIO_PID=$$
 MONITOR_PID=
-MENU_SESSION_FILE=${MENU_SESSION_FILE:-/tmp/carplay_menu_session}
+MENU_SESSION_FILE=${MENU_SESSION_FILE:-/ramdisk/carplay_menu_session}
 MENU_VERBOSE_FILE=${MENU_VERBOSE_FILE:-/tmp/carplay_menu_verbose}
 
 # A disabled next session executes the original receiver without our preloads.

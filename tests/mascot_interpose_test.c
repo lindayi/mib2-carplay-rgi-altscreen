@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static char control[512],status_path[512],ready[512];
@@ -41,11 +42,17 @@ static void unchanged(void) {
 int main(int argc,char **argv) {
     assert(argc==3);
     int missing=!strcmp(argv[2],"missing");
+    int status_error=!strncmp(argv[2],"status-",7);
     char directory[]="/tmp/mascot-XXXXXX";assert(mkdtemp(directory));
-    snprintf(control,sizeof(control),"%s/control",directory);
-    snprintf(status_path,sizeof(status_path),"%s/status",directory);
+    snprintf(control,sizeof(control),"/ramdisk/carplay_mascot.control");
+    snprintf(status_path,sizeof(status_path),"/ramdisk/carplay_mascot.status");
     snprintf(ready,sizeof(ready),"%s/ready",directory);
-    setenv("CARPLAY_MASCOT_CONFIG",control,1);setenv("CARPLAY_MASCOT_STATUS",status_path,1);
+    unsetenv("CARPLAY_MASCOT_CONFIG");unsetenv("CARPLAY_MASCOT_STATUS");
+    if(status_error) {
+        snprintf(status_path,sizeof(status_path),"%s/%sstatus",directory,
+            !strcmp(argv[2],"status-open")?"missing/":"");
+        setenv("CARPLAY_MASCOT_STATUS",status_path,1);
+    }
     setenv("ALT111_MIRROR_BASE_READY_FILE",ready,1);setenv("CARPLAY_MASCOT_ATLAS",missing?"/missing-mascot-atlas":argv[1],1);
     int (*count)(void)=(int (*)(void))dlsym(RTLD_DEFAULT,"mascot_swap_count");
     void (*fail)(int)=(void (*)(int))dlsym(RTLD_DEFAULT,"mascot_swap_fail");assert(count && fail);
@@ -59,9 +66,15 @@ int main(int argc,char **argv) {
     assert(eglMakeCurrent(display,surface,surface,context));
     glViewport(0,0,512,256);glClearColor(.1,.2,.3,1);glClear(GL_COLOR_BUFFER_BIT);
     glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,baseline);
-    publish(1,getpid(),4000);await("state=OFF\n");unchanged();
+    publish(1,getpid(),4000);
+    if(!status_error){await("state=OFF\n");unchanged();}
     FILE *f=fopen(ready,"w");assert(f);fclose(f);
-    if(missing) {
+    if(status_error) {
+        unsigned long long end=now()+2500;
+        while(now()<end){present();usleep(20000);}
+        glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,frame);
+        assert(memcmp(baseline,frame,sizeof(frame)));
+    } else if(missing) {
         await("state=ASSET_ERROR\n");unchanged();
     } else {
         await("state=RACCOON\n");
@@ -85,10 +98,17 @@ int main(int argc,char **argv) {
         publish(1,getpid(),-1);await("state=CONTROL_STALE\n");unchanged();
         publish(1,getpid(),4000);await("state=RACCOON\n");
         assert(unlink(ready)==0);await("state=OFF\n");unchanged();
+        f=fopen(ready,"w");assert(f);fclose(f);
+        publish(1,getpid(),4000);await("state=RACCOON\n");
+        char fifo[520];snprintf(fifo,sizeof(fifo),"%s.fifo",control);
+        assert(mkfifo(fifo,0600)==0);assert(rename(fifo,control)==0);
+        usleep(1300000);unchanged();
     }
     assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(display,context));assert(eglDestroySurface(display,surface));assert(eglTerminate(display));
-    puts(missing?"Mascot missing-assets isolation: PASS":
-        "Mascot real EGL interposition, switch, PID/expiry/ready gates, context recreation, swap failure/no extra swaps: PASS");
+    unlink(control);unlink(status_path);unlink(ready);rmdir(directory);
+    puts(status_error?"Mascot status I/O failure does not block real EGL rendering: PASS":
+        missing?"Mascot missing-assets isolation: PASS":
+        "Mascot real EGL interposition, QNX volatile contract, stalled-worker expiry, PID/ready gates and context recreation: PASS");
     return 0;
 }

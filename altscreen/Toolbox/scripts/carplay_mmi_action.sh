@@ -18,6 +18,8 @@ fi
 RUNTIME="$ROOT/mnt/app/root/carplay-altscreen"
 HOOKS="$ROOT/mnt/app/root/hooks"
 TMP="$ROOT/tmp"
+STATE_ROOT="$ROOT/ramdisk"
+export ALT111_STATE_ROOT="$STATE_ROOT"
 SETTINGS="$HOOKS/carplay_settings.sh"
 CP_SETTINGS_FILE="$ROOT/mnt/persist/var/app/carplay_altscreen/preferences"
 ACTIVE="$TMP/mmi-mirror-active"
@@ -41,13 +43,13 @@ esac
 export CP_SETTINGS_FILE
 enabled=$(cp_setting enabled 1) || exit 1
 mode=$(cp_setting mode 0) || exit 1
-session="$TMP/carplay_menu_session"
+session="$STATE_ROOT/carplay_menu_session"
 session_video(){
     [ -r "$session" ] || return 1
     session_pid=$(sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' "$session")
     case "$session_pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
     kill -0 "$session_pid" 2>/dev/null &&
-        [ "$(cat "$TMP/carplay_supervisor.owner" 2>/dev/null)" = "$session_pid" ] &&
+        [ "$(cat "$STATE_ROOT/carplay_supervisor.owner" 2>/dev/null)" = "$session_pid" ] &&
         grep -q '^enabled=1$' "$session" && grep -q '^video=1$' "$session" &&
         grep -q '^config_error=0$' "$session"
 }

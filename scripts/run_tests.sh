@@ -87,6 +87,14 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -lpthread -ldl -o "$OUT/state_trace_logger"
 "$OUT/state_trace_logger" && echo OK
 
+printf '%-32s ' log_rotation_test
+cc -std=gnu99 -O2 -Wall -Wextra -Werror -Ihook \
+    -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
+    tests/log_rotation_test.c hook/framework/logging.c \
+    -Wl,--wrap=rename -lpthread -ldl -o "$OUT/log_rotation"
+"$OUT/log_rotation"
+"$OUT/log_rotation" archive-failure
+
 printf '%-32s ' local_protocols
 python3 scripts/check_local_protocols.py
 

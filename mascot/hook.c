@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <errno.h>
 
 typedef EGLBoolean (*swap_function)(EGLDisplay,EGLSurface);
 typedef EGLBoolean (*destroy_function)(EGLDisplay,EGLContext);
@@ -23,6 +24,7 @@ static unsigned previous;
 static uint64_t animation_start;
 static int graphics_failed;
 static uint64_t retry_after;
+static uint64_t control_deadline;
 
 static uint64_t monotonic_ms(void) {
     struct timespec t;
@@ -40,25 +42,37 @@ static const char *setting_path(const char *key,const char *fallback) {
 }
 static void status(const char *state,int announce) {
     if(announce)fprintf(stderr,"MASCOT=%s\n",state);
-    const char *path=setting_path("CARPLAY_MASCOT_STATUS","/tmp/carplay_mascot.status");
+    const char *path=setting_path("CARPLAY_MASCOT_STATUS","/ramdisk/carplay_mascot.status");
     char temporary[512];
     int n=snprintf(temporary,sizeof(temporary),"%s.%ld.new",path,(long)getpid());
     if(n<0 || (size_t)n>=sizeof(temporary)) {
         fprintf(stderr,"MASCOT=STATUS_PATH_ERROR\n");return;
     }
+    static int last_error;
+    static const char *last_stage="";
+    static uint64_t last_report;
+    int error=0;
+    const char *stage="open";
     FILE *file=fopen(temporary,"w");
-    if(!file){fprintf(stderr,"MASCOT=STATUS_WRITE_ERROR\n");return;}
-    int good=fprintf(file,"pid=%ld\nstate=%s\nexpires=%llu\n",(long)getpid(),state,
-        (unsigned long long)(wall_ms()+4000))>0;
-    if(fclose(file)!=0)good=0;
-    if(!good || rename(temporary,path)!=0) {
-        fprintf(stderr,"MASCOT=STATUS_WRITE_ERROR\n");
-        unlink(temporary);
+    if(!file)error=errno;
+    else {
+        stage="write";
+        if(fprintf(file,"pid=%ld\nstate=%s\nexpires=%llu\n",(long)getpid(),state,
+            (unsigned long long)(wall_ms()+4000))<0)error=errno;
+        if(fclose(file)!=0 && !error){stage="close";error=errno;}
+        if(!error && rename(temporary,path)!=0){stage="rename";error=errno;}
+        if(error)unlink(temporary);
     }
+    uint64_t now=monotonic_ms();
+    if(error && (error!=last_error || strcmp(stage,last_stage) || now-last_report>=30000)) {
+        fprintf(stderr,"MASCOT=STATUS_WRITE_ERROR stage=%s errno=%d path=%s\n",stage,error,path);
+        last_report=now;
+    } else if(!error && last_error)fprintf(stderr,"MASCOT=STATUS_WRITE_RECOVERED\n");
+    last_error=error;last_stage=stage;
 }
 static void *control_loop(void *unused) {
     (void)unused;
-    const char *config=setting_path("CARPLAY_MASCOT_CONFIG","/tmp/carplay_mascot.control");
+    const char *config=setting_path("CARPLAY_MASCOT_CONFIG","/ramdisk/carplay_mascot.control");
     const char *ready=setting_path("ALT111_MIRROR_BASE_READY_FILE","/tmp/mmi-mirror-basevideo.ready");
     const char *atlas=setting_path("CARPLAY_MASCOT_ATLAS","/mnt/app/root/carplay-altscreen/bin/mirror/mascots.rgba");
     int attempted=0;
@@ -85,6 +99,7 @@ static void *control_loop(void *unused) {
         int choice=next>0 && loaded?next:0;
         if(choice!=selected)render_state=0;
         selected=choice;
+        control_deadline=choice?monotonic_ms()+1000:0;
         int rendered=render_state;
         pthread_mutex_unlock(&lock);
         const char *state=next<0?"CONTROL_STALE":next==0?"OFF":!loaded?"ASSET_ERROR":
@@ -114,7 +129,9 @@ __attribute__((visibility("default")))
 EGLBoolean eglSwapBuffers(EGLDisplay display,EGLSurface surface) {
     pthread_once(&once,initialize);
     if(!real_swap)return EGL_FALSE;
-    pthread_mutex_lock(&lock);unsigned choice=(unsigned)selected;pthread_mutex_unlock(&lock);
+    pthread_mutex_lock(&lock);
+    unsigned choice=monotonic_ms()<control_deadline?(unsigned)selected:0;
+    pthread_mutex_unlock(&lock);
     EGLContext context=eglGetCurrentContext();
     if(choice && context!=EGL_NO_CONTEXT && surface!=EGL_NO_SURFACE
             && eglGetCurrentDisplay()==display && eglGetCurrentSurface(EGL_DRAW)==surface) {

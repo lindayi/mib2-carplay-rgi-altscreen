@@ -33,7 +33,7 @@ RGI_HOOKS="$DEVICE_ROOT/mnt/app/root/hooks"
 MIRROR="$RUNTIME/bin/mirror"
 MIRROR_PID="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.pid"
 MIRROR_LOG="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.log"
-MIRROR_HEALTH="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.mirror.health"
+MIRROR_HEALTH="$DEVICE_ROOT/ramdisk/MMI-Cockpit-Carplay.mirror.health"
 EXPECTED_SIZE=@CARPLAY_JAR_SIZE@
 EXPECTED_CKSUM=@CARPLAY_JAR_CKSUM@
 
@@ -236,7 +236,7 @@ else
    echo "HEALTH_STATE=UNKNOWN"
 fi
 [ -f "$DEVICE_ROOT/tmp/carplay_hook.log" ] && echo "RGI_HOOK_LOG=PRESENT" || echo "RGI_HOOK_LOG=ABSENT (hook not loaded in dio_manager this boot)"
-RGI_RENDER_PID=$(cat "$DEVICE_ROOT/tmp/carplay_maneuver_render.pid" 2>/dev/null)
+RGI_RENDER_PID=$(cat "$DEVICE_ROOT/ramdisk/carplay_maneuver_render.pid" 2>/dev/null)
 if [ -n "$RGI_RENDER_PID" ] && [ -d "$DEVICE_ROOT/proc/$RGI_RENDER_PID" ]; then echo "RGI_RENDERER=RUNNING pid=$RGI_RENDER_PID"; else echo "RGI_RENDERER=NOT_RUNNING (starts with a CarPlay session)"; fi
 
 # V2 vehicle display readiness is driven by the Screen-linearized decoded path.
