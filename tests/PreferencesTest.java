@@ -99,20 +99,20 @@ public final class PreferencesTest {
         catch(IOException expected){}
         check(Arrays.equals(before,Files.readAllBytes(file.toPath())),"failed write preserves prior settings");
         for(String page:new String[]{"root","presentation","information","guidance","appearance","controls","diagnostics","recovery","status","confirm:reset","confirm:export_full","confirm:restart_video"}) {
-            MenuModel.Row[] rows=MenuModel.rows(page,preferences.snapshot(),new String[]{"Build test"},"Ready");
-            check(rows.length>1 && rows[0].target.equals("back"),"back navigation on "+page);
+            MenuModel.Row[] rows=MenuModel.page(page,preferences.snapshot(),new String[]{"Build test"},"Ready").rows;
+            check(rows.length>0 && rows[0].target.equals("back"),"back navigation on "+page);
             for(MenuModel.Row row:rows)check(!row.target.contains("reboot") && !row.target.contains("restore"),"no maintenance action");
         }
         for(int id=0;id<Setting.ALL.length;id++) {
-            MenuModel.Row[] rows=MenuModel.rows("choice:"+id,preferences.snapshot(),new String[0],"Ready");
-            check(rows.length==Setting.ALL[id].choices.length+3,"all validated choices shown");
+            MenuModel.Row[] rows=MenuModel.page("choice:"+id,preferences.snapshot(),new String[0],"Ready").rows;
+            check(rows.length==Setting.ALL[id].choices.length+1,"all validated choices shown");
         }
         check(MenuModel.parent("choice:"+Setting.MODE).equals("root"),"presentation control returns to root");
         check(MenuModel.parent("choice:"+Setting.INFO_DEFAULT).equals("information"),"information Back");
         check(MenuModel.parent("choice:"+Setting.PRESET).equals("appearance"),"preset Back");
         check(MenuModel.parent("choice:"+Setting.MASCOT).equals("appearance"),"mascot Back");
         boolean mode=false,reapply=false;
-        for(MenuModel.Row row:MenuModel.rows("root",preferences.snapshot(),new String[0],"Ready")) {
+        for(MenuModel.Row row:MenuModel.page("root",preferences.snapshot(),new String[0],"Ready").rows) {
             mode|=row.target.equals("choice:"+Setting.MODE);
             reapply|=row.target.equals("action:reapply_layout");
         }

@@ -6,10 +6,11 @@ Target: this owner's 2020 Q5, MHI2Q_US_AUG22_P5145 / MU1316 only.
 > card produced no mascot and `CONTROL_ERROR`; the owner reported the whole MMI
 > freezing, including physical buttons. Boot logs show failed control-file
 > publication and native HMI rendering attempted from the settings worker
-> (`EGL_BAD_CONTEXT`). The source corrections below have host regression coverage,
-> but have not been deployed to the card or confirmed in the car. Avoid the custom
-> settings page in the installed release; mascot Off alone does not correct its
-> worker-thread repaint problem. Host results are not vehicle validation.
+> (`EGL_BAD_CONTEXT`). The threading/filesystem repairs were copied to SD in
+> `03d0b8d`; installation and vehicle behavior have not been confirmed. The menu
+> presentation changes below are later work, not part of that earlier card.
+> Avoid the custom settings page on `c8ec3e7`; mascot Off alone does not correct
+> its worker-thread repaint problem. Host results are not vehicle validation.
 
 ## Entry and implementation
 
@@ -29,6 +30,40 @@ The woven OEM class is generated from the owner's private JAR into ignored build
 output. It is not copied into the source repository. Do not relax the fingerprint
 guard to make an unrelated firmware build pass.
 
+### Menu layers and navigation
+
+The selectable list contains controls only: switches, exclusive choices,
+submenus and actions. Page titles, help, results and status values are not
+disabled or label-shaped menu options.
+
+- Audi's existing title bar shows **Carplay Altscreen** and the current page.
+  The original title models and menu bounds are restored on exit or failure.
+- Switches use native checkboxes; exclusive choices use native radio buttons.
+  Choice pages initially focus the selected value. Back restores the parent
+  selection, and status notifications preserve focus when a switch changes.
+- Explanations use Audi's native focused-item infoline. Reconnect instructions
+  are help/notice text, not suffixes appended to selectable labels.
+- A separate, non-menu native label below the list shows the last result and
+  any pending CarPlay reconnect. A long result directs the owner to
+  **Status & diagnostics -> Last result**, where the complete message remains
+  available, including failures.
+- **System status** and **Last result** use a read-only text area above their
+  Back/Previous page/Next page controls. Page numbers appear in the title bar.
+  Previous/Next wrap around, and are disabled when there is only one page.
+- Confirmation warnings occupy the read-only area, separately from **Cancel**
+  and the specifically named action. Initial focus is Cancel. A warning that
+  cannot fit the native viewport is an extension error, not silently clipped.
+
+Text and controls divide the existing stock content bounds using live native
+font/row measurements. Status paging windows the native wrapped lines, rather
+than truncating the underlying message. No new graphics context, custom font,
+hard-coded screen overlay position or firmware-factory substitution is added.
+The text layer is attached only in the queued HMI refresh, after stock tree
+connection, and is hidden/reused across disconnects. Stock parent teardown caches
+its child count, so removing a sibling inside that traversal is unsafe.
+No widget-tree changes occur in paint or in the parent's disconnect traversal.
+These are main-MMI changes; they do not enable the separate VC menu prototype.
+
 ## Settings and application
 
 | Group | Controls | Application |
@@ -42,7 +77,7 @@ guard to make an unrelated firmware build pass.
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
 | Appearance | Map mascot: Off / Raccoon / Nian | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
 | Controls | CarPlay wheel zoom and speed; touchpad DPAD bridge and sensitivity | Live. Disabling the touchpad bridge restores stock raw-pad forwarding; ordinary knob input remains stock. |
-| Diagnostics | Read-only status, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
+| Diagnostics | Read-only status and last result, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
 | Recovery | Automatic mirror recovery; confirmed video-only restart | Live, but only for an installed, armed video-enabled session. No USB, dio_manager or MMI restart command is exposed. |
 | Reset | Reset display/control preferences | Confirmation required. Keeps master On/Off, Audi settings, phone pairing and installation. |
 
@@ -194,6 +229,14 @@ A filesystem fault fixture rejects `/tmp` rename while allowing ordinary
 read/write. Java logger rotation and production shell snapshot paths are tested
 against that contract; nonzero/timeout action output must remain diagnosable.
 
+`NativeMenuPresentationTest` checks action-only rows, native radio selection
+semantics, initial/restored focus, separate text/control bounds, all pages of
+long status messages, confirmation-fit rejection, OEM title/bounds restoration
+and a stable parent child list across repeated disconnect/reconnect cycles.
+Its font metrics are simulated; it does not emulate Audi's graphics service or
+establish final vehicle readability. The production renderer uses native fonts
+and wrapping. Deferred fallback cleanup also has an HMI-thread regression.
+
 Existing Java/renderer tests cover overlay option messages, reconnect replay and
 input behavior. `./scripts/test_route_labels.sh` renders real GLES previews of
 large text, scrolling, hidden lanes and the three named presets. Route tests cover
@@ -221,8 +264,7 @@ Do not describe the host tests as full vehicle validation.
 
 ## Proposed Virtual Cockpit access
 
-The separate [VC quick-settings prototype](vc-quick-settings.md) removes hints
-and status text from the selectable list and explores a right-aligned,
+The separate [VC quick-settings prototype](vc-quick-settings.md) explores a right-aligned,
 Audi-inspired panel. It is not linked into the vehicle runtime: live wheel
 ownership must be established before enabling an opening shortcut. The current
 Navigation Settings entry remains the installed access path.

@@ -251,6 +251,19 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   The woven OEM class goes only into ignored build output.
 - Reuse native widgets/fonts/focus and preserve OEM rows/model bindings. Hide those
   rows only while our submenu is open. Keep action labels and reconnect state truthful.
+- Main-MMI `MenuModel.Page` separates titles/information from actionable rows.
+  `CarplayMenuChrome` uses the existing title bar and a non-menu native label;
+  restore the original title models/bounds on exit and hide/reuse the label on disconnect.
+  Stock `AbstractWidget.propagateDisconnecting()` caches the child count; removing a
+  sibling during teardown can throw or skip OEM widgets. Attach sibling widgets only
+  in queued HMI refresh, never during stock tree connection.
+- Stock `MultiLineLabelRendererHigh` defaults to no wrapping; select
+  `StringUtility.WRAP_MODE_STANDARD`. It applies `maxLines` before `firstVisibleLine`.
+  For complete status paging, keep `maxLines=0` and window the wrapped lines afterward;
+  use native font/row measurements to prevent text overlapping the controls.
+- Native radio rows compare their model value with their widget ID, not Boolean 1.
+  Preserve focus by action/setting identity, not by the switch's changing value.
+  Presentation tests use simulated font metrics; they are not Audi graphics validation.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.

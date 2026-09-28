@@ -6,6 +6,7 @@ import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuController;
 import de.audi.atip.hmi.event.EventDispatcher;
 import de.audi.atip.hmi.event.RunnableEvent;
 import java.util.ArrayList;
+import java.util.Hashtable;
 
 /** Decorates only the stock front Navigation Settings menu. OEM rows stay bound. */
 public class CarplayMenuController extends MenuController implements SettingsRuntime.Listener {
@@ -22,6 +23,9 @@ public class CarplayMenuController extends MenuController implements SettingsRun
     private long generation;
     private boolean updateQueued;
     private volatile EventDispatcher dispatcher;
+    private CarplayMenuChrome chrome;
+    private final Hashtable pageFocus=new Hashtable();
+    private int textPage;
 
     protected void initializeWidget() {
         super.initializeWidget();
@@ -41,7 +45,7 @@ public class CarplayMenuController extends MenuController implements SettingsRun
         if(entry==null) {
             Object[] children=getChildren().toArray();
             for(int i=0;i<children.length;i++)if(super.isMenuItem((AbstractWidget)children[i]))original.add(children[i]);
-            entry=new CarplayMenuItem(this,new MenuModel.Row("Carplay Altscreen","root",-1,0,false,false,false),990000);
+            entry=new CarplayMenuItem(this,new MenuModel.Row("Carplay Altscreen","root",-1,0,false,false,""),990000);
             add(entry);
         }
         if(getInitContext().getScreen() instanceof CarplaySettingsScreen)
@@ -65,7 +69,11 @@ public class CarplayMenuController extends MenuController implements SettingsRun
         if(target==null)return;
         try {target.postEvent(new RunnableEvent(new Runnable(){public void run(){
             synchronized(updateLock){if(run!=generation || target!=dispatcher)return;}
-            try {requireDispatchThread();clearAllCaches();relayout();triggerRepaint();}
+            try {
+                requireDispatchThread();
+                if(chrome!=null)chrome.close();
+                hideInfoline(true);clearAllCaches();relayout();triggerRepaint();
+            }
             catch(RuntimeException cleanup){Log.e("SettingsMenu","fallback relayout failed",cleanup);}
             catch(LinkageError cleanup){Log.e("SettingsMenu","fallback linkage failed",cleanup);}
         }}));}
@@ -74,7 +82,14 @@ public class CarplayMenuController extends MenuController implements SettingsRun
     public void back(){if(isOpen())show(MenuModel.parent(page));}
     public void activate(MenuModel.Row row) {
         try {
+            requireDispatchThread();
+            if(pageChanged)return;
             if(row.target.equals("back"))back();
+            else if(row.target.startsWith("text:")) {
+                int count=chrome.pageCount();
+                textPage=(textPage+(row.target.equals("text:next")?1:count-1))%count;
+                changed();
+            }
             else if(row.target.equals("set"))SettingsRuntime.set(row.setting,row.value);
             else if(row.target.equals("choose")) {
                 SettingsRuntime.set(row.setting,row.value);show(MenuModel.parent(page));
@@ -86,7 +101,16 @@ public class CarplayMenuController extends MenuController implements SettingsRun
     }
     private void show(String next) {
         requireDispatchThread();
-        page=next;pageChanged=true;changed();
+        rememberFocus();
+        page=next;textPage=0;pageChanged=true;changed();
+    }
+    private void rememberFocus() {
+        if(!isOpen() || getFocusedIndex()==null)return;
+        int id=getMenuItemID(getFocusedIndex());
+        for(int i=0;i<generated.size();i++) {
+            CarplayMenuItem item=(CarplayMenuItem)generated.get(i);
+            if(item.getWidgetID()==id){pageFocus.put(page,item.row().focusKey());break;}
+        }
     }
     public void changed() {
         final EventDispatcher target=dispatcher;
@@ -121,33 +145,57 @@ public class CarplayMenuController extends MenuController implements SettingsRun
     protected void disconnectUpdates() {
         SettingsRuntime.removeListener(this);
         page="";pending=false;front=false;
-        synchronized(updateLock){generation++;updateQueued=false;dispatcher=null;}
+        synchronized(updateLock){generation++;updateQueued=false;}
+        try {
+            if(chrome!=null){requireDispatchThread();chrome.close();}
+        } catch(RuntimeException error) {
+            failed=true;Log.e("SettingsMenu","native text cleanup failed during disconnect",error);
+        } catch(LinkageError error) {
+            failed=true;Log.e("SettingsMenu","native text cleanup linkage failed during disconnect",error);
+        } finally {
+            pageFocus.clear();
+            synchronized(updateLock){dispatcher=null;}
+        }
     }
     private void rebuild() {
         if(!front || rebuilding || !pending)return;
         requireDispatchThread();
         rebuilding=true;pending=false;
         try {
-            int focus=getFocusedIndex()==null?-1:getMenuItemID(getFocusedIndex());
+            if(!pageChanged)rememberFocus();
+            hideInfoline(true);
             for(int i=generated.size()-1;i>=0;i--)remove((AbstractWidget)generated.get(i));
             generated.clear();
+            MenuModel.Page view=null;
             if(isOpen()) {
-                String notice=SettingsRuntime.result();
-                if(SettingsRuntime.reconnectPending())notice+=" | Reconnect CarPlay for connection changes";
-                MenuModel.Row[] rows=MenuModel.rows(page,Preferences.get().snapshot(),SettingsRuntime.status(),notice);
-                for(int i=0;i<rows.length;i++) {
-                    CarplayMenuItem item=new CarplayMenuItem(this,rows[i],990001+i);
+                view=MenuModel.page(page,Preferences.get().snapshot(),SettingsRuntime.status(),SettingsRuntime.result());
+                for(int i=0;i<view.rows.length;i++) {
+                    CarplayMenuItem item=new CarplayMenuItem(this,view.rows[i],990001+i);
                     generated.add(item);add(item);
                     if(failed)return;
                 }
+                if(chrome==null) {
+                    chrome=new CarplayMenuChrome(this,(AbstractWidget)getInitContext().getScreen());
+                    chrome.attach();
+                }
+                int gap=getLayout().getItemsGap();
+                int controlsHeight=getLayout().getContentInsetsVert()*2;
+                int count=view.document?generated.size():1;
+                for(int i=0;i<count;i++)controlsHeight+=
+                    ((CarplayMenuItem)generated.get(i)).getPreferredHeight(false,getLayout().getContentWidth())+gap;
+                textPage=chrome.show(view,textPage,controlsHeight,SettingsRuntime.result(),SettingsRuntime.reconnectPending());
+                for(int i=0;i<generated.size();i++) {
+                    CarplayMenuItem item=(CarplayMenuItem)generated.get(i);
+                    if(item.row().target.startsWith("text:"))item.setEnabled(chrome.pageCount()>1);
+                }
+            } else if(chrome!=null) {
+                chrome.close();
             }
             clearAllCaches();relayout();
-            boolean restored=false;
-            if(isOpen() && !pageChanged)for(int i=0;i<generated.size();i++) {
-                CarplayMenuItem item=(CarplayMenuItem)generated.get(i);
-                if(item.getWidgetID()==focus){focusItemImmediately(getMenuItemIndex(item));restored=true;break;}
+            if(isOpen()) {
+                int index=view.focusIndex((String)pageFocus.get(page));
+                focusItemImmediately(getMenuItemIndex((AbstractWidget)generated.get(index)));
             }
-            if(isOpen()) {if(!restored)jumpToTop();}
             else if(entry!=null)focusItemImmediately(getMenuItemIndex(entry));
             pageChanged=false;
         } catch(RuntimeException error){fail(error);}

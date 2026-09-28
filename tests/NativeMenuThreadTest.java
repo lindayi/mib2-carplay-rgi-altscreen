@@ -15,14 +15,17 @@ public final class NativeMenuThreadTest {
         Field f=CarplayMenuController.class.getDeclaredField(name);f.setAccessible(true);f.set(target,value);
     }
     static final class Menu extends CarplayMenuController {
-        int renders;
+        int renders,paints;
         protected void refreshMenu() {
             check(Thread.currentThread()==ui,"native update executed on worker");
             renders++;
         }
         public void triggerRepaint() {
-            throw new AssertionError("worker called synchronous Audi repaint directly");
+            check(Thread.currentThread()==ui,"worker called synchronous Audi repaint directly");
+            paints++;
         }
+        public void clearAllCaches(){check(Thread.currentThread()==ui,"worker cleared native caches");}
+        public void relayout(){check(Thread.currentThread()==ui,"worker changed native layout");}
         void disconnect(){disconnectUpdates();}
     }
     static void worker(Runnable task) throws Exception {
@@ -92,6 +95,10 @@ public final class NativeMenuThreadTest {
         field(menu,"page","root");reject=true;worker(menu::changed);reject=false;
         worker(menu::changed);check(events.size()==1,"queue failure permanently wedged notifications");
         events.remove(0).dispatch();
-        System.out.println("NativeMenuThreadTest: actual stock RunnableEvent, worker isolation, coalescing, close/reconnect and queue failure PASS");
+        worker(()->menu.fail(new IllegalStateException("fixture extension failure")));
+        check(menu.paints==0 && events.size()==1,"fallback cleanup ran on worker");
+        events.remove(0).dispatch();check(menu.paints==1,"fallback cleanup not dispatched");
+        worker(menu::changed);check(events.isEmpty(),"failed extension keeps refreshing");
+        System.out.println("NativeMenuThreadTest: actual stock RunnableEvent, worker isolation, coalescing, close/reconnect, queue failure and deferred fallback PASS");
     }
 }

@@ -17,13 +17,16 @@ public final class CarplayMenuItem extends MenuItemController {
         setRenderer(new CompositeRendererHigh(this));
         setModelID(-1);setLabelId(-1);setWidgetID(id);setInternalID(id);
         setGlassplateInsetsBottom(6);setGlassplateInsetsTop(7);
-        boolean submenu=!row.heading && !row.target.equals("set") && !row.target.equals("choose")
-            && !row.target.equals("back") && !row.target.startsWith("action:");
-        setType(row.heading?TYPE_LABEL:row.checkable?TYPE_CHECKBOX:submenu?TYPE_SUBMENU:TYPE_ACTION);
+        boolean choice=row.target.equals("choose");
+        boolean submenu=!row.target.equals("set") && !choice
+            && !row.target.equals("back") && !row.target.startsWith("action:") && !row.target.startsWith("text:");
+        setType(choice?TYPE_RADIO_BUTTON:row.checkable?TYPE_CHECKBOX:submenu?TYPE_SUBMENU:TYPE_ACTION);
         if(submenu)setBitmaps(new int[]{39,39,39,39});
-        setFocusable(!row.heading);
-        if(row.checkable)setModel(new Integer(row.checked?1:0));
+        setFocusable(true);
+        setInfolineTextEnabled(row.help);setInfolineTextDisabled(row.help);
+        if(row.checkable)setModel(new Integer(row.checked?(choice?id:1):(choice?-1:0)));
     }
+    MenuModel.Row row(){return row;}
     protected void afterConnected() {
         super.afterConnected();
         setLabels(this,row.label);
@@ -39,14 +42,14 @@ public final class CarplayMenuItem extends MenuItemController {
         if(children!=null)for(int i=0;i<children.size();i++)setLabels((AbstractWidget)children.get(i),text);
     }
     public void keyPressed(KeyEvent event) {
-        if(!event.isConsumed() && event.getKeyCode()==KeyEvent.INC_MENU_ENTER && !row.heading
+        if(!event.isConsumed() && event.getKeyCode()==KeyEvent.INC_MENU_ENTER
                 && isEnabled() && isVisible() && isVisibleOnCurrentStage()) {
             event.consume();owner.activate(row);return;
         }
         super.keyPressed(event);
     }
     public void keyReleased(KeyEvent event) {
-        if(event.getKeyCode()==KeyEvent.INC_MENU_ENTER && !row.heading){event.consume();return;}
+        if(event.getKeyCode()==KeyEvent.INC_MENU_ENTER){event.consume();return;}
         super.keyReleased(event);
     }
 }
