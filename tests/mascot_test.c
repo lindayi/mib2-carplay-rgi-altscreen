@@ -158,18 +158,76 @@ int main(int argc,char **argv) {
             changed++;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
         }
         assert(changed==40*80 && maxx-minx+1==40 && maxy-miny+1==80);
-        assert(miny==44 && minx==(selected==1?135:207));
+        assert(miny==44 && minx==(selected==1?175:167));
         snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
+    }
+    mascot_graphics_destroy(&g);
+    /* Asymmetric colors prove the rendered pixels flip, not just the position. */
+    for(unsigned y=0;y<40;y++)for(unsigned x=0;x<20;x++) {
+        unsigned char *p=solid+(y*20+x)*4;
+        p[0]=x<10?255:0;p[1]=0;p[2]=x<10?0:255;p[3]=255;
+    }
+    glViewport(31,19,328,160);
+    snapshot(&initial);
+    const unsigned times[]={0,1,1500,3000,5999,6000,6001,9000,11999,12000,12001,25000};
+    const float distances[]={0,.048f,72,144,287.952f,288,287.952f,144,.048f,0,.048f,48};
+    for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
+        for(unsigned i=0;i<sizeof(times)/sizeof(times[0]);i++) {
+            glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
+            glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
+            assert(mascot_draw(&g,fixture,selected,times[i]));
+            snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
+            GLfloat r[4];glGetUniformfv(g.program,g.rectangle,r);
+            int flipped=times[i]%12000>=6000;
+            float expected=selected==1?distances[i]:288-distances[i];
+            float left=(r[0]+1)*328/2+(r[2]<0?r[2]*328/2:0);
+            assert(fabsf(left-expected)<0.001f);
+            assert(fabsf(r[2]*328/2-(flipped?-40:40))<0.001f);
+            assert(left>=-.001f && left+40<=328.001f);
+            pixels(after);
+            int lx=31+(int)roundf(expected)+5,rx=lx+30,y=70;
+            assert(after[(y*512+lx)*4+(flipped?2:0)]==255);
+            assert(after[(y*512+rx)*4+(flipped?0:2)]==255);
+            for(unsigned p=3;p<sizeof(after);p+=4)assert(after[p]==before[p]);
+        }
+    }
+    mascot_graphics_destroy(&g);
+    glViewport(31,19,320,160);
+    for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
+        double span=320-2*a[selected-1].width;
+        unsigned t=(unsigned)round(1.5*span/.048);
+        glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
+        glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
+        assert(mascot_draw(&g,a,selected,t));pixels(after);bounds(1);
+        snprintf(path,sizeof(path),"%s/mascot-%u-return.ppm",argv[2],selected);ppm(path);
+    }
+    mascot_graphics_destroy(&g);
+    glViewport(0,0,128,160);
+    unsigned char wide[80*40*4];memset(wide,255,sizeof(wide));
+    mascot_animation narrow[MASCOT_COUNT];
+    for(unsigned i=0;i<MASCOT_COUNT;i++){narrow[i]=fixture[i];narrow[i].pixels=wide;narrow[i].width=64;}
+    for(unsigned w=64;w<=80;w+=16) {
+        for(unsigned i=0;i<MASCOT_COUNT;i++)narrow[i].width=w;
+        for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
+            assert(mascot_draw(&g,narrow,selected,6000));
+            GLfloat r[4];glGetUniformfv(g.program,g.rectangle,r);
+            assert(fabsf((r[0]+1)*128/2-(128-2*(int)w)/2.f)<0.001f);
+            assert(fabsf(r[2]*128/2-2*w)<0.001f);
+        }
+        mascot_graphics_destroy(&g);
     }
     glViewport(0,0,1440,455);
     assert(mascot_draw(&g,fixture,1,3000));
     GLfloat rectangle[4];glGetUniformfv(g.program,g.rectangle,rectangle);
     assert(fabsf((rectangle[1]+1)*455/2-66.5f)<0.001f);
     assert(fabsf(rectangle[2]*1440/2-40)<0.001f && fabsf(rectangle[3]*455/2-80)<0.001f);
+    assert(mascot_draw(&g,fixture,1,40000));
+    glGetUniformfv(g.program,g.rectangle,rectangle);assert(rectangle[2]<0);
     assert(mascot_draw_image(&g,solid,20,40,1));
     glGetUniformfv(g.program,g.rectangle,rectangle);
     assert(fabsf((rectangle[0]+1)*1440/2-710)<0.001f);
     assert(fabsf((rectangle[1]+1)*455/2-207)<0.001f);
+    assert(fabsf(rectangle[2]*1440/2-20)<0.001f);
     snapshot(&initial);fail_texture=1;
     assert(!mascot_draw_image(&g,solid,20,40,1));
     snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
@@ -177,6 +235,6 @@ int main(int argc,char **argv) {
     mascot_graphics_destroy(&g);mascot_free(a);glUseProgram(0);glDeleteProgram(program);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(d,c));assert(eglDestroySurface(d,surface));assert(eglTerminate(d));
-    puts("Mascot parsers, real GLES pixels/clipping/alpha/state, frames/wrap, and graphics failures: PASS");
+    puts("Mascot parsers, real GLES pixels/clipping/alpha/state, edge turns/flipping, frames, and graphics failures: PASS");
     return 0;
 }

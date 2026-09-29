@@ -418,7 +418,13 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   build may reject newer values, so choose Off before an intentional downgrade.
   Atlas generation requires all four GIFs; SD staging rejects an older
   atlas. Capybara uses its four original frame delays, exterior-white removal,
-  the common size/clearance, and leftward travel to match its artwork.
+  the common size/clearance, and initially leftward travel to match its artwork.
+- Mascots now turn at both video-viewport edges, with their full canvas inside
+  the viewport when it fits. Preserve 48-video-pixel/second travel, original
+  frame order/timing and horizontal reflection on the return leg. Raccoon starts
+  rightward; the other three start leftward. The shared VC image draw must remain
+  centered and unflipped. With no horizontal travel room, center/clip without
+  modulo-by-zero. Host pixel/edge tests do not establish physical cockpit bounds.
 - The owner's private `lizard.mp4` is a 30 fps blue-background clip. Convert frames
   66..85 with `tools/build_mascot_video.py`, key `0044b8`: 20 frames, 670 ms after
   GIF timing quantization, fixed union crop, original white eyes preserved. Keep

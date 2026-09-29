@@ -142,12 +142,19 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
         if(good){mascot_graphics_destroy(g);*g=next;}
     } else good=g->initialized || initialize(g,a);
     if(good) {
-        float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+width);
-        float x=selected==1?travel-width:viewport[2]-travel;
-        if(image)x=floorf((viewport[2]-width)/2.f);
+        float x=floorf((viewport[2]-width)/2.f),draw_width=width;
+        if(!image && viewport[2]>width) {
+            double span=viewport[2]-width;
+            double travel=fmod(elapsed_ms*0.048,2*span);
+            int returning=travel>=span;
+            x=(float)(returning?2*span-travel:travel);
+            if(selected!=1)x=(float)span-x;
+            /* Reflect the quad, not frame order, so the return leg faces forward. */
+            if(returning){x+=width;draw_width=-width;}
+        }
         glUseProgram(g->program);glUniform1i(g->sampler,0);
         glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,2.f*bottom/viewport[3]-1.f,
-            2.f*width/viewport[2],2.f*height/viewport[3]);
+            2.f*draw_width/viewport[2],2.f*height/viewport[3]);
         glBindTexture(GL_TEXTURE_2D,g->textures[selected-1][mascot_frame(sprite,elapsed_ms)]);
         glBindBuffer(GL_ARRAY_BUFFER,g->buffer);
         glVertexAttribPointer(0,4,GL_FLOAT,GL_FALSE,0,0);glEnableVertexAttribArray(0);

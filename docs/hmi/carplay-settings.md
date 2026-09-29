@@ -132,8 +132,14 @@ the logged 1440x455 mirror viewport. Its size is unchanged.
 This is a trial clearance, not a measured boundary of Audi's full-width street/
 Trip bar. That bar is composed in the VC after the video and cannot be outranked
 by changing draw order inside the mirror. The map crop and Audi bar are untouched.
-Placement in both View sizes still needs vehicle confirmation. The raccoon
-travels right; Nian, Capybara and Lizard travel left, matching their artwork. The white
+Placement in both View sizes still needs vehicle confirmation. Mascots travel
+back and forth at 48 video pixels/second, turning when their canvas reaches either
+edge of the current video viewport. The raccoon starts at the left moving right;
+Nian, Capybara and Lizard start at the right moving left. On the return leg the
+image flips horizontally, without reversing frame order or changing animation
+timing. Travel speed is not individually stride-matched. If the sprite is as wide
+as or wider than the viewport, it stays centered and clipped rather than moving.
+The white
 exterior of the raccoon and capybara references is removed, without erasing
 enclosed white details such as the raccoon's face.
 
