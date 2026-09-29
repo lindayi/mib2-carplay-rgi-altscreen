@@ -407,8 +407,17 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   `tools/build_mascot_assets.py`; keep artwork/derived PNGs out of Git. Native
   build output and generated atlas are both required at SD staging, included in
   both checksum manifests and the installer's explicit mirror copy list.
-  Retained local inputs are `carplay-build-inputs\mascot-assets\raccoon.gif` and
-  `nian.gif`; source URLs/hashes are recorded in that private directory.
+  Retained local inputs are `carplay-build-inputs\mascot-assets\raccoon.gif`,
+  `nian.gif` and `capybara.gif`; source URLs/hashes are recorded privately,
+  without retaining signed URL query tokens. No artwork redistribution rights
+  are asserted.
+- Stable mascot IDs are Off=0, Raccoon=1, Nian=2, Capybara=3. Keep Java choices,
+  shell validation, native control bounds/atlas count and diagnostic state
+  allowlists aligned. Format-3 preferences retain all existing values; an old
+  build rejects Capybara=3, so choose Off before an intentional downgrade.
+  Atlas generation requires all three GIFs; SD staging rejects the old two-entry
+  atlas. Capybara uses its four original frame delays, exterior-white removal,
+  the common size/clearance, and leftward travel to match its artwork.
 - `scripts/test_mascots.sh` covers real host GLES/state/failure/interposition
   behavior. View its previews. This is not verification of QNX EGL interposition,
   vehicle placement, or full binary-only mirror source.

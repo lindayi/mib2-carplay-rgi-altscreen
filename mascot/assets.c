@@ -52,7 +52,7 @@ int mascot_config(const char *text, uint64_t now_ms, unsigned pid) {
     const char prefix[]="MASCOT2 ";
     if(strncmp(text,prefix,sizeof(prefix)-1))return -1;
     const char *p=text+sizeof(prefix)-1;
-    if(*p<'0' || *p>'2' || p[1]!=' ')return -1;
+    if(*p<'0' || *p>'0'+MASCOT_COUNT || p[1]!=' ')return -1;
     int selected=*p-'0';
     p+=2;
     if(*p<'0' || *p>'9')return -1;

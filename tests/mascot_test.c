@@ -64,9 +64,10 @@ static void snapshot(state *s) {
 static void parsers(const char *atlas,const char *bad) {
     assert(mascot_config("MASCOT2 1 42 4000\n",1000,42)==1);
     assert(mascot_config("MASCOT2 2 42 4000\n",1000,42)==2);
+    assert(mascot_config("MASCOT2 3 42 4000\n",1000,42)==3);
     assert(mascot_config("MASCOT2 0 0 4000\n",1000,42)==0);
     const char *invalid[]={"MASCOT1 1 4000\n","MASCOT2 1 43 4000\n","MASCOT2 1 0 4000\n",
-        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 3 42 4000\n","MASCOT2 1 42 4000\nx",
+        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 4 42 4000\n","MASCOT2 1 42 4000\nx",
         "MASCOT2 1 42 -4000\n","MASCOT2 1 42 184467440737095516160\n","MASCOT2 1 42 4000",""};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++)assert(mascot_config(invalid[i],1000,42)==-1);
     FILE *f=fopen(atlas,"rb");assert(f);assert(fseek(f,0,SEEK_END)==0);long n=ftell(f);assert(n>100);
@@ -75,21 +76,21 @@ static void parsers(const char *atlas,const char *bad) {
     for(unsigned i=0;i<6;i++) {
         unsigned char original=data[offsets[i]];data[offsets[i]]=offsets[i]==24?0:255;
         f=fopen(bad,"wb");assert(f);assert(fwrite(data,1,n,f)==(size_t)n);fclose(f);
-        mascot_animation a[2]={{0}};assert(!mascot_load(bad,a));assert(a[0].pixels==NULL);
+        mascot_animation a[MASCOT_COUNT]={{0}};assert(!mascot_load(bad,a));assert(a[0].pixels==NULL);
         data[offsets[i]]=original;
     }
     for(unsigned i=0;i<5;i++) {
         size_t length=i==4?(size_t)n+1:i==3?(size_t)n-1:i*13;
         data[n]=0;f=fopen(bad,"wb");assert(f);assert(fwrite(data,1,length,f)==length);fclose(f);
-        mascot_animation a[2]={{0}};assert(!mascot_load(bad,a));
+        mascot_animation a[MASCOT_COUNT]={{0}};assert(!mascot_load(bad,a));
     }
     free(data);assert(remove(bad)==0);
 }
 int main(int argc,char **argv) {
     assert(argc==3);char path[512];
     snprintf(path,sizeof(path),"%s/bad.rgba",argv[2]);parsers(argv[1],path);
-    mascot_animation a[2]={{0}};assert(mascot_load(argv[1],a));
-    for(unsigned i=0;i<2;i++) {
+    mascot_animation a[MASCOT_COUNT]={{0}};assert(mascot_load(argv[1],a));
+    for(unsigned i=0;i<MASCOT_COUNT;i++) {
         assert(mascot_frame(a+i,0)==0);assert(mascot_frame(a+i,a[i].delay[0])==1);
         assert(mascot_frame(a+i,a[i].duration)==0);
     }
@@ -116,7 +117,7 @@ int main(int argc,char **argv) {
     state initial,final;snapshot(&initial);
     mascot_graphics g={0};assert(mascot_draw(&g,a,0,3000));assert(!g.initialized);
     pixels(after);assert(!memcmp(before,after,sizeof(before)));
-    assert(!mascot_draw(&g,a,3,3000));
+    assert(!mascot_draw(&g,a,MASCOT_COUNT+1,3000));
     GLuint blocked;glGenFramebuffers(1,&blocked);glBindFramebuffer(GL_FRAMEBUFFER,blocked);
     assert(!mascot_draw(&g,a,1,3000));assert(!g.initialized);
     GLint bound;glGetIntegerv(GL_FRAMEBUFFER_BINDING,&bound);assert((GLuint)bound==blocked);
@@ -131,7 +132,7 @@ int main(int argc,char **argv) {
         pixels(after);assert(!memcmp(before,after,sizeof(before)));assert(glGetError()==GL_NO_ERROR);
     }
     fail_shader=fail_texture=0;
-    for(unsigned mascot=1;mascot<=2;mascot++) {
+    for(unsigned mascot=1;mascot<=MASCOT_COUNT;mascot++) {
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
         assert(mascot_draw(&g,a,mascot,3000));snapshot(&final);
@@ -145,9 +146,9 @@ int main(int argc,char **argv) {
     }
     mascot_graphics_destroy(&g);
     unsigned char solid[20*40*4];memset(solid,255,sizeof(solid));
-    mascot_animation fixture[2]={{.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid},
-        {.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid}};
-    for(unsigned selected=1;selected<=2;selected++) {
+    mascot_animation fixture[MASCOT_COUNT]={{.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid}};
+    for(unsigned i=1;i<MASCOT_COUNT;i++)fixture[i]=fixture[0];
+    for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
         assert(mascot_draw(&g,fixture,selected,3000));pixels(after);

@@ -18,10 +18,11 @@ static vc_panel_page root={
     }
 };
 static vc_panel_page mascots={
-    "Map mascot","Appears only on the CarPlay cluster map",3,{
+    "Map mascot","Appears only on the CarPlay cluster map",4,{
         {"Off","",VC_ROW_CHOICE,1},
         {"Raccoon","",VC_ROW_CHOICE,0},
-        {"Nian","",VC_ROW_CHOICE,0}
+        {"Nian","",VC_ROW_CHOICE,0},
+        {"Capybara","",VC_ROW_CHOICE,0}
     }
 };
 static void background(void) {

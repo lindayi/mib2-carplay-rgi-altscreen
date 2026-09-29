@@ -8,7 +8,7 @@ public final class MascotControl {
     static final String STATUS="/ramdisk/carplay_mascot.status";
     private MascotControl(){}
     public static void publish(int selected) throws IOException {
-        if(selected<0 || selected>2)throw new IOException("Invalid map mascot");
+        if(selected<0 || selected>=Setting.ALL[Setting.MASCOT].choices.length)throw new IOException("Invalid map mascot");
         int pid=0;
         File owner=new File("/tmp/MMI-Cockpit-Carplay.mirror.pid");
         if(selected!=0 && owner.isFile()) {

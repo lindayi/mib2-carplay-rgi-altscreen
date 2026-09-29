@@ -122,14 +122,15 @@ public final class VcPanelTest {
         field(com.luka.carplay.pdc.PdcSmallStageGuard.class,"parkingControlsActive").set(null,false);
         check(!VcPanel.roller(1) && VcPanel.roller(0),"ordinary short gesture not deferred until release");
         VcPanel.scale(1);hold();acknowledge();VcPanel.scale(3);acknowledge();
-        VcPanel.roller(1);VcPanel.roller(0);acknowledge();VcPanel.scale(2);acknowledge();
+        VcPanel.roller(1);VcPanel.roller(0);acknowledge();VcPanel.scale(3);acknowledge();
+        check(((String)snapshot.invoke(null,1000L)).contains("Capybara"),"Capybara missing from VC choices");
         Path helper=Paths.get("/mnt/app/root/carplay-altscreen/bin/carplay_mmi_action.sh");
         check(!Files.exists(helper),"fixture helper already exists");
         Files.createDirectories(helper.getParent());Files.write(helper,"#!/bin/sh\nexit 0\n".getBytes("US-ASCII"));
         VcPanel.roller(1);VcPanel.roller(0);
         long end=System.currentTimeMillis()+4000;
-        while(prefs.snapshot().get(Setting.MASCOT)!=2 && System.currentTimeMillis()<end)Thread.sleep(10);
-        check(prefs.snapshot().get(Setting.MASCOT)==2,"selection not persisted by shared settings worker");
+        while(prefs.snapshot().get(Setting.MASCOT)!=3 && System.currentTimeMillis()<end)Thread.sleep(10);
+        check(prefs.snapshot().get(Setting.MASCOT)==3,"Capybara not persisted by shared settings worker");
         SettingsRuntime.stop();VcPanel.stop();Files.delete(helper);
         Files.deleteIfExists(root.resolve("preferences"));Files.deleteIfExists(root.resolve("layout"));Files.delete(root);
         System.out.println("VC panel: default hold, short/release arbitration, ack/revision leases, scale, Back, View/drawer/session/parking gates and shared save PASS");

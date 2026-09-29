@@ -58,12 +58,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raccoon", type=Path, required=True)
     parser.add_argument("--nian", type=Path, required=True)
+    parser.add_argument("--capybara", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    output = bytearray(b"MASCOT01" + struct.pack("<I", 2))
+    sources = (("raccoon", args.raccoon, True), ("nian", args.nian, False),
+               ("capybara", args.capybara, True))
+    output = bytearray(b"MASCOT01" + struct.pack("<I", len(sources)))
     provenance = []
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    for name, path, remove in (("raccoon", args.raccoon, True), ("nian", args.nian, False)):
+    for name, path, remove in sources:
         frames, delays = animation(path, remove)
         width, height = frames[0].size
         output += struct.pack("<III", width, height, len(frames))

@@ -37,10 +37,12 @@ for preset in 0 1 2 3; do
     test "$actual" = "$expected"
 done
 cp "$T/good" "$T/preferences"
-for mascot in 0 1 2; do
+for mascot in 0 1 2 3; do
     sed "s/mascot=0/mascot=$mascot/" "$T/good" > "$T/preferences"
     test "$(cp_setting mascot 0)" = "$mascot"
 done
+sed 's/mascot=0/mascot=4/' "$T/good" > "$T/preferences"
+if cp_setting mascot 0; then echo "FAIL: invalid mascot accepted"; exit 1; fi
 cp "$T/good" "$T/preferences"
 echo 'enabled=1' >> "$T/preferences"
 if cp_setting enabled 1; then echo "FAIL: duplicate setting accepted"; exit 1; fi

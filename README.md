@@ -158,7 +158,7 @@ features below follow it automatically.
   Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
   recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
   reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
-- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / Raccoon / Nian**.
+- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / Raccoon / Nian / Capybara**.
   Default Off; animates along the bottom of the cluster navigation canvas, above
   the separate text bar. No main-MMI overlay or extra maneuver-box content.
   See [local assets, implementation and vehicle limits](docs/hmi/carplay-settings.md#optional-map-mascots).

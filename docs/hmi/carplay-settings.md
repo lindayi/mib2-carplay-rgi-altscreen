@@ -81,7 +81,7 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
-| Appearance | Map mascot: Off / Raccoon / Nian | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
+| Appearance | Map mascot: Off / Raccoon / Nian / Capybara | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
 | Controls | CarPlay wheel zoom and speed; touchpad DPAD bridge and sensitivity | Live. Disabling the touchpad bridge restores stock raw-pad forwarding; ordinary knob input remains stock. |
 | Diagnostics | Read-only status and last result, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
 | Recovery | Automatic mirror recovery; confirmed video-only restart | Live, but only for an installed, armed video-enabled session. No USB, dio_manager or MMI restart command is exposed. |
@@ -122,7 +122,8 @@ selection, mascot, input or recovery.
 
 ### Optional map mascots
 
-**Overlay appearance -> Map mascot** selects Off, Raccoon or Nian. A transparent,
+**Overlay appearance -> Map mascot** selects Off, Raccoon, Nian or Capybara.
+The VC panel's **Map mascot** page offers the same choices. A transparent,
 80-video-pixel-high animation (twice the former width and height) travels across
 the lower navigation canvas. Following owner feedback that the enlarged mascot
 sat too high, its bottom clearance is 70% of the previous value:
@@ -132,8 +133,9 @@ This is a trial clearance, not a measured boundary of Audi's full-width street/
 Trip bar. That bar is composed in the VC after the video and cannot be outranked
 by changing draw order inside the mirror. The map crop and Audi bar are untouched.
 Placement in both View sizes still needs vehicle confirmation. The raccoon
-travels right and Nian travels left, matching their artwork. The white exterior
-of the raccoon reference is removed without erasing its enclosed white face.
+travels right; Nian and Capybara travel left, matching their artwork. The white
+exterior of the raccoon and capybara references is removed, without erasing
+enclosed white details such as the raccoon's face.
 
 `libcarplay_mascot.so` is preloaded only into the existing mirror sidecar, never
 the receiver or HMI. It composites immediately before that mirror's EGL swap;
@@ -164,11 +166,17 @@ owner's local GIFs to `tools/build_mascot_assets.py` (Python/Pillow):
 
 ```sh
 python3 tools/build_mascot_assets.py --raccoon <local-raccoon.gif> \
-    --nian <local-nian.gif> --output build/mascot-assets/mascots.rgba
+    --nian <local-nian.gif> --capybara <local-capybara.gif> \
+    --output build/mascot-assets/mascots.rgba
 ```
 
 The native build produces the library; SD staging requires both it and the
-generated atlas. Source GIFs, derived artwork and SHA256 provenance stay in
+generated three-animation atlas; staging rejects an old two-animation atlas.
+Existing IDs stay Off=0, Raccoon=1 and Nian=2; Capybara appends ID 3.
+The preference format remains version 3, and existing selections are preserved.
+Older builds cannot read Capybara's value: select Off before an intentional
+downgrade rather than relying on an older build's invalid-preference safe path.
+Source GIFs, derived artwork and SHA256 provenance stay in
 private inputs/ignored build output, not Git. No redistribution license for the
 reference artwork is asserted. The binary-only mirror is not rebuilt or
 represented as fully source-audited.

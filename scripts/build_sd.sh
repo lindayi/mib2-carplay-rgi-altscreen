@@ -43,6 +43,13 @@ for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/mane
     [ -s "$f" ] || { echo "ERROR: missing build artifact $f"; exit 1; }
 done
 
+python3 - "$PROJECT_DIR/build/mascot-assets/mascots.rgba" <<'PY'
+import sys
+with open(sys.argv[1], "rb") as atlas:
+    if atlas.read(12) != b"MASCOT01\x03\x00\x00\x00":
+        sys.exit("ERROR: regenerate the three-mascot atlas with --capybara before staging")
+PY
+
 echo "=== MMI-Cockpit-Carplay SD (AltScreen + RGI) -> $OUT ==="
 case "$OUT" in "$PROJECT_DIR"/build/*) rm -rf "$OUT" ;; *) [ ! -e "$OUT" ] || { echo "ERROR: $OUT exists; remove it or use a path under build/"; exit 1; } ;; esac
 mkdir -p "$OUT"

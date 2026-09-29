@@ -153,7 +153,7 @@ mkdir -p "$ROOT/ramdisk"
 printf 'HEALTH_STATE=VIDEO_PROGRESS\nHEALTH_RESTART_COUNT=0\n' > "$ROOT/ramdisk/MMI-Cockpit-Carplay.mirror.health"
 printf 'action=export_full failure=fixture\nPRIVATE_FAILURE_DETAIL\n' > "$ROOT/tmp/carplay_menu_action.failure.log"
 printf 'PRIVATE_ROTATED_LOG\n' > "$ROOT/tmp/carplay_java.log.1"
-printf 'pid=123\nstate=QUEUED\nexpires=123\nprivate=PRIVATE_FAILURE_DETAIL\n' > "$ROOT/ramdisk/carplay_mascot.status"
+printf 'pid=123\nstate=CAPYBARA\nexpires=123\nprivate=PRIVATE_FAILURE_DETAIL\n' > "$ROOT/ramdisk/carplay_mascot.status"
 printf 'VCPANEL1 123 7 2 300 1 1\nPRIVATE_PANEL_DETAIL\n' > "$ROOT/ramdisk/carplay_vc_panel.status"
 : > "$ROOT/ramdisk/carplay_vc_panel.status.123.new"
 run status-health "$SCRIPTS/status_mmi_cockpit_carplay_test.sh"
@@ -164,7 +164,7 @@ run export-only "$SCRIPTS/export_mmi_cockpit_diagnostics.sh"
 need export-only 'EXPORT=PASS no_restore=YES no_restart=YES'
 absent export-only 'PRIVATE_DESTINATION_TEST'
 absent export-only 'PRIVATE_FAILURE_DETAIL'
-need export-only 'MASCOT_REPORTED_STATE=QUEUED'
+need export-only 'MASCOT_REPORTED_STATE=CAPYBARA'
 need export-only 'VC_PANEL_REPORTED_STATE=1'
 absent export-only 'PRIVATE_PANEL_DETAIL'
 exports=$VOL/MMI-Cockpit-Carplay/logs/exports

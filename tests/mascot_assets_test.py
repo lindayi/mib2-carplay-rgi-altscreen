@@ -1,4 +1,8 @@
 import importlib.util
+import json
+import struct
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -21,6 +25,24 @@ with tempfile.TemporaryDirectory() as directory:
     assert delays == [50, 120] and len(frames) == 2
     assert frames[0].size == (40, 40)
     assert frames[0].getpixel((20, 20))[3] == 255
+    output = Path(directory) / "built" / "mascots.rgba"
+    subprocess.run([sys.executable, assets.__file__, "--raccoon", str(path), "--nian", str(path),
+                    "--capybara", str(path), "--output", str(output)], check=True)
+    data = output.read_bytes()
+    assert data[:12] == b"MASCOT01" + struct.pack("<I", 3)
+    provenance = json.loads(output.with_suffix(".json").read_text())
+    assert [p["name"] for p in provenance] == ["raccoon", "nian", "capybara"]
+    offset = 12
+    for entry in provenance:
+        width, height, count = struct.unpack_from("<III", data, offset)
+        offset += 12
+        assert count == 2 and height == 40
+        assert list(struct.unpack_from("<II", data, offset)) == [50, 120]
+        offset += 4 * count + width * height * count * 4
+    assert offset == len(data)
+    with Image.open(output.parent / "capybara-0.png") as capybara:
+        assert capybara.tobytes() == frames[0].tobytes()
+        assert capybara.getpixel((20, 20))[3] == 255
     image.save(path)
     try:
         assets.animation(path, True)
