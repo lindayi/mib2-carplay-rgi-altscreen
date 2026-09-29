@@ -34,7 +34,7 @@ public final class VcPanelWorkerTest {
         check(!Files.exists(owner),"mirror owner already exists");
         Files.write(owner,Integer.toString(process).getBytes("US-ASCII"));
         try {
-            VcPanel.start();VcPanel.presentation(true,false,false);
+            VcPanel.presentation(true,false,false);VcPanel.start();
             long end=System.currentTimeMillis()+2000;
             while(((Integer)get("pid")!=process || !Files.exists(Paths.get(VcPanel.CONTROL)))
                     && System.currentTimeMillis()<end)Thread.sleep(10);

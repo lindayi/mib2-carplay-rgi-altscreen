@@ -69,6 +69,23 @@ Earlier JSON reports are historical, not necessarily the current build.
 
 ## Vehicle evidence and the current open issue
 
+### Centered-panel and four-mascot trial: 2026-09-29
+
+- After the `aac9ddb` card preparation, the owner reports it "mostly works great".
+  All panel options are visible, but Audi elements cover the top/title and bottom.
+  Starting already in wide AltScreen View does not open the panel even after a
+  roller detent visibly zooms the map; switching View away/back makes entry easy.
+  No diagnostics were exported and installed build ID was not read back.
+- The next candidate shortens the panel from 420x348 to 420x288, without shrinking
+  option fonts. At 1440x455 this adds 30 video pixels of clearance at both ends.
+  This is a host geometry change, not a measured Audi occlusion boundary.
+- MU1316 stock `updateAll()` calls private `updateMapPresentation()` and bypasses
+  `setMapPresentation()`. Observe accepted Status in the existing
+  `GatedCombiService` wrapper before forwarding unchanged, so startup replay seeds
+  `VcPanel` even before wheel start. Do not default large-map eligibility to true
+  or weaken the detent/PID/session/presentation gates. The missing replay is a
+  reproduced source gap; no vehicle log confirms it caused this owner's failure.
+
 ### First live VC-panel report: 2026-09-28 evening
 
 - After preparing the `3c3de7e` card, the owner reports the panel mostly works.
@@ -79,7 +96,7 @@ Earlier JSON reports are historical, not necessarily the current build.
 - Current source lowers mascot bottom clearance by 30%, without resizing:
   `0.70 * (ceil(videoHeight * 0.20) + 4)`, 66.5 pixels at 455 pixels high.
   The panel is centered in the video viewport; BAP positive steps move down and
-  negative steps move up. These refinements are not yet vehicle-confirmed.
+  negative steps move up. See the later partial owner confirmation above.
 - Host regressions reproduced two presentation races: callbacks/worker closed on
   an expired cached acknowledgement before reading fresh native status, and
   revision changes during EGL swap discarded acknowledgement of displayed frames.

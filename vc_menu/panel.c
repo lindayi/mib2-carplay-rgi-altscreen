@@ -170,26 +170,26 @@ int vc_panel_paint(const vc_panel_renderer *renderer,const vc_panel *panel,
     canvas c={rgba,width,height,stride,(int)width-VC_PANEL_WIDTH-16,((int)height-VC_PANEL_HEIGHT)/2};
     rect(&c,0,0,VC_PANEL_WIDTH,VC_PANEL_HEIGHT,0x121519,248);
     rect(&c,0,0,VC_PANEL_WIDTH,2,0xaeb2b6,180);
-    text(&c,renderer->font,page->title,20,12,380,1.35f,0xf4f4f4);
-    rect(&c,20,47,380,1,0x52565a,255);
+    text(&c,renderer->font,page->title,20,8,380,1.35f,0xf4f4f4);
+    rect(&c,20,37,380,1,0x52565a,255);
     for(unsigned i=0;i<page->count;i++) {
         const vc_panel_row *row=&page->rows[i];
-        int y=56+(int)i*38;
+        int y=44+(int)i*32;
         int selected=i==panel->focus[panel->depth-1];
         if(selected) {
             for(int x=0;x<VC_PANEL_WIDTH;x++)
-                rect(&c,x,y,1,36,x<4?0xf23843:0x681a23,x<4?255:235);
+                rect(&c,x,y,1,30,x<4?0xf23843:0x681a23,x<4?255:235);
         }
         unsigned color=selected?0xffffff:0xdfe1e3;
         int value_width=text_width(row->value,.95f);
         int icon=row->kind==VC_ROW_LINK || row->kind==VC_ROW_TOGGLE || row->kind==VC_ROW_CHOICE?24:0;
         int value_x=VC_PANEL_WIDTH-20-icon-value_width;
         int label_limit=row->value[0]?value_x-36:VC_PANEL_WIDTH-40-icon;
-        text(&c,renderer->font,row->label,20,y+7,label_limit,1.05f,color);
-        text(&c,renderer->font,row->value,value_x,y+8,value_width,.95f,color);
-        if(row->kind==VC_ROW_LINK)chevron(&c,VC_PANEL_WIDTH-28,y+13,color);
+        text(&c,renderer->font,row->label,20,y+4,label_limit,1.05f,color);
+        text(&c,renderer->font,row->value,value_x,y+5,value_width,.95f,color);
+        if(row->kind==VC_ROW_LINK)chevron(&c,VC_PANEL_WIDTH-28,y+10,color);
         if(row->kind==VC_ROW_CHOICE) {
-            int cx=VC_PANEL_WIDTH-27,cy=y+18;
+            int cx=VC_PANEL_WIDTH-27,cy=y+15;
             for(int yy=-8;yy<=8;yy++)for(int xx=-8;xx<=8;xx++) {
                 int distance=xx*xx+yy*yy;
                 if((distance>=42 && distance<=64) || (row->checked && distance<=10))
@@ -198,16 +198,16 @@ int vc_panel_paint(const vc_panel_renderer *renderer,const vc_panel *panel,
         }
         if(row->kind==VC_ROW_TOGGLE) {
             int x=VC_PANEL_WIDTH-35;
-            rect(&c,x,y+10,17,17,color,255);
-            rect(&c,x+1,y+11,15,15,selected?0x681a23:0x121519,255);
+            rect(&c,x,y+7,17,17,color,255);
+            rect(&c,x+1,y+8,15,15,selected?0x681a23:0x121519,255);
             if(row->checked) {
-                for(int n=0;n<5;n++)rect(&c,x+3+n,y+17+n/2,2,2,color,255);
-                for(int n=0;n<7;n++)rect(&c,x+7+n,y+19-n,2,2,color,255);
+                for(int n=0;n<5;n++)rect(&c,x+3+n,y+14+n/2,2,2,color,255);
+                for(int n=0;n<7;n++)rect(&c,x+7+n,y+16-n,2,2,color,255);
             }
         }
     }
-    rect(&c,20,296,380,1,0x44494e,255);
-    text(&c,renderer->font,page->hint,20,302,380,.8f,0xadb2b8);
-    text(&c,renderer->font,"OK  Select     Back  Return",20,325,380,.7f,0x92989f);
+    rect(&c,20,244,380,1,0x44494e,255);
+    text(&c,renderer->font,page->hint,20,250,380,.8f,0xadb2b8);
+    text(&c,renderer->font,"OK  Select     Back  Return",20,270,380,.7f,0x92989f);
     return 1;
 }

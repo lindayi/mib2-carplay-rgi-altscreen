@@ -7,7 +7,7 @@
 #define VC_PANEL_ROWS 6
 #define VC_PANEL_DEPTH 4
 #define VC_PANEL_WIDTH 420
-#define VC_PANEL_HEIGHT 348
+#define VC_PANEL_HEIGHT 288
 
 enum vc_row_kind { VC_ROW_VALUE, VC_ROW_TOGGLE, VC_ROW_LINK, VC_ROW_CHOICE };
 typedef struct {

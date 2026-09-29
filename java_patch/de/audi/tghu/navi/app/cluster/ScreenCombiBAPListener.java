@@ -68,6 +68,5 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
         com.luka.carplay.cluster.ClusterLayerController.onVcPresentation(largeMapView);
         super.setMapPresentation(largeMapView, leftMenu, rightMenu);
         com.luka.carplay.cluster.AltScreenCluster.onPresentation(largeMapView);
-        com.luka.carplay.settings.VcPanel.presentation(largeMapView,leftMenu,rightMenu);
     }
 }

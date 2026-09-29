@@ -42,9 +42,37 @@ public final class VcPanelTest {
         connection.set(CarplayBus.getInstance(),2);
         field(CarplayBus.class,"running").set(CarplayBus.getInstance(),true);
         field(CarplayBus.class,"out").set(CarplayBus.getInstance(),new DataOutputStream(new ByteArrayOutputStream()));
-        set("running",true);set("pid",42);VcPanel.presentation(true,false,false);
+        Class<?> unsafeType=Class.forName("sun.misc.Unsafe");
+        Object unsafe=field(unsafeType,"theUnsafe").get(null);
+        Class<?> listenerType=Class.forName("de.audi.tghu.navi.app.cluster.ScreenCombiBAPListener");
+        Object listener=unsafeType.getMethod("allocateInstance",Class.class).invoke(unsafe,listenerType);
+        Class<?> service=Class.forName("de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi");
+        final int[] replies={0,0};
+        Object sink=Proxy.newProxyInstance(VcPanelTest.class.getClassLoader(),new Class[]{service},(p,m,a)->{
+            if(m.getName().equals("updateMapScale"))replies[0]++;
+            if(m.getName().equals("updateMapPresentation")) {
+                check(get("largeMap").equals(a[0]),"presentation was not captured before stock Status");
+                replies[1]++;
+            }
+            return null;
+        });
+        com.luka.carplay.rgd.GatedCombiService gate=new com.luka.carplay.rgd.GatedCombiService(
+            (de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi)sink);
+        gate.setRouteGuidanceBlocked(true);
+        stockField(listener,"combiservice",gate);
+        Method replay=listenerType.getSuperclass().getDeclaredMethod("updateMapPresentation");replay.setAccessible(true);
+        set("running",true);VcPanel.scale(1);hold();
+        check(!(Boolean)get("open") && !(Boolean)get("mapConfirmed"),"unknown View accepted zoom as size evidence");
+        // Exercise the private stock replay used by updateAll(), without a View request.
+        stockField(listener,"largeMapView",true);
+        set("running",false);set("pid",42);
+        replay.invoke(listener);
+        set("running",true);
+        check((Boolean)get("largeMap") && replies[1]==1,"startup presentation replay was missed");
         hold();check(!(Boolean)get("open"),"opened without map-focus evidence");
         check(!VcPanel.scale(1),"closed router consumes scale");
+        replay.invoke(listener);
+        check((Boolean)get("mapConfirmed"),"duplicate startup replay erased zoom-detent evidence");
         VcPanel.roller(1);
         check(!(Boolean)get("open"),"press opened before hold");
         VcPanel.roller(3);check((Boolean)get("open"),"hold did not open");
@@ -61,14 +89,6 @@ public final class VcPanelTest {
         acknowledge();
         Object before=get("revision");
         check(VcPanel.scale(0) && before.equals(get("revision")),"zero scale manufactured a menu step");
-        Class<?> unsafeType=Class.forName("sun.misc.Unsafe");
-        Object unsafe=field(unsafeType,"theUnsafe").get(null);
-        Class<?> listenerType=Class.forName("de.audi.tghu.navi.app.cluster.ScreenCombiBAPListener");
-        Object listener=unsafeType.getMethod("allocateInstance",Class.class).invoke(unsafe,listenerType);
-        Class<?> service=Class.forName("de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi");
-        final int[] replies={0};
-        stockField(listener,"combiservice",Proxy.newProxyInstance(VcPanelTest.class.getClassLoader(),
-            new Class[]{service},(p,m,a)->{if(m.getName().equals("updateMapScale"))replies[0]++;return null;}));
         Class<?> distance=Class.forName("de.audi.tghu.navi.app.cluster.BAPDistanceFormatter$BAPDistance");
         stockField(listener,"mapScale",distance.getMethod("invalid").invoke(null));
         acknowledge();
@@ -98,9 +118,17 @@ public final class VcPanelTest {
             de.audi.app.terminalmode.keyevents.KeyState.PRESSED),"console event retained wheel Back marker");
         keys.updateKey2(4,41,0,5,1);
         com.luka.carplay.core.SteeringWheelInputModule.consumePanelBack(de.audi.app.terminalmode.keyevents.KeyState.RELEASED);
-        VcPanel.presentation(false,false,false);check(!(Boolean)get("open"),"View change did not close");
+        stockField(listener,"largeMapView",false);replay.invoke(listener);
+        check(!(Boolean)get("open"),"small-map stock replay did not close");
+        check(!VcPanel.scale(1),"small-map stock replay captured zoom");
         hold();check(!(Boolean)get("open"),"small View opened unmeasured panel");
-        VcPanel.presentation(true,false,false);VcPanel.scale(1);hold();acknowledge();
+        stockField(listener,"largeMapView",true);replay.invoke(listener);
+        hold();check(!(Boolean)get("open"),"large-map replay bypassed new detent requirement");
+        VcPanel.scale(1);hold();acknowledge();
+        stockField(listener,"rightSideMenuOpen",true);replay.invoke(listener);
+        check(!(Boolean)get("open") && !(Boolean)get("mapConfirmed"),"stock drawer replay retained panel");
+        stockField(listener,"rightSideMenuOpen",false);replay.invoke(listener);
+        VcPanel.scale(1);hold();acknowledge();
         set("ackUntil",System.currentTimeMillis()-1);
         check(!VcPanel.scale(1) && (Boolean)get("open"),"expired cache must reject input pending worker status read");
         VcPanel.roller(1);VcPanel.roller(0);

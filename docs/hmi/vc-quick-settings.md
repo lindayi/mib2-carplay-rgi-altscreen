@@ -10,7 +10,12 @@ After the `3c3de7e` card preparation, the owner reported that the panel mostly
 works, but its top-right placement was clipped/covered, scrolling felt reversed,
 and it closed during active use. No diagnostic export or installed build-ID
 readback accompanied that report. The centering, direction and acknowledgement
-corrections below still need a vehicle retest.
+corrections were included in the subsequent `aac9ddb` card trial. On 2026-09-29
+the owner reported that it mostly works well and opens easily after a View
+round trip. All options were visible, but Audi elements covered the title and
+bottom; starting already in large-map View prevented entry even after a detent
+visibly zoomed the map. No diagnostics or installed build-ID readback accompanied
+this report. The shorter panel and startup replay correction below need a retest.
 
 ## Controls and eligibility
 
@@ -19,6 +24,9 @@ roller one detent, then hold it to open **Carplay Altscreen**. That initial
 detent still zooms normally; it establishes map-input evidence. It is required
 again after a session change or native drawer/tab takeover. This conservative
 guard exists because the tested VC's drawer-open flags remained false.
+The accepted stock presentation Status, including its initial `updateAll()`
+replay, seeds panel View eligibility; a View toggle is not required. Unknown or
+small-map state still cannot open the panel, and the zoom detent remains required.
 
 | Input | Panel behavior |
 | --- | --- |
@@ -61,12 +69,15 @@ parent focus; choices start at the saved value. There are at most six selectable
 rows per page, with bounded ASCII labels and ellipsis for long display text.
 Export, install, reset and receiver-restart actions are not included.
 
-`vc_menu/panel.c` paints a 420x348 panel. The runtime uploads a padded 452x380
+`vc_menu/panel.c` paints a 420x288 panel, reduced from 420x348 after the latest
+vehicle feedback. Rows use 32 rather than 38 pixels of vertical spacing; option
+font sizes and width are unchanged. All six rows, title, status hint and control
+footer remain. The runtime uploads a padded 452x320
 image at the center of the mirror viewport, preserving caller GL state,
 destination alpha and pixels outside the panel. It draws after the mascot and
 before the mirror's existing EGL swap; there is no extra displayable, context
 writer or swap. In the logged 1440x455 viewport the panel occupies x=510..929,
-with 54 pixels above and 53 below. This is a map-video canvas, not the entire
+with 84 pixels above and 83 below (30 more on each side). This is a map-video canvas, not the entire
 cockpit. Audi's VC-local layers may still occlude it; final placement needs a
 parked-car check. Do not squeeze it into the 328x181 maneuver box.
 
@@ -132,6 +143,18 @@ No global keyboard grab or arbitrary native drawer-entry API is claimed.
 Raw right/left/Back/tab events still reach Audi. Native coexistence, particularly
 Back outside an OEM drawer, must be checked on the car.
 
+Panel presentation state is observed by `GatedCombiService.updateMapPresentation`
+before forwarding the unchanged stock Status. MU1316's private
+`CombiBAPListener.updateMapPresentation()` is also called by startup `updateAll()`,
+bypassing the incoming `setMapPresentation` override. Observing only requests
+left the panel's initial `largeMap` false until a View change. Capture the replay
+even before the wheel module starts; do not initialize eligibility to true or
+infer large-map state from a zoom gesture. Duplicate identical replays preserve
+detent evidence, while size changes/drawer flags invalidate it. This source gap
+is reproduced on the host; without vehicle logs it is not a proven explanation
+of every startup failure. No new layout request, display-context writer or
+phone reconnect is introduced.
+
 ## Evidence and checks
 
 The returned `5a3a292` trial proves raw press/release/long states 3/4, encoder,
@@ -145,7 +168,9 @@ Host coverage:
 
 - `VcPanelTest`: gesture arbitration, map/size eligibility, exact-stock scale
   reply without a MapManager, single movement source, revision/lease checks,
-  focus restoration, session/parking dismissal and shared settings persistence.
+  focus restoration, session/parking dismissal and shared settings persistence;
+  private stock startup presentation replay before wheel start, duplicate replay,
+  small-map rejection and drawer invalidation without a synthetic View toggle.
 - `VcPanelWorkerTest`: actual Java worker/atomic files with explicitly simulated
   renderer acknowledgements, fresh-status/cached-expiry races, stale epochs/PIDs,
   timeout, malformed status and stop.

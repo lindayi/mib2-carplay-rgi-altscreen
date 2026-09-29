@@ -124,7 +124,10 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public void poiSearchResult(int a, int b) { real.poiSearchResult(a, b); }
     public void updatePOIListSize(int a) { real.updatePOIListSize(a); }
     public void updateFSGSetup(int a, boolean b) { real.updateFSGSetup(a, b); }
-    public void updateMapPresentation(boolean a, boolean b, boolean c) {
-        real.updateMapPresentation(a, b, c); }
+    public void updateMapPresentation(boolean large, boolean left, boolean right) {
+        // Stock updateAll() replays this state without calling setMapPresentation().
+        com.luka.carplay.settings.VcPanel.presentation(large,left,right);
+        real.updateMapPresentation(large,left,right);
+    }
     public void updateEtcStatus(EtcStatus a) { real.updateEtcStatus(a); }
 }

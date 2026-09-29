@@ -81,6 +81,22 @@ int main(int argc,char **argv) {
     background();assert(vc_panel_paint(&renderer,&panel,pixels,sizeof(pixels),WIDTH,HEIGHT,WIDTH*4));
     assert(!memcmp(pixels,baseline,sizeof(pixels)));
     save(argv[1],"closed");
+    vc_panel_page full=root;
+    full.count=6;full.rows[5]=root.rows[1];
+    strcpy(full.rows[5].label,"Sixth option");
+    strcpy(full.hint,"Reconnect CarPlay to apply saved changes");
+    assert(vc_panel_open(&panel,&full));vc_panel_move(&panel,5);
+    background();assert(vc_panel_paint(&renderer,&panel,pixels,sizeof(pixels),WIDTH,HEIGHT,WIDTH*4));
+    const int bands[][2]={{8,37},{48,74},{80,106},{112,138},{144,170},{176,202},{208,234},{250,268},{270,288}};
+    for(unsigned i=0;i<sizeof(bands)/sizeof(bands[0]);i++) {
+        unsigned ink=0;
+        for(int y=bands[i][0];y<bands[i][1];y++)for(int x=20;x<380;x++) {
+            unsigned char *p=pixels+(((HEIGHT-VC_PANEL_HEIGHT)/2+y)*WIDTH+WIDTH-VC_PANEL_WIDTH-16+x)*4;
+            if(p[0]>125 && p[1]>125 && p[2]>125)ink++;
+        }
+        assert(ink>20);
+    }
+    save(argv[1],"six-rows");
     vc_panel_page invalid=root;
     invalid.count=VC_PANEL_ROWS+1;assert(!vc_panel_open(&panel,&invalid));
     invalid=root;memset(invalid.rows[0].label,'x',sizeof(invalid.rows[0].label));

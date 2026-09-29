@@ -81,11 +81,11 @@ int main(int argc,char **argv) {
         unsigned at=(y*WIDTH+x)*4;
         assert(pixels[at+3]==baseline[at+3]);
         if(memcmp(pixels+at,baseline+at,4)) {
-            assert(x>=510 && x<930 && y>=53 && y<401);changed++;
+            assert(x>=510 && x<930 && y>=83 && y<371);changed++;
         }
     }
     fprintf(stderr,"VC_PANEL_TEST changed_pixels=%u\n",changed);
-    assert(changed==420*348);
+    assert(changed==420*288);
     f=fopen(argv[1],"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",WIDTH,HEIGHT);
     for(int y=HEIGHT-1;y>=0;y--)for(int x=0;x<WIDTH;x++)assert(fwrite(pixels+(y*WIDTH+x)*4,1,3,f)==3);
     assert(fclose(f)==0);

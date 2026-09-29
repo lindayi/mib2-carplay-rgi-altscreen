@@ -70,6 +70,8 @@ public final class VcPanel {
     }
     public static void presentation(boolean large,boolean left,boolean right) {
         synchronized(LOCK) {
+            if(largeMap!=large || left || right)
+                Log.i("VcPanel","stock presentation large="+large+" left="+left+" right="+right);
             if(largeMap!=large || left || right){closeLocked("View/drawer presentation");mapConfirmed=false;held=true;}
             largeMap=large;
         }
