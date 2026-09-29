@@ -194,8 +194,26 @@ Older builds may not support newer mascot values: select Off before an intention
 downgrade rather than relying on an older build's invalid-preference safe path.
 Source GIFs, derived artwork and SHA256 provenance stay in
 private inputs/ignored build output, not Git. No redistribution license for the
-reference artwork is asserted. The binary-only mirror is not rebuilt or
+current modified atlas has been established. The binary-only mirror is not rebuilt or
 represented as fully source-audited.
+
+**Artwork redistribution review, 2026-09-29**
+
+| Reference | Verified evidence | Public package status |
+| --- | --- | --- |
+| Raccoon | Supplied file is hosted by Dribbble. A search suggested "baby raccoon" by Dina Mae, but the exact asset-to-shot match and artist-specific permission could not be verified; the shot pages returned access challenges. [Dribbble terms, sections 9-11](https://dribbble.com/terms) do not provide a general third-party asset redistribution license. | Not cleared; do not present the suggested artist as verified attribution. |
+| Nian / lion dance | The supplied Pinterest CDN image could not be traced to an original creator or asset-specific license. [Pinterest's terms](https://policy.pinterest.com/en/terms-of-service) contain user-content grants, but the original uploader's authority over this particular repost is unverified. | Not cleared; neither a confirmed prohibition nor a confirmed redistribution grant was found for the exact artwork. |
+| Capybara | Exact source confirmed as [Capybara run by EiBBiT](https://www.deviantart.com/eibbit/art/Capybara-run-933711073). The page references the supplied GIF filename and explicitly labels it [CC BY-NC-ND 3.0](https://creativecommons.org/licenses/by-nc-nd/3.0/). | The unchanged original may be shared noncommercially with the required attribution/license notices. The current background-edited sprite is not cleared by the NoDerivatives license; seek separate permission before publishing it. |
+| Lizard | The supplied [Instagram reel](https://www.instagram.com/reel/DVCmwa1jR8D/) identifies uploader `igreenscreenthings` in its public embed. A related [CreatorSet Tom the Lizard walking template](https://creatorset.com/collections/all-products/products/tom-the-lizard-walking-meme-hoppers-blue-screen-green-screen) states personal use only and prohibits redistribution; it also disclaims commercial rights to the underlying material. | No redistribution grant verified for the supplied clip. The related product references a different reel, so its terms are supporting evidence, not proof of this MP4's exact provenance or license. |
+
+The [CC BY-NC-ND 3.0 legal code, section 3](https://creativecommons.org/licenses/by-nc-nd/3.0/legalcode.en)
+allows technically necessary format changes; do not claim that merely changing
+GIF to RGBA always creates a prohibited adaptation. Background editing and the
+intended modified presentation are the unresolved permissions here. An unchanged
+licensed original is distinct from the processed atlas. A public post, download
+button, attribution or ownership disclaimer alone does not establish the needed
+rights. This review records evidence and release restrictions, not a definitive
+legal opinion about exceptions or every possible use. No artwork was published.
 
 The owner's blue-background lizard video is converted locally using FFmpeg and
 Pillow; neither is needed in the vehicle. Its selected walking cycle is source

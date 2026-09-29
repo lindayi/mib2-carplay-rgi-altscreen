@@ -428,7 +428,13 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   `nian.gif`, `capybara.gif` and the locally converted `lizard.gif`;
   source URLs/hashes are recorded privately,
   without retaining signed URL query tokens. No artwork redistribution rights
-  are asserted.
+  for the modified atlas are asserted. The 2026-09-29 review verified the exact
+  Capybara source as EiBBiT's DeviantArt deviation 933711073, licensed CC BY-NC-ND
+  3.0: unchanged noncommercial sharing with attribution is distinct from the
+  background-edited sprite. Raccoon/Nian permissions remain unverified; the
+  Lizard reel uploader is confirmed but no distribution grant was found.
+  Keep primary evidence and qualifications in `docs\hmi\carplay-settings.md`;
+  do not treat search-suggested creators or another reel's terms as exact proof.
 - Stable mascot IDs are Off=0, Raccoon=1, Nian=2, Capybara=3, Lizard=4. Keep Java choices,
   shell validation, native control bounds/atlas count and diagnostic state
   allowlists aligned. Format-3 preferences retain all existing values; an old

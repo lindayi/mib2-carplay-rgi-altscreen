@@ -198,6 +198,13 @@ features below follow it automatically.
 
 Raw unit logs and generated class trees are intentionally kept outside Git.
 
+The optional mascot artwork and generated animation atlas are not included.
+The repository's code license does not license third-party animations. A
+[source/license review](docs/hmi/carplay-settings.md#optional-map-mascots) found
+CC BY-NC-ND 3.0 for the original Capybara, but did not establish permission to
+redistribute the current modified four-mascot atlas. Attribution or a
+"we do not own the rights" disclaimer does not replace applicable permission.
+
 The renderer embeds a small DejaVu-derived font atlas. Keep
 `maneuver_render/LICENSE.DEJAVU` with redistributed renderer binaries; the native
 build copies it into `build/` and the SD build includes it at the card root.
