@@ -105,7 +105,8 @@ static void *control_loop(void *unused) {
         int rendered=render_state;
         pthread_mutex_unlock(&lock);
         const char *state=next<0?"CONTROL_STALE":next==0?"OFF":!loaded?"ASSET_ERROR":
-            rendered<0?"GRAPHICS_ERROR":rendered==1?"RACCOON":rendered==2?"NIAN":rendered==3?"CAPYBARA":"QUEUED";
+            rendered<0?"GRAPHICS_ERROR":rendered==1?"RACCOON":rendered==2?"NIAN":
+            rendered==3?"CAPYBARA":rendered==4?"LIZARD":"QUEUED";
         uint64_t now=monotonic_ms();
         if(strcmp(last,state) || now-last_status>=1000) {
             status(state,strcmp(last,state)!=0);last=state;last_status=now;

@@ -87,6 +87,7 @@ int main(int argc,char **argv) {
         glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,frame);assert(!memcmp(baseline,frame,sizeof(frame)));
         publish(2,getpid(),4000);await("state=NIAN\n");
         publish(3,getpid(),4000);await("state=CAPYBARA\n");
+        publish(4,getpid(),4000);await("state=LIZARD\n");
         assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
         assert(eglDestroyContext(display,context));
         context=eglCreateContext(display,config,EGL_NO_CONTEXT,version);

@@ -30,7 +30,7 @@ public final class Setting {
         new Setting("info_road","Information-bar road text",new String[]{"Next road / exit","Current road"},0,false),
         new Setting("info_return","Information-page selection",new String[]{"Return to default after 20 seconds","Keep until OK or route ends"},0,false),
         new Setting("preset","Overlay appearance preset",new String[]{"Custom","Minimal","Standard","Large text"},0,false),
-        new Setting("mascot","Map mascot",new String[]{"Off","Raccoon","Nian","Capybara"},0,false)
+        new Setting("mascot","Map mascot",new String[]{"Off","Raccoon","Nian","Capybara","Lizard"},0,false)
     };
     public final String key, label;
     public final String[] choices;

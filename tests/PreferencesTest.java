@@ -17,7 +17,7 @@ public final class PreferencesTest {
         Files.write(legacy.toPath(),"maps:/car/instrumentcluster/map?maneuverLayout=rightaligned".getBytes("UTF-8"));
         Preferences preferences=new Preferences(file,legacy);
         check(Arrays.equals(Setting.ALL[Setting.MASCOT].choices,
-            new String[]{"Off","Raccoon","Nian","Capybara"}),"stable mascot IDs");
+            new String[]{"Off","Raccoon","Nian","Capybara","Lizard"}),"stable mascot IDs");
         check(preferences.snapshot().on(Setting.ENABLED),"missing preference keeps existing On behavior");
         check(preferences.snapshot().get(Setting.LAYOUT)==1,"legacy layout retained");
         for(int id=0;id<Setting.ALL.length;id++) {
@@ -39,7 +39,7 @@ public final class PreferencesTest {
         expectInvalid(valid.replace("format=3","format=1"));
         expectInvalid(valid.replace("format=3","format=2"));
         expectInvalid(valid.replace("mascot=0\n",""));
-        expectInvalid(valid.replace("mascot=0","mascot=4"));
+        expectInvalid(valid.replace("mascot=0","mascot=5"));
         expectInvalid(valid.replace("info_return=0\n",""));
         expectInvalid(valid.replace("preset=0","preset=4"));
         expectInvalid(valid.replace("road=1\n",""));
@@ -68,7 +68,7 @@ public final class PreferencesTest {
         check(Preferences.read(file,8192).startsWith("format=3\n"),"next save upgrades schema");
         preferences.set(Setting.DISTANCE,0);
         preferences.set(Setting.ROAD_SCROLL,1);
-        preferences.set(Setting.MASCOT,3);
+        preferences.set(Setting.MASCOT,4);
         int[] custom=preferences.snapshot().copy();
         int[][] presetValues={{0,1,1,1,0,1,0},{1,0,1,0,0,0,1},{1,1,1,1,0,0,0},{1,1,1,1,1,0,0}};
         for(int preset=0;preset<4;preset++) {
@@ -79,7 +79,7 @@ public final class PreferencesTest {
                 check(preferences.snapshot().copy()[id]==custom[id],"preset destroyed Custom");
             }
             check(preferences.snapshot().get(Setting.INFO_DEFAULT)==1 && !preferences.snapshot().on(Setting.ENABLED)
-                && preferences.snapshot().get(Setting.MASCOT)==3,
+                && preferences.snapshot().get(Setting.MASCOT)==4,
                 "preset changes unrelated settings");
         }
         preferences.set(Setting.PRESET,0);

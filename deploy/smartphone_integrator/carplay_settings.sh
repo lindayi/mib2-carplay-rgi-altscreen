@@ -12,7 +12,7 @@ cp_setting(){
       BEGIN {
         n=split("enabled mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot",keys," ")
         for(i=1;i<=n;i++){known[keys[i]]=1;max[keys[i]]=1}
-        max["mode"]=2;max["layout"]=3;max["touch_sensitivity"]=2;max["preset"]=3;max["mascot"]=3
+        max["mode"]=2;max["layout"]=3;max["touch_sensitivity"]=2;max["preset"]=3;max["mascot"]=4
         value["info_default"]=value["info_road"]=value["info_return"]=value["preset"]=value["mascot"]=0
       }
       /^#/ || /^$/ {next}

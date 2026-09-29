@@ -81,7 +81,7 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
-| Appearance | Map mascot: Off / Raccoon / Nian / Capybara | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
+| Appearance | Map mascot: Off / Raccoon / Nian / Capybara / Lizard | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
 | Controls | CarPlay wheel zoom and speed; touchpad DPAD bridge and sensitivity | Live. Disabling the touchpad bridge restores stock raw-pad forwarding; ordinary knob input remains stock. |
 | Diagnostics | Read-only status and last result, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
 | Recovery | Automatic mirror recovery; confirmed video-only restart | Live, but only for an installed, armed video-enabled session. No USB, dio_manager or MMI restart command is exposed. |
@@ -122,7 +122,7 @@ selection, mascot, input or recovery.
 
 ### Optional map mascots
 
-**Overlay appearance -> Map mascot** selects Off, Raccoon, Nian or Capybara.
+**Overlay appearance -> Map mascot** selects Off, Raccoon, Nian, Capybara or Lizard.
 The VC panel's **Map mascot** page offers the same choices. A transparent,
 80-video-pixel-high animation (twice the former width and height) travels across
 the lower navigation canvas. Following owner feedback that the enlarged mascot
@@ -133,9 +133,19 @@ This is a trial clearance, not a measured boundary of Audi's full-width street/
 Trip bar. That bar is composed in the VC after the video and cannot be outranked
 by changing draw order inside the mirror. The map crop and Audi bar are untouched.
 Placement in both View sizes still needs vehicle confirmation. The raccoon
-travels right; Nian and Capybara travel left, matching their artwork. The white
+travels right; Nian, Capybara and Lizard travel left, matching their artwork. The white
 exterior of the raccoon and capybara references is removed, without erasing
 enclosed white details such as the raccoon's face.
+
+Each animation is cropped once to the union of its frames' visible bounds before
+scaling. External GIF padding therefore does not change its on-screen ground
+line. Do not bottom-align or crop every frame separately: that would remove
+intentional hopping and change the animation. At 80-video-pixel canvas height,
+the approximate gap below pixels with at least 50% opacity varies by 0..28 pixels
+for the bouncing raccoon, 0..2 for Nian, 0..12 for Capybara and 0..2 for Lizard.
+These are host asset measurements, not cockpit-bar measurements. They add to the
+66.5-pixel base clearance at 455 pixels high; do not subtract the source GIF's
+raw transparent margin again when applying the owner's 30% clearance reduction.
 
 `libcarplay_mascot.so` is preloaded only into the existing mirror sidecar, never
 the receiver or HMI. It composites immediately before that mirror's EGL swap;
@@ -166,20 +176,39 @@ owner's local GIFs to `tools/build_mascot_assets.py` (Python/Pillow):
 
 ```sh
 python3 tools/build_mascot_assets.py --raccoon <local-raccoon.gif> \
-    --nian <local-nian.gif> --capybara <local-capybara.gif> \
+    --nian <local-nian.gif> --capybara <local-capybara.gif> --lizard <local-lizard.gif> \
     --output build/mascot-assets/mascots.rgba
 ```
 
 The native build produces the library; SD staging requires both it and the
-generated three-animation atlas; staging rejects an old two-animation atlas.
-Existing IDs stay Off=0, Raccoon=1 and Nian=2; Capybara appends ID 3.
+generated four-animation atlas; staging rejects an older atlas.
+Existing IDs stay Off=0, Raccoon=1, Nian=2 and Capybara=3; Lizard appends ID 4.
 The preference format remains version 3, and existing selections are preserved.
-Older builds cannot read Capybara's value: select Off before an intentional
+Older builds may not support newer mascot values: select Off before an intentional
 downgrade rather than relying on an older build's invalid-preference safe path.
 Source GIFs, derived artwork and SHA256 provenance stay in
 private inputs/ignored build output, not Git. No redistribution license for the
 reference artwork is asserted. The binary-only mirror is not rebuilt or
 represented as fully source-audited.
+
+The owner's blue-background lizard video is converted locally using FFmpeg and
+Pillow; neither is needed in the vehicle. Its selected walking cycle is source
+frames 66..85 at 30 fps (about 2.20..2.87 seconds). GIF frame delays alternate
+30/40 ms to preserve the cycle's timing within GIF's 10 ms precision: 20 frames,
+670 ms total. The blue background is keyed out before a fixed union crop, keeping
+the eyes and body opaque without moving the crop each frame.
+
+```sh
+python3 tools/build_mascot_video.py --input <local-lizard.mp4> \
+    --output <local-lizard.gif> --start-frame 66 --frames 20 --key-color 0044b8
+```
+
+This converter is for constant-frame-rate, solid-key-background clips, not an
+automatic subject-segmentation service for arbitrary footage. It rejects invalid
+frame ranges, unsupported timing and a key that leaves the frame borders opaque.
+The mascot suite includes synthetic-video checks for transparency, white details,
+fixed cropping, frame selection, timing and preservation on failure. The generated
+GIF and its hash/crop/timing report remain private.
 
 Arrival time uses a valid phone-supplied destination UTC offset when available,
 otherwise the existing HU-local conversion. It appears in Audi's existing arrival

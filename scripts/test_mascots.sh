@@ -11,6 +11,7 @@ test -f /.dockerenv || { echo "Mascot interposition fixtures require Docker" >&2
 mkdir -p /ramdisk
 cc -shared -fPIC tests/qnx_tmp_contract.c -ldl -o build/mascot-tests/qnx-tmp-contract.so
 python3 tests/mascot_assets_test.py
+python3 tests/mascot_video_test.py
 cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
     tests/mascot_test.c mascot/assets.c mascot/draw.c \
     -Wl,--wrap=glCreateShader -Wl,--wrap=glTexImage2D \

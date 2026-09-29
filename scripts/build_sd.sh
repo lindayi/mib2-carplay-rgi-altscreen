@@ -46,8 +46,8 @@ done
 python3 - "$PROJECT_DIR/build/mascot-assets/mascots.rgba" <<'PY'
 import sys
 with open(sys.argv[1], "rb") as atlas:
-    if atlas.read(12) != b"MASCOT01\x03\x00\x00\x00":
-        sys.exit("ERROR: regenerate the three-mascot atlas with --capybara before staging")
+    if atlas.read(12) != b"MASCOT01\x04\x00\x00\x00":
+        sys.exit("ERROR: regenerate the four-mascot atlas with --lizard before staging")
 PY
 
 echo "=== MMI-Cockpit-Carplay SD (AltScreen + RGI) -> $OUT ==="

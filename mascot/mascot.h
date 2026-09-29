@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <GLES2/gl2.h>
 
-#define MASCOT_COUNT 3
+#define MASCOT_COUNT 4
 #define MASCOT_MAX_FRAMES 32
 typedef struct {
     unsigned width, height, count, duration;

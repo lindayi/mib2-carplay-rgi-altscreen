@@ -77,7 +77,7 @@ summary(){
     fi
     if [ -r "$ROOT/ramdisk/carplay_mascot.status" ]; then
         tail -c 256 "$ROOT/ramdisk/carplay_mascot.status" | awk \
-            '/^state=(OFF|CONTROL_STALE|QUEUED|RACCOON|NIAN|CAPYBARA|ASSET_ERROR|GRAPHICS_ERROR)$/ {
+            '/^state=(OFF|CONTROL_STALE|QUEUED|RACCOON|NIAN|CAPYBARA|LIZARD|ASSET_ERROR|GRAPHICS_ERROR)$/ {
                 print "MASCOT_REPORTED_STATE=" substr($0,7)
             }'
     fi

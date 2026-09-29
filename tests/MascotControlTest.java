@@ -26,7 +26,8 @@ public final class MascotControlTest {
             check(Preferences.read(control.toFile(),96).startsWith("MASCOT2 0 0 "),"missing owner gates On");
             write(owner,pid+"\n");
             check(Setting.ALL[Setting.MASCOT].choices[3].equals("Capybara"),"stable Capybara choice ID");
-            for(int selected=1;selected<=3;selected++) {
+            check(Setting.ALL[Setting.MASCOT].choices[4].equals("Lizard"),"stable Lizard choice ID");
+            for(int selected=1;selected<=4;selected++) {
                 long start=System.currentTimeMillis();MascotControl.publish(selected);
                 String packet=Preferences.read(control.toFile(),96);
                 check(packet.startsWith("MASCOT2 "+selected+" "+pid+" ") && packet.endsWith("\n"),"canonical PID-bound packet");
@@ -39,7 +40,9 @@ public final class MascotControlTest {
             write(status,record);check(MascotControl.status().equals("RACCOON"),"live status");
             write(status,record.replace("RACCOON","CAPYBARA"));
             check(MascotControl.status().equals("CAPYBARA"),"live Capybara status");
-            for(int selected:new int[]{-1,4}) {
+            write(status,record.replace("RACCOON","LIZARD"));
+            check(MascotControl.status().equals("LIZARD"),"live Lizard status");
+            for(int selected:new int[]{-1,5}) {
                 try {MascotControl.publish(selected);throw new AssertionError("invalid selection accepted");}
                 catch(IOException expected){}
             }

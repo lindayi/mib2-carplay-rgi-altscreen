@@ -4,7 +4,8 @@ This personal native-MMI menu package requires MHI2Q_US_AUG22_P5145 / MU1316.
 The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
 No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.
 Optional mascots: Carplay Altscreen -> Overlay appearance -> Map mascot ->
-Off / Raccoon / Nian / Capybara. Default Off. They animate inside the bottom of the cluster
+Off / Raccoon / Nian / Capybara / Lizard. Default Off.
+They animate inside the bottom of the cluster
 map, above the separate information bar; not on the main MMI or Audi native map.
 The reference artwork is included for this owner's private use, not licensed here
 for redistribution. Host graphics tests are not QNX or vehicle validation.

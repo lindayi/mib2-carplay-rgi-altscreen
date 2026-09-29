@@ -59,10 +59,11 @@ def main():
     parser.add_argument("--raccoon", type=Path, required=True)
     parser.add_argument("--nian", type=Path, required=True)
     parser.add_argument("--capybara", type=Path, required=True)
+    parser.add_argument("--lizard", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     sources = (("raccoon", args.raccoon, True), ("nian", args.nian, False),
-               ("capybara", args.capybara, True))
+               ("capybara", args.capybara, True), ("lizard", args.lizard, False))
     output = bytearray(b"MASCOT01" + struct.pack("<I", len(sources)))
     provenance = []
     args.output.parent.mkdir(parents=True, exist_ok=True)

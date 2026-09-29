@@ -408,18 +408,33 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   build output and generated atlas are both required at SD staging, included in
   both checksum manifests and the installer's explicit mirror copy list.
   Retained local inputs are `carplay-build-inputs\mascot-assets\raccoon.gif`,
-  `nian.gif` and `capybara.gif`; source URLs/hashes are recorded privately,
+  `nian.gif`, `capybara.gif` and the locally converted `lizard.gif`;
+  source URLs/hashes are recorded privately,
   without retaining signed URL query tokens. No artwork redistribution rights
   are asserted.
-- Stable mascot IDs are Off=0, Raccoon=1, Nian=2, Capybara=3. Keep Java choices,
+- Stable mascot IDs are Off=0, Raccoon=1, Nian=2, Capybara=3, Lizard=4. Keep Java choices,
   shell validation, native control bounds/atlas count and diagnostic state
   allowlists aligned. Format-3 preferences retain all existing values; an old
-  build rejects Capybara=3, so choose Off before an intentional downgrade.
-  Atlas generation requires all three GIFs; SD staging rejects the old two-entry
+  build may reject newer values, so choose Off before an intentional downgrade.
+  Atlas generation requires all four GIFs; SD staging rejects an older
   atlas. Capybara uses its four original frame delays, exterior-white removal,
   the common size/clearance, and leftward travel to match its artwork.
+- The owner's private `lizard.mp4` is a 30 fps blue-background clip. Convert frames
+  66..85 with `tools/build_mascot_video.py`, key `0044b8`: 20 frames, 670 ms after
+  GIF timing quantization, fixed union crop, original white eyes preserved. Keep
+  both video/GIF and conversion provenance private. This is chroma keying, not
+  arbitrary-video segmentation; native playback still uses only the RGBA atlas.
+- Normalize external asset padding using one alpha-bounds union per animation,
+  never per-frame cropping or forced foot alignment: preserve hopping. Host
+  measurements at 80-video-pixel canvas height (alpha >= 128) give extra bottom
+  gaps of Raccoon 0..28, Nian 0..2, Capybara 0..12, Lizard 0..2 pixels. These are
+  pose differences after padding removal, not measured Audi-bar geometry. Keep
+  the requested 30% base-clearance reduction; do not double-compensate raw GIF
+  margins already removed by the atlas builder.
 - `scripts/test_mascots.sh` covers real host GLES/state/failure/interposition
-  behavior. View its previews. This is not verification of QNX EGL interposition,
+  behavior and synthetic video conversion. The host suite needs FFmpeg and Pillow;
+  local image `mib2-mascot-video-test` extends the GLES test image with FFmpeg.
+  View its previews. This is not verification of QNX EGL interposition,
   vehicle placement, or full binary-only mirror source.
 
 ### Diagnostics and recovery

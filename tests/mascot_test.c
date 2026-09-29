@@ -65,9 +65,10 @@ static void parsers(const char *atlas,const char *bad) {
     assert(mascot_config("MASCOT2 1 42 4000\n",1000,42)==1);
     assert(mascot_config("MASCOT2 2 42 4000\n",1000,42)==2);
     assert(mascot_config("MASCOT2 3 42 4000\n",1000,42)==3);
+    assert(mascot_config("MASCOT2 4 42 4000\n",1000,42)==4);
     assert(mascot_config("MASCOT2 0 0 4000\n",1000,42)==0);
     const char *invalid[]={"MASCOT1 1 4000\n","MASCOT2 1 43 4000\n","MASCOT2 1 0 4000\n",
-        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 4 42 4000\n","MASCOT2 1 42 4000\nx",
+        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 5 42 4000\n","MASCOT2 1 42 4000\nx",
         "MASCOT2 1 42 -4000\n","MASCOT2 1 42 184467440737095516160\n","MASCOT2 1 42 4000",""};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++)assert(mascot_config(invalid[i],1000,42)==-1);
     FILE *f=fopen(atlas,"rb");assert(f);assert(fseek(f,0,SEEK_END)==0);long n=ftell(f);assert(n>100);
