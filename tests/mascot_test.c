@@ -164,6 +164,11 @@ int main(int argc,char **argv) {
     GLfloat rectangle[4];glGetUniformfv(g.program,g.rectangle,rectangle);
     assert(fabsf((rectangle[1]+1)*455/2-95)<0.001f);
     assert(fabsf(rectangle[2]*1440/2-40)<0.001f && fabsf(rectangle[3]*455/2-80)<0.001f);
+    assert(mascot_draw_image(&g,solid,20,40,1));
+    snapshot(&initial);fail_texture=1;
+    assert(!mascot_draw_image(&g,solid,20,40,1));
+    snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
+    fail_texture=0;assert(mascot_draw_image(&g,solid,20,40,1));
     mascot_graphics_destroy(&g);mascot_free(a);glUseProgram(0);glDeleteProgram(program);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(d,c));assert(eglDestroySurface(d,surface));assert(eglTerminate(d));

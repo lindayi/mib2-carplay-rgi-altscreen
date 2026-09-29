@@ -18,6 +18,7 @@
 package com.luka.carplay.core;
 
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.settings.VcPanel;
 
 import de.audi.app.terminalmode.keyevents.KeyState;
 import de.audi.atip.mmicombi.IMMICombiScreenChangeManager;
@@ -43,6 +44,9 @@ public final class SteeringWheelInputModule implements Module {
     private static final Object SELECT_LOCK = new Object();
     private static long pendingPressUntil;
     private static long pendingReleaseUntil;
+    private static long pendingLongUntil;
+    private static final long[] panelBackUntil=new long[3];
+    private static boolean panelBackGesture;
 
     private final RawKeyListener listener = new RawKeyListener();
     private FrameworkRef.ServiceHandle keyPanelHandle;
@@ -107,6 +111,7 @@ public final class SteeringWheelInputModule implements Module {
             combiManager = manager;
             listenerRegistration = registration;
             running = true;
+            VcPanel.start();
             clearPendingSelects();
             Log.i(TAG, "raw MFW OK listener ready (key=40 mapContext="
                 + (manager == null ? "unavailable, using CarPlay RGI state" : "20") + ")");
@@ -135,6 +140,7 @@ public final class SteeringWheelInputModule implements Module {
         FrameworkRef.ServiceHandle handle = keyPanelHandle;
         FrameworkRef.ServiceHandle combiHandle = combiManagerHandle;
         running = false;
+        VcPanel.stop();
         keyPanel = null;
         combiManager = null;
         listenerRegistration = null;
@@ -174,8 +180,24 @@ public final class SteeringWheelInputModule implements Module {
                 pendingReleaseUntil = 0L;
                 return consume;
             }
+            if(state!=null && state.is(KeyState.LONGPRESSED)) {
+                boolean consume=pendingLongUntil>=now;pendingLongUntil=0L;return consume;
+            }
             return false;
         }
+    }
+
+    public static boolean consumePanelBack(KeyState state) {
+        int index=state==null?-1:state.is(KeyState.PRESSED)?0:state.is(KeyState.RELEASED)?1:
+            state.is(KeyState.LONGPRESSED)?2:-1;
+        if(index<0)return false;
+        synchronized(SELECT_LOCK) {
+            boolean consume=panelBackUntil[index]>=System.currentTimeMillis();
+            panelBackUntil[index]=0L;return consume;
+        }
+    }
+    private static int rawStateIndex(int state) {
+        return state==KST_PRESSED?0:state==KST_RELEASED?1:state>=3 && state<=5?2:-1;
     }
 
     private static void armCollapsedSelect(int rawState) {
@@ -183,6 +205,7 @@ public final class SteeringWheelInputModule implements Module {
         synchronized (SELECT_LOCK) {
             if (rawState == KST_PRESSED) pendingPressUntil = until;
             else if (rawState == KST_RELEASED) pendingReleaseUntil = until;
+            else if(rawState>=3 && rawState<=5)pendingLongUntil=until;
         }
     }
 
@@ -191,6 +214,7 @@ public final class SteeringWheelInputModule implements Module {
         synchronized (SELECT_LOCK) {
             if (rawState == KST_PRESSED) pendingPressUntil = 0L;
             else if (rawState == KST_RELEASED) pendingReleaseUntil = 0L;
+            else if(rawState>=3 && rawState<=5)pendingLongUntil=0L;
         }
     }
 
@@ -198,6 +222,9 @@ public final class SteeringWheelInputModule implements Module {
         synchronized (SELECT_LOCK) {
             pendingPressUntil = 0L;
             pendingReleaseUntil = 0L;
+            pendingLongUntil = 0L;
+            for(int i=0;i<panelBackUntil.length;i++)panelBackUntil[i]=0L;
+            panelBackGesture=false;
         }
     }
 
@@ -229,16 +256,36 @@ public final class SteeringWheelInputModule implements Module {
                     +" rgi="+ScreenModule.isNavActive()+" input_owner=UNVERIFIED");
             }
 
+            if(keyboardId!=KBD_MFW && keyboardId!=KBD_MFW_3GP) {
+                int index=rawStateIndex(keyState);
+                if(index>=0)synchronized(SELECT_LOCK){panelBackUntil[index]=0L;}
+            }
             if (keyCode == KEY_DDS) {
                 clearCollapsedSelect(keyState);
                 return;
             }
+            if(keyboardId==KBD_MFW || keyboardId==KBD_MFW_3GP) {
+                if(keyCode==41) {
+                    if(keyState==KST_PRESSED) {
+                        boolean consumed=VcPanel.back();
+                        synchronized(SELECT_LOCK){panelBackGesture=consumed;}
+                    }
+                    synchronized(SELECT_LOCK) {
+                        int index=rawStateIndex(keyState);
+                        if(panelBackGesture && index>=0)panelBackUntil[index]=System.currentTimeMillis()+COLLAPSED_SELECT_WINDOW_MS;
+                        if(keyState==KST_RELEASED)panelBackGesture=false;
+                    }
+                    return;
+                }
+                if(keyState==KST_PRESSED) {
+                    if(keyCode==99 || keyCode==100 || keyCode>=36 && keyCode<=39)VcPanel.dismiss();
+                }
+            }
             if (keyCode != KEY_MFW_ROLLER_LEFT
-                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)
-                    || (keyState != KST_PRESSED && keyState != KST_RELEASED)) return;
+                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)) return;
 
             armCollapsedSelect(keyState);
-            if (keyState != KST_PRESSED) return;
+            if(!VcPanel.roller(keyState))return;
 
             boolean mapTab = isConfirmedMapTab();
             Log.i(TAG, "MFW OK pressed board=" + keyboardId + " mapTab=" + mapTab);

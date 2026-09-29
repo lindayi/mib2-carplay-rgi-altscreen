@@ -1,157 +1,155 @@
-# Virtual Cockpit quick-settings prototype
+# Virtual Cockpit quick settings
 
 Target: the owner's 2020 Q5, MHI2Q_US_AUG22_P5145 / MU1316.
 
-**This is an isolated UI prototype, not an enabled vehicle menu.** The native
-renderer and navigation model compile for QNX, but no vehicle process links them,
-no new wheel shortcut is installed, and they cannot change saved preferences.
-The main MMI and existing VC drawer retain their current behavior.
+**Experimental runtime integration; not yet vehicle-confirmed.** The panel now
+uses the mirror compositor, real settings worker and steering-wheel handlers.
+The owner requested long-press availability **by default**, not a per-session
+main-MMI opt-in. This does not add a row inside Audi's native right drawer.
+The installed/tested `5a3a292` card does not contain this integration.
 
-## Visual and interaction design
+## Controls and eligibility
 
-The proposed panel sits on the right of the VC map area. It uses a charcoal
-background, light text, a restrained red selection strip, familiar submenu
-chevrons, checkboxes for switches and radio marks for exclusive choices.
-It is Audi-inspired, not a claim of pixel-identical OEM rendering. Typography
-reuses the project's embedded DejaVu-derived font; retain
-`maneuver_render/LICENSE.DEJAVU` with distributions.
+With CarPlay cluster video active, choose large-map View and turn the left
+roller one detent, then hold it to open **Carplay Altscreen**. That initial
+detent still zooms normally; it establishes map-input evidence. It is required
+again after a session change or native drawer/tab takeover. This conservative
+guard exists because the tested VC's drawer-open flags remained false.
 
-The first page contains Enabled, Display mode, Map layout, Map mascot and More
-settings. Titles and explanatory/status text are separate from selectable rows.
-Focus never lands on a heading, help text or a fake Back option. Back restores
-the parent page's previous focus, then dismisses the root panel. The UI model
-supports selection and in-memory toggle/choice changes only.
-
-`vc_menu/panel.c` paints a bounded 420x348 panel into an RGBA surface while
-preserving destination alpha and all pixels outside the panel. It refuses a
-surface too small to maintain legible text; it does not squeeze a settings page
-into the 328x181 maneuver box. The eventual vehicle composition must use measured
-map-plane geometry, not assume that host preview coordinates fit every VC stage.
-
-Run the host prototype:
-
-```sh
-bash scripts/test_vc_panel.sh
-```
-
-It requires a host C compiler with ASan/UBSan and Python/Pillow. In the existing
-Linux test image put `/usr/bin` before the QNX toolchain in `PATH`.
-It produces `build/vc-panel-previews/root.png`, `mascot.png` and `closed.png`.
-The background is a schematic fixture, not captured CarPlay video or a cockpit
-photograph. The regular native build also produces
-`build/libvc_menu_prototype.a`, deliberately not linked or deployed.
-
-## Project-owned actions and remaining input gate
-
-The observed Road/Trip toggle and CarPlay zoom are implemented by this project,
-not proof of unavoidable VC-local actions. Source and exact MU1316 bytecode
-inspection after the owner's clarification establishes these control points:
-
-| Action | Current path | Candidate menu routing |
-| --- | --- | --- |
-| Road/Trip toggle | `SteeringWheelInputModule.RawKeyListener.updateKey2` handles raw roller state 1, then `ScreenModule.onSteeringWheelOkPressed` calls `RouteGuidance.requestInfoModeToggle` | Defer a short action until release; a recognized long hold can open the panel without first toggling Road/Trip. While the panel is active, route a new short press to selection instead. |
-| CarPlay map zoom | `ScreenCombiBAPListener.setMapScale` -> `AltScreenCluster.onMapScaleSteps` -> `CMD_ALT_ZOOM` -> native `alt_on_zoom` -> AirPlay `changeMapZoomLevel` | Route the unscaled BAP steps to menu navigation instead of sending the zoom command. The existing zoom preference already gates the CarPlay command. |
-| Audi map zoom behind the video | The same override calls stock `super.setMapScale(steps)` | Stock increments map-context value 400476 and may change auto-zoom, then calls protected `updateMapScale()`. An owned-menu branch can call the latter directly to report the unchanged scale without applying those changes. Preserve its initialized-scale/status behavior; do not simply discard the BAP request. |
-| Main-CarPlay Select copy | `consumeCollapsedSelect` filters raw-wheel-origin pressed/released `DDS_SELECT` events in `CarplayDSILifecycleController` | Preserve wheel/centre-knob separation. Long/repeat states require their own review; the existing filter is not a general input grab. |
-
-Both short and long presses currently toggle Road/Trip because the action runs
-at state 1, before state 3 identifies a long hold. Long states are traced but
-do not invoke a separate action. This behavior does not establish that the VC
-itself toggled the information page.
-
-A global exclusive keyboard API is therefore **not a prerequisite for gating
-these project-controlled actions**. The candidate is one local router with
-explicit closed/opening/active/closing state and a renderer-acknowledged,
-generation-bound ownership lease. Use one source for menu movement: raw encoder
-and BAP scale describe the same detents, and the returned trace has opposite
-signs between them. Do not apply both or apply the user's map-zoom speed multiplier
-to menu navigation.
-
-This is an implementation approach, not an enabled feature or verified native
-drawer integration. It still needs activation eligibility, press/release/hold
-arbitration, loss-of-renderer recovery and dismissal tests. In particular:
-
-- Existing map-tab fallback checks connection/RGI state, not authoritative VC
-  focus; map-only sessions must not inherit the active-RGI requirement blindly.
-- Right/left drawer, Back and tab keys can request local dismissal without
-  suppressing Audi's actions, but their observation does not detect an already-open
-  native drawer or prove that no other cluster-local selection occurs.
-- Preserve native map-scale status replies, normal closed-menu behavior and the
-  centre-console knob. A delayed callback from an old connection or closed panel
-  must not reactivate menu ownership.
-- A long-roller custom panel is distinct from inserting a new entry inside
-  Audi's existing right drawer. No arbitrary OEM drawer-entry mechanism has been
-  demonstrated here.
-
-The next step can be a disabled-by-default local routing/renderer integration
-with host state-machine tests, followed by a bounded parked-car interaction test.
-Another identical event-delivery trace, by itself, is not the missing mechanism.
-
-The exact stock `org.dsi.ifc.keypanel.Constants` defines:
-
-| Input | Code |
+| Input | Panel behavior |
 | --- | --- |
-| Left roller press | 40 |
-| Wheel cancel/Back | 41 |
-| Left/right side-menu keys | 99 / 100 |
-| Press / release | 1 / 0 |
-| Double press / long press | 2 / 3 |
-| Further long-press states | 4 / 5 |
+| Long roller hold | Open, or close an already-open panel; the opening release does not select |
+| Rotation | Move once per BAP scale step; no project CarPlay/native-map zoom while input is owned |
+| Short roller press/release | Select the displayed row; outside the panel, Road/Trip toggles on release rather than initial press |
+| Back | Return to the parent selection, then close at the root |
+| Either native drawer button, tab or View change | Dismiss the panel and retain the stock action |
 
-The returned trace establishes delivery of the tested keys, but not consumption
-of arbitrary cluster-local actions. `DSIKeyPanel`
-listeners observe events; they do not return a consumed flag. Existing raw
-roller suppression addresses its later CarPlay `DDS_SELECT` copy, not arbitrary
-stock VC behavior.
+Only a successfully presented, matching panel snapshot grants input routing.
+Selection waits for the displayed revision; turning then pressing faster than
+the new row is acknowledged does not select an unseen row. The panel closes
+on parking/camera intent, video/session loss, Master Off, incompatible display
+mode, expired presentation acknowledgement or 30 seconds without menu input.
+An unacknowledged opening times out after 1.5 seconds. It does not reopen itself.
 
-Navigation BAP FctID 54 reports large-map and left/right drawer-open flags.
-The stock handler stores/acknowledges these flags and updates map size; this
-does not grant a custom panel keyboard ownership. FctID 44 exposes fixed
-map-view/orientation options, not an arbitrary menu-entry payload.
-The optional `IMMICombiScreenChangeManager` is not a dependable service on this
-configuration. `ScreenModule` video/RGI flags alone are not proof of the active
-VC tab or input focus.
+Small-map View and Audi-map-only mode are not supported panel surfaces in this
+first integration. Map-only CarPlay mode is supported without requiring active
+route guidance. Turning Enabled Off or selecting Audi-map mode can remove the
+panel's own video surface; use the main-MMI menu to restore those settings.
+No preference reboots MMI or disconnects the phone automatically.
 
-Before declaring a live shortcut usable, host integration and parked-car
-observation must establish:
+## Layout and preferences
 
-- Correct arbitration of the observed press, release, long-press and roller events.
-- Whether the native drawer or zoom UI acts before the head unit sees them.
-- How to establish and revoke scoped menu input ownership without a competing
-  display-context writer, fake map option or global button suppression.
-- Dismissal on Back, native drawer opening, tab/View changes, camera/parking
-  takeover, disconnect, missing renderer acknowledgement and stale generations.
-- No underlying map zoom, Road/Trip toggle or main-CarPlay selection while the
-  panel owns input; centre-console controls and ordinary right-button behavior
-  remain stock.
+The right-aligned panel uses a charcoal background, light text, restrained red
+selection strip, chevrons, checkboxes and radio choices. It is Audi-inspired,
+not pixel-identical OEM rendering. Typography reuses the embedded DejaVu-derived
+font; retain `maneuver_render/LICENSE.DEJAVU` with distributions.
 
-## Observe-only evidence
+The root contains Enabled, Display mode, Map layout, Map mascot and More settings.
+More provides Guidance, Appearance, Information bar, Controls and Reapply map
+layout. These use the same `Setting` definitions, `Preferences` snapshots and
+asynchronous `SettingsRuntime` save/action path as main MMI, not a second settings
+file. Checked values reflect persisted snapshots, not optimistic local toggles.
+Save errors, transient success notices and reconnect requirements occupy the
+non-selectable hint area. Main-MMI Last result retains complete details.
 
-The returned `5a3a292` trial on 2026-09-28 proves raw roller press/release and
-long states 3/4, encoder steps, right-menu key 100 and Back key 41 reach the HU.
-The owner reports short/long presses both changing the project-controlled Road/Trip bar,
-rotation zooming the map, and right/Back controlling Audi's drawer; main CarPlay
-did not react. Crucially, every logged Fct54 left/right-menu flag stayed false
-despite that visible drawer. The trace establishes delivery, **not consumption,
-exclusive ownership or a reliable native-drawer dismissal signal**. The live
-panel remains disabled. The controllable HU actions above narrow this gate; the
-false flags still prevent treating BAP drawer status as an authoritative focus signal.
+Titles, hints and the fixed control footer are not menu rows. Back restores
+parent focus; choices start at the saved value. There are at most six selectable
+rows per page, with bounded ASCII labels and ellipsis for long display text.
+Export, install, reset and receiver-restart actions are not included.
 
-With existing verbose diagnostics enabled, Java now logs `[VcInput]` records:
+`vc_menu/panel.c` paints a 420x348 panel. The runtime uploads a padded 452x380
+image to the right/top of the mirror viewport, preserving caller GL state,
+destination alpha and pixels outside the panel. It draws after the mascot and
+before the mirror's existing EGL swap; there is no extra displayable, context
+writer or swap. In the logged 1440x455 viewport the panel occupies x=1004..1423,
+with 16 pixels above and 91 below. This is a map-video canvas, not the entire
+cockpit. Audi's VC-local layers may still occlude it; final placement needs a
+parked-car check. Do not squeeze it into the 328x181 maneuver box.
 
-- `RAW_KEY`: only relevant MFW navigation keys, including long/repeat states.
-- `RAW_ENCODER`: the left-wheel encoder when optional notification is available.
-- `BAP_MAP_SCALE` and `BAP_PRESENTATION`: stock navigation callback delivery.
-- `CARPLAY_KEY`: relevant normalized keys reaching the existing CarPlay path,
-  including the already-existing MFW select suppression.
+## Runtime and acknowledgement contract
 
-The new trace does not consume any additional keys, change stock BAP handling,
-claim focus or render the prototype. Encoder-trace registration failure is
-reported without disabling the existing key listener. Logging remains on the
-existing asynchronous bounded writer and is quiet at normal verbosity.
+`VcPanel.java` owns navigation and gesture state. Raw key callbacks only publish
+intent; its bounded worker exchanges atomic RAM files. The mirror's existing
+overlay worker parses/rasterizes snapshots; only its EGL thread touches GL.
+The native metadata lock covers no file I/O or CPU text painting.
 
-Capture while parked, noting visible behavior as well as the trace, with main
-MMI CarPlay left open. Include short/long roller press, a few detents, Back,
-ordinary right drawer open/close, and a VC tab change. Video/RGI fields are
-explicitly marked `input_owner=UNVERIFIED`. Full exports remain private and are
-not uploaded automatically. An input trace alone is not proof of suppression.
+- Control: `/ramdisk/carplay_vc_panel.control`.
+- Header: `VCPANEL1 pid epoch revision expires_ms connection count focus`.
+- Open snapshots then contain title, hint and `count` rows, each
+  `kind checked<TAB>label<TAB>value`. Closed snapshots have count/focus zero.
+- Status: `/ramdisk/carplay_vc_panel.status`, one line
+  `VCPANEL1 pid epoch revision expires_ms connection state`.
+  State is 1 for presented, 0 for withdrawn/pending, -1 for a renderer error.
+- Control expires after 600 ms. Native rendering additionally requires an
+  advancing control worker (at most 400 ms without renewal) and video readiness.
+- Presentation expires after 300 ms and advances only after successful real
+  `eglSwapBuffers`, not worker polling. Java requires matching PID, epoch,
+  connection and revision bounds; selection requires the exact shown revision.
+
+No input is captured during opening without an acknowledgement. Stalled video,
+failed swaps, stale PID/session files, stopped workers or missing runtime support
+withdraw ownership. Context recreation rebuilds GL objects. Fresh texture
+allocation is validated before a new UI revision can be acknowledged; an upload
+failure must not report old pixels as the new selection.
+
+`libcarplay_mascot.so` retains its compatibility filename but now contains both
+overlays. Mascot Off does not disable the panel. Conversely, a missing mascot
+atlas does not prevent panel rendering. Keep the library preload restricted to
+the mirror sidecar, never the main receiver or HMI.
+
+## Input routing and native coexistence
+
+Road/Trip and CarPlay zoom are project-controlled, not unavoidable VC-local
+actions. `SteeringWheelInputModule` now arbitrates raw key 40 press/hold/release.
+Ordinary completed short gestures still call `ScreenModule` and `RouteGuidance`.
+Wheel-origin normalized short/long Select copies are filtered separately from
+the centre-console knob. An owned panel's Back gesture also filters only its
+wheel-origin main-CarPlay copy, including release after closing the panel.
+Console events clear stale Back markers; ordinary closed-panel Back is unchanged.
+
+`ScreenCombiBAPListener.setMapScale` uses one movement source: BAP steps. Raw
+encoder events remain trace-only; they describe the same detents with opposite
+signs in the returned capture. Menu movement does not use the zoom-speed setting.
+While owned, the override calls protected stock `updateMapScale()` to report the
+unchanged scale, skipping both the CarPlay command and stock zoom mutation.
+Otherwise both original zoom paths run unchanged.
+
+Exact MU1316 bytecode confirms that stock `setMapScale` normally changes map
+context value 400476, may change auto-zoom, and then calls that status method.
+No global keyboard grab or arbitrary native drawer-entry API is claimed.
+Raw right/left/Back/tab events still reach Audi. Native coexistence, particularly
+Back outside an OEM drawer, must be checked on the car.
+
+## Evidence and checks
+
+The returned `5a3a292` trial proves raw press/release/long states 3/4, encoder,
+right-button 100 and Back 41 delivery. The owner saw Road/Trip toggling, map zoom
+and native drawer operation, with no main-CarPlay reaction. All logged Fct54
+drawer flags stayed false despite the visible drawer. These observations
+motivated the local router and map-scale entry guard; they do not prove final
+menu usability or complete input ownership.
+
+Host coverage:
+
+- `VcPanelTest`: gesture arbitration, map/size eligibility, exact-stock scale
+  reply without a MapManager, single movement source, revision/lease checks,
+  focus restoration, session/parking dismissal and shared settings persistence.
+- `VcPanelWorkerTest`: actual Java worker/atomic files with explicitly simulated
+  renderer acknowledgements, stale epochs/PIDs, timeout, malformed status and stop.
+- `vc_panel_protocol_test.c`: bounded schema, malformed/truncated input, lease/PID
+  gates and a snapshot generated by the real Java serializer.
+- `test_vc_panel.sh`: sanitizer-backed model/rendering/parser checks and previews.
+- `test_mascots.sh`: actual host EGL panel pixels and alpha at 1440x455, successful
+  swap acknowledgements, readiness loss/recovery, revisions, stalls, expiry,
+  small-surface rejection, texture failure and context recreation.
+- Package fixtures retain export-only immutability and remove panel RAM state
+  during restore. Summary export includes only selected status fields.
+
+The actual GL composite is `build/mascot-tests/vc-panel-live.png`. Earlier
+`build/vc-panel-previews/*.png` remain schematic UI-only previews. Neither is a
+cockpit photo. Host tests cannot establish native drawer coexistence, physical
+occlusion, QNX graphics responsiveness or in-car legibility.
+
+Verbose `[VcInput]` traces remain available; `[VcPanel]` records opening,
+presentation, selection and closure. Failures are explicit and the main-MMI
+System status includes panel state. Keep diagnostic exports private.

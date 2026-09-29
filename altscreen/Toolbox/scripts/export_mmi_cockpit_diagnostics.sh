@@ -67,6 +67,14 @@ summary(){
     marker MASCOT_RAMDISK "$ROOT/ramdisk"
     marker MASCOT_CONTROL "$ROOT/ramdisk/carplay_mascot.control"
     marker MASCOT_STATUS "$ROOT/ramdisk/carplay_mascot.status"
+    marker VC_PANEL_CONTROL "$ROOT/ramdisk/carplay_vc_panel.control"
+    marker VC_PANEL_STATUS "$ROOT/ramdisk/carplay_vc_panel.status"
+    if [ -r "$ROOT/ramdisk/carplay_vc_panel.status" ]; then
+        tail -c 256 "$ROOT/ramdisk/carplay_vc_panel.status" | awk \
+            '$1=="VCPANEL1" && NF==7 && $7 ~ /^(-1|0|1)$/ {
+                print "VC_PANEL_REPORTED_STATE=" $7
+            }'
+    fi
     if [ -r "$ROOT/ramdisk/carplay_mascot.status" ]; then
         tail -c 256 "$ROOT/ramdisk/carplay_mascot.status" | awk \
             '/^state=(OFF|CONTROL_STALE|QUEUED|RACCOON|NIAN|ASSET_ERROR|GRAPHICS_ERROR)$/ {

@@ -68,7 +68,7 @@ The text layer is attached only in the queued HMI refresh, after stock tree
 connection, and is hidden/reused across disconnects. Stock parent teardown caches
 its child count, so removing a sibling inside that traversal is unsafe.
 No widget-tree changes occur in paint or in the parent's disconnect traversal.
-These are main-MMI changes; they do not enable the separate VC menu prototype.
+These main-MMI layers remain separate from the experimental VC panel described below.
 
 ## Settings and application
 
@@ -278,9 +278,11 @@ overflow. The new clipping/notice changes, driver-lock behavior, persistence acr
 reboots and adapter compatibility are not established by that report.
 Do not describe the host tests as full vehicle validation.
 
-## Proposed Virtual Cockpit access
+## Experimental Virtual Cockpit access
 
-The separate [VC quick-settings prototype](vc-quick-settings.md) explores a right-aligned,
-Audi-inspired panel. It is not linked into the vehicle runtime: live wheel
-ownership must be established before enabling an opening shortcut. The current
-Navigation Settings entry remains the installed access path.
+The [VC quick-settings panel](vc-quick-settings.md) now has mirror rendering,
+wheel routing and shared preference saves. Long-press is enabled by default in
+the new source, with large-map View and a map-zoom detent required to establish
+entry eligibility. This is a custom panel, not an extra row inside Audi's drawer.
+It is not yet vehicle-confirmed or present on the tested `5a3a292` card. The
+Navigation Settings entry remains available, including when no panel surface exists.

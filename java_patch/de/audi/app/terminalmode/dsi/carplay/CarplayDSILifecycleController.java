@@ -864,6 +864,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateKey(Key key, KeyState keystate) {
+            if(Key.BACK.is(key) && SteeringWheelInputModule.consumePanelBack(keystate)) {
+                com.luka.carplay.framework.Log.i("VcInput","CARPLAY_KEY key="+key+" state="+keystate
+                    +" route=VC_PANEL_BACK_SUPPRESSION");
+                return;
+            }
             /* Raw key 40 (left MFW roller) and raw key 16 (centre DDS) both become
              * DDS_SELECT in the stock keyboard stack.  The raw listener marks only
              * key 40, so consume that copy here before it reaches iOS.  This applies

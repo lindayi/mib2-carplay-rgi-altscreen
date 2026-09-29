@@ -19,9 +19,14 @@ public final class SteeringWheelTraceTest {
             listener.updateKey2(4,key,state,3,1);
             check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.PRESSED),"trace consumed unrelated wheel key");
             check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.RELEASED),"trace consumed unrelated release");
+            check(!SteeringWheelInputModule.consumePanelBack(KeyState.PRESSED),"closed panel consumed Back");
+            check(!SteeringWheelInputModule.consumePanelBack(KeyState.RELEASED),"closed panel consumed Back release");
         }
         listener.updateKey2(4,40,3,4,1);
-        check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.LONGPRESSED),"new long-press interception");
+        check(SteeringWheelInputModule.consumeCollapsedSelect(KeyState.LONGPRESSED),"wheel long press leaked to CarPlay");
+        listener.updateKey2(4,40,3,4,1);
+        listener.updateKey2(1,16,3,5,1);
+        check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.LONGPRESSED),"centre knob long press affected");
         listener.updateEncoder2(4,40,3,0,1);
         check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.PRESSED),"encoder acquired input");
         listener.updateKey2(4,40,1,5,1);
@@ -32,6 +37,6 @@ public final class SteeringWheelTraceTest {
         running.setBoolean(module,false);
         listener.updateKey2(4,40,1,8,1);
         check(!SteeringWheelInputModule.consumeCollapsedSelect(KeyState.PRESSED),"stopped listener consumed");
-        System.out.println("SteeringWheelTraceTest: observe-only keys/encoder, no new interception, centre DDS and invalid/stopped gates PASS");
+        System.out.println("SteeringWheelTraceTest: wheel-origin short/long suppression, centre DDS, observe-only encoder and invalid/stopped gates PASS");
     }
 }

@@ -22,5 +22,7 @@ int mascot_config(const char *text, uint64_t now_ms, unsigned pid);
 unsigned mascot_frame(const mascot_animation *animation, uint64_t elapsed_ms);
 int mascot_draw(mascot_graphics *graphics, const mascot_animation animations[MASCOT_COUNT],
                 unsigned selected, uint64_t elapsed_ms);
+int mascot_draw_image(mascot_graphics *graphics,const unsigned char *rgba,
+                     unsigned width,unsigned height,int refresh);
 void mascot_graphics_destroy(mascot_graphics *graphics);
 #endif

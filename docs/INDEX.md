@@ -43,7 +43,7 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 ## 📱 HMI - head-unit screen  [x]
 - [pdc-small-stage](hmi/pdc-small-stage.md) - CarPlay stays beside the side parking (OPS) popup: small stage, message 108, APS drawer, status line
 - [carplay-settings](hmi/carplay-settings.md) - Native MMI settings, application rules and vehicle validation limits
-- [vc-quick-settings](hmi/vc-quick-settings.md) - Isolated VC-style panel prototype; live wheel ownership remains unverified
+- [vc-quick-settings](hmi/vc-quick-settings.md) - Experimental default-long-press VC panel, renderer leases and native-coexistence limits
 
 ## 🚀 Deploy  [x]
 - [install](deploy/install.md) - release contents, M.I.B. installer, manual install (SSH or Telnet), verify, uninstall

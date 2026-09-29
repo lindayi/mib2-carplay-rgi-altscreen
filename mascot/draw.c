@@ -122,22 +122,29 @@ fail:
     mascot_graphics_destroy(g);
     return 0;
 }
-int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsigned selected,uint64_t elapsed_ms) {
+static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsigned selected,uint64_t elapsed_ms,int image,int refresh) {
     if(selected==0)return 1;
     if(selected>MASCOT_COUNT)return 0;
     GLint viewport[4],framebuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING,&framebuffer);glGetIntegerv(GL_VIEWPORT,viewport);
     if(framebuffer!=0 || viewport[2]<128 || viewport[3]<64)return 0;
     const mascot_animation *sprite=&a[selected-1];
-    float width=2.f*sprite->width,height=2.f*sprite->height;
+    float width=(image?1.f:2.f)*sprite->width,height=(image?1.f:2.f)*sprite->height;
     /* Trial clearance for the VC-local street/Trip overlay, not a measured bar boundary. */
-    float bottom=ceilf(viewport[3]*0.20f)+4.f;
+    float bottom=image?viewport[3]-height:ceilf(viewport[3]*0.20f)+4.f;
+    if(image && (viewport[2]<(int)width || viewport[3]<(int)height))return 0;
     if(bottom+height>viewport[3])return 0;
     saved_state state;save(&state);
-    int good=g->initialized || initialize(g,a);
+    int good;
+    if(image && refresh && g->initialized) {
+        mascot_graphics next={0};
+        good=initialize(&next,a);
+        if(good){mascot_graphics_destroy(g);*g=next;}
+    } else good=g->initialized || initialize(g,a);
     if(good) {
         float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+width);
         float x=selected==1?travel-width:viewport[2]-travel;
+        if(image)x=viewport[2]-width;
         glUseProgram(g->program);glUniform1i(g->sampler,0);
         glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,2.f*bottom/viewport[3]-1.f,
             2.f*width/viewport[2],2.f*height/viewport[3]);
@@ -153,4 +160,15 @@ int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     }
     restore(&state);
     return good;
+}
+int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsigned selected,uint64_t elapsed_ms) {
+    return draw(g,a,selected,elapsed_ms,0,0);
+}
+int mascot_draw_image(mascot_graphics *g,const unsigned char *rgba,unsigned width,unsigned height,int refresh) {
+    mascot_animation a[MASCOT_COUNT]={{0}};
+    for(unsigned i=0;i<MASCOT_COUNT;i++) {
+        a[i].width=width;a[i].height=height;a[i].count=1;a[i].duration=1000;a[i].delay[0]=1000;
+        a[i].pixels=(unsigned char *)rgba;
+    }
+    return draw(g,a,1,0,1,refresh);
 }

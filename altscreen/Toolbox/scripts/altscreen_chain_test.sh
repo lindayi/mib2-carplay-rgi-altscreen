@@ -409,6 +409,11 @@ cleanup_volatile_runtime(){
                 "$ram_root"/carplay_mascot.control.new \
                 "$ram_root"/carplay_mascot.status \
                 "$ram_root"/carplay_mascot.status.*.new \
+                "$ram_root"/carplay_vc_panel.control \
+                "$ram_root"/carplay_vc_panel.control.new \
+                "$ram_root"/carplay_vc_panel.status \
+                "$ram_root"/carplay_vc_panel.status.new \
+                "$ram_root"/carplay_vc_panel.status.*.new \
                 "$tmp_root"/mmi-mirror-active \
                 "$tmp_root"/mmi-mirror-basevideo.ready \
                 "$tmp_root"/mmi-mirror-controller.started \

@@ -23,6 +23,7 @@ public final class SettingsRuntime {
     private static volatile String result="Ready";
     private static volatile long savedAt;
     private static String lastNotice="";
+    private static String lastPanelStatus="";
     private static volatile boolean busy;
     private static boolean actionBusy,syncPending;
     private static String pendingAction;
@@ -213,6 +214,8 @@ public final class SettingsRuntime {
         }
         String notice=notice();
         if(!notice.equals(lastNotice)){lastNotice=notice;changed();}
+        String panel=VcPanel.status();
+        if(!panel.equals(lastPanelStatus)){lastPanelStatus=panel;changed();}
     }
     private static void loop(int run){
         while(current(run)) {
@@ -350,6 +353,7 @@ public final class SettingsRuntime {
             "Cockpit integration: "+(CarPlayApp.isActive()?"Active":"Inactive"),
             "Mirror health: "+mirrorHealth,
             "Map mascot renderer: "+mascotHealth,
+            "VC quick settings: "+VcPanel.status(),
             "Last cluster context: "+clusterContext,
             "Video marker: "+(readyMarker?"Present (not pixel proof)":"Absent"),
             error.length()==0?"Preferences: valid":"Preferences error: "+error,

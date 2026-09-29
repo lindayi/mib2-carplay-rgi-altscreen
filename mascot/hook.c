@@ -1,4 +1,5 @@
 #include "mascot.h"
+#include "../vc_menu/runtime.h"
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <pthread.h>
@@ -79,6 +80,7 @@ static void *control_loop(void *unused) {
     const char *last="";
     uint64_t last_status=0;
     for(;;) {
+        vc_overlay_poll();
         int next=-1;
         char text[96];
         FILE *file=fopen(config,"r");
@@ -108,7 +110,7 @@ static void *control_loop(void *unused) {
         if(strcmp(last,state) || now-last_status>=1000) {
             status(state,strcmp(last,state)!=0);last=state;last_status=now;
         }
-        struct timespec wait={0,250000000};
+        struct timespec wait={0,100000000};
         nanosleep(&wait,NULL);
     }
     return NULL;
@@ -151,7 +153,13 @@ EGLBoolean eglSwapBuffers(EGLDisplay display,EGLSurface surface) {
         }
     }
     previous=choice;
-    return real_swap(display,surface);
+    vc_panel_frame frame={0};
+    if(context!=EGL_NO_CONTEXT && surface!=EGL_NO_SURFACE
+            && eglGetCurrentDisplay()==display && eglGetCurrentSurface(EGL_DRAW)==surface)
+        vc_overlay_draw(&frame);
+    EGLBoolean result=real_swap(display,surface);
+    vc_overlay_presented(&frame,result==EGL_TRUE);
+    return result;
 }
 __attribute__((visibility("default")))
 EGLBoolean eglDestroyContext(EGLDisplay display,EGLContext context) {
@@ -162,5 +170,6 @@ EGLBoolean eglDestroyContext(EGLDisplay display,EGLContext context) {
         memset(&graphics,0,sizeof(graphics));
         graphics_context=EGL_NO_CONTEXT;graphics_failed=0;previous=0;
     }
+    if(result)vc_overlay_context_lost(context);
     return result;
 }

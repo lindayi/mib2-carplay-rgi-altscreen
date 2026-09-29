@@ -84,7 +84,8 @@ Earlier JSON reports are historical, not necessarily the current build.
   Back delivery. The owner observed short/long both toggling Road/Trip, rotation
   zooming, and right/Back controlling Audi's drawer, without affecting main CarPlay.
   Every recorded Fct54 drawer flag was false despite the visible drawer: these
-  flags cannot establish exclusive ownership or dismissal. Keep the VC panel disabled.
+  flags cannot establish exclusive ownership or dismissal. That card had no live
+  VC panel; the later guarded integration below remains vehicle-unverified.
 - New source changes below are not part of the tested card. Status text now has
   an explicit native-node clip; successful saves name the setting and expire after
   five seconds without erasing Last result, failures or the reconnect requirement.
@@ -260,25 +261,47 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 ### Native MMI menu
 
 - Entry: **NAV -> right drawer -> Navigation settings -> Carplay Altscreen**.
-- The proposed VC panel is currently an isolated prototype (`vc_menu/`), not
-  linked or deployed. Its title/help/footer are not focusable rows. Keep the main
-  MMI on CarPlay as the access-design goal, not a claimed implemented feature.
+- The experimental VC panel now links through the mirror-only overlay library
+  (`libcarplay_mascot.so`) and uses the shared SettingsRuntime save path. Per the
+  owner's explicit choice, long-press is enabled by default, not session-opt-in.
+  It requires large-map View, live CarPlay video and a BAP zoom detent after each
+  session/drawer/tab takeover to establish eligibility. It is not an OEM drawer
+  entry, supports no Audi-map-only surface, and is not vehicle-confirmed.
+- `VcPanel` arbitrates press/hold/release, uses BAP scale as the sole movement
+  source and restores parent focus. Ordinary Road/Trip now toggles on release.
+  The opening hold/release must never select a row. Native drawer/tab/View,
+  parking intent, lifecycle changes and renderer failure withdraw input ownership.
+  Closing/hidden/unacknowledged panels must never accept a new setting change.
+  Filter the owned wheel Back gesture's normalized main-CarPlay copy through
+  release, even if Back closed the panel. Never suppress the centre-console Back.
+- Panel control/status use strict `VCPANEL1` snapshots under `/ramdisk`, tied to
+  mirror PID, opening epoch, revision and receiver connection. Control lasts
+  600 ms; the native control-worker lease is at most 400 ms. A 300 ms presentation
+  lease advances only after a successful real EGL swap. Select requires the
+  exact displayed revision; a worker/status heartbeat is not presentation.
+- Native CPU painting happens outside the render mutex; metadata exchange does
+  no I/O. Repaint on a readiness re-entry even when epoch/revision are unchanged:
+  otherwise a transparent initial buffer can be incorrectly acknowledged.
+  Validate a fresh texture allocation before acknowledging changed UI pixels.
+  Test the real 1440x455 EGL composite, not only model geometry or status strings.
 - MU1316 raw MFW keys: roller 40, cancel 41, side-menu left/right 99/100.
   Raw state 2 is **double press**, 3 is long press (4/5 further long states).
   DSI observation and BAP drawer-open flags do not grant exclusive wheel input.
   Existing MFW DDS_SELECT suppression protects CarPlay only, not native VC UI.
-  Do not enable a live panel gesture until ownership/dismissal are demonstrated.
-  See `docs/hmi/vc-quick-settings.md` for the parked evidence gate.
+  The local router gates project actions; native coexistence still requires
+  parked verification. See `docs/hmi/vc-quick-settings.md`.
 - Road/Trip and CarPlay zoom are project-controlled actions, not evidence that
   arbitrary VC-local input must first be globally grabbed. Raw state 1 calls
   `ScreenModule.onSteeringWheelOkPressed` -> `RouteGuidance.requestInfoModeToggle`;
-  it fires before a long hold is recognized. A hold shortcut must defer the short
-  action until release and suppress its opening gesture's later release.
+  it previously fired before a long hold was recognized. The router now defers
+  the short action until release and suppresses the opening gesture's release.
 - Zoom enters our `ScreenCombiBAPListener.setMapScale`: it calls the CarPlay zoom
   handler and then stock zoom. Exact MU1316 stock code mutates map context 400476/
   auto-zoom before protected `updateMapScale()` reports the scale. A local menu
   router can bypass both zoom actions but retain the current-scale status reply.
-  This seam is source/bytecode-verified, not a vehicle-tested menu interception.
+  An exact-stock host regression exercises this seam without a MapManager,
+  proving no stock zoom delegation while still sending the scale status.
+  This is not yet a vehicle-tested menu interception.
   Use one movement source: raw encoder and BAP scale duplicate detents with
   opposite signs in the returned trace. Native drawer/focus and dismissal are
   separate remaining gates, not proof that these two project actions cannot be gated.
@@ -442,6 +465,9 @@ the documented toolchain/private inputs and recreate the Windows adapter if need
 - Retain checks for the hook export allowlist, no emutls/eager RGD initialization,
   ARM ELF and no C++ runtime dependency. Generated Screen/EGL/GLES import stubs are
   link-time aids only; never deploy them over the real vehicle libraries.
+- QNX's GLES header sequence can leave compiler `stddef.h` unable to expose
+  `size_t` again. The panel public header uses libc `stdlib.h` for that type;
+  retain the cross-build check, rather than assuming host header ordering matches.
 - `build_sd.sh` regenerates JAR size/POSIX cksum pins in INSTALL/START/STATUS and the
   package SHA256 manifest. Never swap a JAR alone into an already-staged package.
 - Changing mirror scripts requires updating their release `SHA256SUMS` before SD

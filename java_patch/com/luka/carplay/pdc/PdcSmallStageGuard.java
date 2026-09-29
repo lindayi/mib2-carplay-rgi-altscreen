@@ -57,6 +57,8 @@ public final class PdcSmallStageGuard {
     /* Popup visibility is independent of CarPlay focus. HOME can release our
      * screen override while the same OPS remains open, with no new DSI edge. */
     private static boolean opsPopupVisible;
+    private static volatile boolean parkingControlsActive;
+    public static boolean isParkingControlsActive(){return parkingControlsActive;}
     private static AbstractParkingSystemPLAComponent passivePla;
     private static HMIService protectedHmi;
     private static int showGeneration;
@@ -87,6 +89,8 @@ public final class PdcSmallStageGuard {
     public static synchronized void parkingContentChanging(
         DisplayContent content, List systems, HMIService hmiService
     ) {
+        parkingControlsActive=content!=null && (content.getPopup()!=DSICarParkingSystem.POPUP_NONE
+            || content.getMode()==DSICarParkingSystem.VPSMODE_TRAILERASSIST_ARA);
         pureOpsContent = isPureOpsContent(content, systems);
         Log.i(TAG, "parking intent popup=" + (content == null ? -1 : content.getPopup())
             + " mode=" + (content == null ? -1 : content.getMode())
@@ -153,6 +157,7 @@ public final class PdcSmallStageGuard {
     }
 
     public static synchronized void parkingStopped() {
+        parkingControlsActive=false;
         pureOpsContent = false;
         passivePla = null;
         opsPopupVisible = false;

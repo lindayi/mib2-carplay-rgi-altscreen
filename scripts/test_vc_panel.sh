@@ -6,6 +6,9 @@ mkdir -p build/vc-panel-previews
 cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
     tests/vc_panel_test.c vc_menu/panel.c -o build/vc-panel-previews/test
 ASAN_OPTIONS=detect_leaks=1 build/vc-panel-previews/test build/vc-panel-previews
+cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    tests/vc_panel_protocol_test.c vc_menu/protocol.c -o build/vc-panel-previews/protocol
+ASAN_OPTIONS=detect_leaks=1 build/vc-panel-previews/protocol
 python3 - <<'PY'
 from pathlib import Path
 from PIL import Image

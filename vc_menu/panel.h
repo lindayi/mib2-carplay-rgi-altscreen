@@ -1,7 +1,7 @@
 #ifndef CARPLAY_VC_PANEL_H
 #define CARPLAY_VC_PANEL_H
 
-#include <stddef.h>
+#include <stdlib.h>
 #include <stdint.h>
 
 #define VC_PANEL_ROWS 6
