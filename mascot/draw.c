@@ -131,7 +131,7 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     const mascot_animation *sprite=&a[selected-1];
     float width=(image?1.f:2.f)*sprite->width,height=(image?1.f:2.f)*sprite->height;
     /* Trial clearance for the VC-local street/Trip overlay, not a measured bar boundary. */
-    float bottom=image?viewport[3]-height:ceilf(viewport[3]*0.20f)+4.f;
+    float bottom=image?floorf((viewport[3]-height)/2.f):(ceilf(viewport[3]*0.20f)+4.f)*0.70f;
     if(image && (viewport[2]<(int)width || viewport[3]<(int)height))return 0;
     if(bottom+height>viewport[3])return 0;
     saved_state state;save(&state);
@@ -144,7 +144,7 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     if(good) {
         float travel=(float)fmod(elapsed_ms*0.048,viewport[2]+width);
         float x=selected==1?travel-width:viewport[2]-travel;
-        if(image)x=viewport[2]-width;
+        if(image)x=floorf((viewport[2]-width)/2.f);
         glUseProgram(g->program);glUniform1i(g->sampler,0);
         glUniform4f(g->rectangle,2.f*x/viewport[2]-1.f,2.f*bottom/viewport[3]-1.f,
             2.f*width/viewport[2],2.f*height/viewport[3]);

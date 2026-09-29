@@ -124,7 +124,8 @@ void vc_overlay_draw(vc_panel_frame *frame) {
 }
 void vc_overlay_presented(const vc_panel_frame *frame,int success) {
     pthread_mutex_lock(&mutex);
-    if(frame->drawn && success && current.epoch==frame->epoch && current.revision==frame->revision
+    /* A newer request during swap does not undo the older frame actually presented. */
+    if(frame->drawn && success && current.epoch==frame->epoch && frame->revision<=current.revision
             && current.page.count && mono_ms()<deadline) {
         frame_expiry=wall_ms()+300;frame_revision=frame->revision;state=1;
     } else if(!success){frame_expiry=0;state=-1;}

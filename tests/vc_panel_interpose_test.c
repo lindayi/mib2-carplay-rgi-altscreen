@@ -54,6 +54,11 @@ static void unchanged(void) {
     frame();glReadPixels(0,0,WIDTH,HEIGHT,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
     assert(!memcmp(pixels,baseline,sizeof(pixels)));
 }
+static void advance_during_swap(void) {
+    version++;
+    publish(getpid(),600);
+    usleep(200000);
+}
 int main(int argc,char **argv) {
     assert(argc==2 && access("/.dockerenv",F_OK)==0);
     setenv("ALT111_MIRROR_BASE_READY_FILE","/tmp/vc-panel-ready",1);
@@ -76,20 +81,28 @@ int main(int argc,char **argv) {
         unsigned at=(y*WIDTH+x)*4;
         assert(pixels[at+3]==baseline[at+3]);
         if(memcmp(pixels+at,baseline+at,4)) {
-            assert(x>=1004 && x<1424 && y>=91 && y<439);changed++;
+            assert(x>=510 && x<930 && y>=53 && y<401);changed++;
         }
     }
     fprintf(stderr,"VC_PANEL_TEST changed_pixels=%u\n",changed);
-    assert(changed>100000);
+    assert(changed==420*348);
     f=fopen(argv[1],"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",WIDTH,HEIGHT);
     for(int y=HEIGHT-1;y>=0;y--)for(int x=0;x<WIDTH;x++)assert(fwrite(pixels+(y*WIDTH+x)*4,1,3,f)==3);
     assert(fclose(f)==0);
-    version=2;await(2,1,1);
-    usleep(450000);assert(!status(2,1));
-    publish(getpid(),600);await(2,1,1);
+    void (*before_swap)(void (*)(void))=(void (*)(void (*)(void)))dlsym(RTLD_DEFAULT,"mascot_swap_before");
+    assert(before_swap);
+    for(unsigned i=0;i<8;i++) {
+        unsigned presented=version;
+        before_swap(advance_during_swap);
+        frame();usleep(150000);
+        assert(status(presented,1));
+        await(version,1,1);
+    }
+    usleep(450000);assert(!status(version,1));
+    publish(getpid(),600);await(version,1,1);
     void (*fail)(int)=(void (*)(int))dlsym(RTLD_DEFAULT,"mascot_swap_fail");assert(fail);
     fail(1);assert(!eglSwapBuffers(display,surface));usleep(150000);
-    assert(status(2,-1));fail(0);await(2,1,1);
+    assert(status(version,-1));fail(0);await(version,1,1);
     assert(unlink("/tmp/vc-panel-ready")==0);await(0,0,0);unchanged();
     f=fopen("/tmp/vc-panel-ready","w");assert(f);fclose(f);
     publish(getpid()+1,600);usleep(180000);unchanged();
@@ -98,21 +111,21 @@ int main(int argc,char **argv) {
     char foreign[64]={0};f=fopen("/ramdisk/carplay_vc_panel.status","r");assert(f);
     assert(fgets(foreign,sizeof(foreign),f));fclose(f);
     assert(!strcmp(foreign,"FOREIGN_STATUS\n"));
-    publish(getpid(),600);await(2,1,1);
+    publish(getpid(),600);await(version,1,1);
     assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(display,context));
     context=eglCreateContext(display,config,EGL_NO_CONTEXT,api);
     assert(eglMakeCurrent(display,surface,surface,context));
     glViewport(0,0,WIDTH,HEIGHT);glClearColor(.12f,.15f,.17f,.4f);
-    await(2,1,1);
+    await(version,1,1);
     glViewport(0,0,328,181);publish(getpid(),600);
-    frame();usleep(150000);assert(status(2,-1));
-    glViewport(0,0,WIDTH,HEIGHT);await(2,1,1);
+    frame();usleep(150000);assert(status(version,-1));
+    glViewport(0,0,WIDTH,HEIGHT);await(version,1,1);
     publish(getpid(),1);usleep(180000);unchanged();
-    publish(getpid(),600);await(2,1,1);
+    publish(getpid(),600);await(version,1,1);
     assert(mkfifo("/ramdisk/vc-panel-fifo",0600)==0);
     assert(rename("/ramdisk/vc-panel-fifo","/ramdisk/carplay_mascot.control")==0);
-    usleep(650000);publish(getpid(),600);unchanged();assert(!status(2,1));
+    usleep(650000);publish(getpid(),600);unchanged();assert(!status(version,1));
     unlink("/ramdisk/carplay_mascot.control");unlink("/ramdisk/carplay_vc_panel.control");
     unlink("/ramdisk/carplay_vc_panel.status");unlink("/tmp/vc-panel-ready");
     puts("VC panel real EGL: full-size pixels/alpha, successful-swap acknowledgements, revisions, stall/PID/readiness/expiry gates and context recovery PASS");

@@ -124,8 +124,10 @@ selection, mascot, input or recovery.
 
 **Overlay appearance -> Map mascot** selects Off, Raccoon or Nian. A transparent,
 80-video-pixel-high animation (twice the former width and height) travels across
-the lower navigation canvas. Its bottom reserves 20% of the current video height,
-rounded up, plus four pixels: 95 pixels in the logged 1440x455 mirror viewport.
+the lower navigation canvas. Following owner feedback that the enlarged mascot
+sat too high, its bottom clearance is 70% of the previous value:
+`0.70 * (ceil(videoHeight * 0.20) + 4)`, or 66.5 rather than 95 video pixels in
+the logged 1440x455 mirror viewport. Its size is unchanged.
 This is a trial clearance, not a measured boundary of Audi's full-width street/
 Trip bar. That bar is composed in the VC after the video and cannot be outranked
 by changing draw order inside the mirror. The map crop and Audi bar are untouched.

@@ -50,6 +50,24 @@ public final class VcPanelWorkerTest {
                 acknowledgeFile(control(),process);Thread.sleep(20);
             }
             check(VcPanel.status().equals("ACTIVE") && VcPanel.scale(-1),"matching acknowledgement did not grant routing");
+            for(int attempt=0;attempt<2;attempt++) {
+                Object epoch=get("epoch");
+                synchronized(field(VcPanel.class,"LOCK").get(null)) {
+                    set("ackUntil",System.currentTimeMillis()-1);
+                    acknowledgeFile(control(),process);
+                    if(attempt==0) {
+                        Object focus=get("focus");
+                        check(!VcPanel.scale(1),"expired cached acknowledgement granted input");
+                        check((Boolean)get("open"),"callback closed before the worker read fresh presentation");
+                        check(focus.equals(get("focus")),"unacknowledged input moved focus");
+                    }
+                }
+                end=System.currentTimeMillis()+1000;
+                while((Boolean)get("open") && !VcPanel.status().equals("ACTIVE") && System.currentTimeMillis()<end)
+                    Thread.sleep(10);
+                check(epoch.equals(get("epoch")) && VcPanel.status().equals("ACTIVE"),
+                    "fresh renderer status was discarded before checking the cached lease");
+            }
             Thread.sleep(450);
             check(!VcPanel.scale(-1) && !(Boolean)get("open"),"worker kept stale presentation");
             VcPanel.scale(1);hold();

@@ -42,7 +42,7 @@ public final class VcPanel {
         }
     }
     public static void stop() {
-        synchronized(LOCK){running=false;run++;closeLocked();mapConfirmed=false;pressed=held=false;LOCK.notifyAll();}
+        synchronized(LOCK){running=false;run++;closeLocked("module stopped");mapConfirmed=false;pressed=held=false;LOCK.notifyAll();}
     }
     private static boolean eligible() {
         Preferences.Snapshot s=Preferences.get().snapshot();
@@ -53,23 +53,24 @@ public final class VcPanel {
     }
     private static boolean owns(long now) {
         if(!open)return false;
-        if(!eligible() || connection!=CarplayBus.getInstance().connectionGeneration()
-                || now<openedAt || now-lastInput>30000L || (ackUntil!=0 && now>=ackUntil)) {
-            if(ackUntil!=0 && now>=ackUntil)error("VC panel presentation lease expired");
-            closeLocked();return false;
-        }
+        if(!eligible()){closeLocked("surface/lifecycle");return false;}
+        if(connection!=CarplayBus.getInstance().connectionGeneration()){closeLocked("connection changed");return false;}
+        if(now<openedAt){closeLocked("clock moved backwards");return false;}
+        if(now-lastInput>30000L){closeLocked("idle timeout");return false;}
+        // Callbacks cannot read the fresh status file; let the worker decide expiry.
+        if(ackUntil!=0 && now>=ackUntil)LOCK.notifyAll();
         return ackUntil>now;
     }
-    private static void closeLocked() {
-        if(open)Log.i("VcPanel","closed epoch="+epoch);
+    private static void closeLocked(String reason) {
+        if(open)Log.i("VcPanel","closed epoch="+epoch+" reason="+reason);
         open=false;ackUntil=0;shownRevision=0;epoch++;revision++;depth=0;focus=0;page="root";
     }
     public static void dismiss() {
-        synchronized(LOCK){closeLocked();mapConfirmed=false;held=true;LOCK.notifyAll();}
+        synchronized(LOCK){closeLocked("native drawer/tab");mapConfirmed=false;held=true;LOCK.notifyAll();}
     }
     public static void presentation(boolean large,boolean left,boolean right) {
         synchronized(LOCK) {
-            if(largeMap!=large || left || right){closeLocked();mapConfirmed=false;held=true;}
+            if(largeMap!=large || left || right){closeLocked("View/drawer presentation");mapConfirmed=false;held=true;}
             largeMap=large;
         }
     }
@@ -80,7 +81,7 @@ public final class VcPanel {
             if(owns(now)) {
                 if(steps==0)return true;
                 Page model=model();
-                long next=(long)focus-steps;
+                long next=(long)focus+steps;
                 focus=(int)Math.max(0L,Math.min(model.count()-1L,next));
                 revision++;lastInput=now;LOCK.notifyAll();return true;
             }
@@ -102,7 +103,7 @@ public final class VcPanel {
             if(state==3 || state==4 || state==5) {
                 if(!pressed || held)return false;
                 held=true;
-                if(open){closeLocked();return false;}
+                if(open){closeLocked("long hold");return false;}
                 if(!eligible() || !mapConfirmed
                         || confirmedConnection!=CarplayBus.getInstance().connectionGeneration()) {
                     error("VC panel needs large-map View and a map-zoom detent after session/tab/drawer changes");
@@ -128,7 +129,8 @@ public final class VcPanel {
         synchronized(LOCK) {
             boolean consumed=owns(System.currentTimeMillis());
             if(!open)return false;
-            if(depth==0){closeLocked();return consumed;}
+            if(!consumed){closeLocked("unacknowledged Back");return false;}
+            if(depth==0){closeLocked("Back");return consumed;}
             page=parents[--depth];focus=focuses[depth];revision++;lastInput=System.currentTimeMillis();
             LOCK.notifyAll();
             return consumed;
@@ -147,7 +149,7 @@ public final class VcPanel {
         return new Page(Setting.ALL[id].label,null,Setting.ALL[id].choices);
     }
     private static void enter(String next) {
-        if(depth>=parents.length){error("VC panel navigation depth exceeded");closeLocked();return;}
+        if(depth>=parents.length){error("VC panel navigation depth exceeded");closeLocked("navigation depth");return;}
         parents[depth]=page;focuses[depth++]=focus;page=next;focus=0;
         if(next.startsWith("choice:"))focus=Preferences.get().snapshot().get(Integer.parseInt(next.substring(7)));
         revision++;
@@ -164,7 +166,7 @@ public final class VcPanel {
             SettingsRuntime.set(Integer.parseInt(page.substring(7)),focus);
             back();
         } else if(page.equals("root")) {
-            if(focus==0){SettingsRuntime.set(Setting.ENABLED,0);closeLocked();}
+            if(focus==0){SettingsRuntime.set(Setting.ENABLED,0);closeLocked("master off");}
             else if(focus==4)enter("more");
             else setting(new int[]{Setting.ENABLED,Setting.MODE,Setting.LAYOUT,Setting.MASCOT}[focus]);
         } else if(page.equals("more")) {
@@ -248,41 +250,41 @@ public final class VcPanel {
                 synchronized(LOCK){if(!running || run!=generation)break;}
                 try {
                     int process=owner();
-                    String data;long ticket;int version;
+                    File status=new File(STATUS);
+                    long[] ack=status.isFile()?parseStatus(Preferences.read(status,256)):null;
+                    String data;
                     synchronized(LOCK) {
                         if(!running || run!=generation)break;
                         long now=System.currentTimeMillis();
-                        if(pid!=process){closeLocked();mapConfirmed=false;pid=process;}
+                        if(pid!=process){closeLocked("mirror PID changed");mapConfirmed=false;pid=process;}
+                        if(open && ack!=null && ack[0]==pid && ack[1]==epoch
+                                && ack[2]>0 && ack[2]<=revision && ack[4]==connection) {
+                            if(ack[5]<0){error("VC panel renderer rejected the frame");closeLocked("renderer failure");}
+                            else if(ack[5]==0 && ackUntil!=0){error("VC panel renderer withdrew presentation");closeLocked("renderer withdrew");}
+                            else if(ack[5]==1 && ack[3]>now && ack[3]-now<=300L) {
+                                if(ackUntil==0)Log.i("VcPanel","presented epoch="+epoch+" pid="+pid);
+                                ackUntil=ack[3];shownRevision=(int)ack[2];problem="";
+                            }
+                        }
                         owns(now);
+                        if(open && ackUntil!=0 && now>=ackUntil) {
+                            error("VC panel presentation lease expired");closeLocked("presentation timeout");
+                        }
                         if(!eligible())mapConfirmed=false;
                         if(open && (pid==0 || now-openedAt>1500L && ackUntil==0)) {
-                            error("VC panel presentation acknowledgement unavailable");closeLocked();
+                            error("VC panel presentation acknowledgement unavailable");closeLocked("opening timeout");
                         }
                         long prefs=Preferences.get().snapshot().revision;
                         if(open && preferencesRevision!=prefs){preferencesRevision=prefs;revision++;}
                         String hint=SettingsRuntime.notice()+SettingsRuntime.reconnectPending();
                         if(open && !hint.equals(lastHint)){lastHint=hint;revision++;}
-                        data=snapshot(now);ticket=epoch;version=revision;
+                        data=snapshot(now);
                     }
                     publish(data);
-                    File status=new File(STATUS);
-                    long[] ack=status.isFile()?parseStatus(Preferences.read(status,256)):null;
-                    synchronized(LOCK) {
-                        long now=System.currentTimeMillis();
-                        if(running && run==generation && open && epoch==ticket && ack!=null
-                                && ack[0]==pid && ack[1]==ticket && ack[2]>0 && ack[2]<=version) {
-                            if(ack[5]<0){error("VC panel renderer rejected the frame");closeLocked();}
-                            else if(ack[5]==0 && ackUntil!=0){error("VC panel renderer withdrew presentation");closeLocked();}
-                            else if(ack[5]==1 && ack[3]>now && ack[3]-now<=300L && ack[4]==connection) {
-                                if(ackUntil==0)Log.i("VcPanel","presented epoch="+epoch+" pid="+pid);
-                                ackUntil=ack[3];shownRevision=(int)ack[2];problem="";
-                            }
-                        }
-                    }
                 } catch(IOException e) {
-                    synchronized(LOCK){error("VC panel I/O: "+e.getMessage());closeLocked();}
+                    synchronized(LOCK){error("VC panel I/O: "+e.getMessage());closeLocked("I/O failure");}
                 } catch(SecurityException e) {
-                    synchronized(LOCK){error("VC panel access denied");closeLocked();}
+                    synchronized(LOCK){error("VC panel access denied");closeLocked("access denied");}
                 }
                 synchronized(LOCK) {
                     if(!running || run!=generation)break;
@@ -290,9 +292,9 @@ public final class VcPanel {
                 }
             }
         } catch(RuntimeException e) {
-            synchronized(LOCK){error("VC panel worker failed: "+e);closeLocked();running=false;}
+            synchronized(LOCK){error("VC panel worker failed: "+e);closeLocked("worker failure");running=false;}
         } finally {
-            synchronized(LOCK){if(run==generation){running=false;closeLocked();}}
+            synchronized(LOCK){if(run==generation){running=false;closeLocked("worker stopped");}}
             try {publish("VCPANEL1 0 0 0 0 0 0 0\n");}
             catch(IOException e){Log.w("VcPanel","Cannot withdraw panel: "+e);}
             catch(SecurityException e){Log.w("VcPanel","Cannot withdraw panel: "+e);}

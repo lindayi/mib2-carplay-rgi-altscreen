@@ -72,11 +72,12 @@ public final class VcPanelTest {
         Class<?> distance=Class.forName("de.audi.tghu.navi.app.cluster.BAPDistanceFormatter$BAPDistance");
         stockField(listener,"mapScale",distance.getMethod("invalid").invoke(null));
         acknowledge();
-        listenerType.getMethod("setMapScale",int.class).invoke(listener,-1);
+        listenerType.getMethod("setMapScale",int.class).invoke(listener,1);
         check(replies[0]==1 && (Integer)get("focus")==1,"menu scale lost stock status reply");
         // No MapManager was supplied: any accidental stock zoom delegation would fail above.
-        VcPanel.scale(1);acknowledge();
-        check(VcPanel.scale(-3) && (Integer)get("focus")==3,"BAP detents not routed once with expected sign");
+        VcPanel.scale(-1);acknowledge();
+        check((Integer)get("focus")==0,"negative BAP step did not move up");
+        check(VcPanel.scale(3) && (Integer)get("focus")==3,"positive BAP detents did not move down once");
         VcPanel.roller(1);VcPanel.roller(0);
         check(get("page").equals("root"),"selected unseen revision");
         acknowledge();VcPanel.roller(1);VcPanel.roller(0);
@@ -101,7 +102,10 @@ public final class VcPanelTest {
         hold();check(!(Boolean)get("open"),"small View opened unmeasured panel");
         VcPanel.presentation(true,false,false);VcPanel.scale(1);hold();acknowledge();
         set("ackUntil",System.currentTimeMillis()-1);
-        check(!VcPanel.scale(1) && !(Boolean)get("open"),"expired renderer retained ownership");
+        check(!VcPanel.scale(1) && (Boolean)get("open"),"expired cache must reject input pending worker status read");
+        VcPanel.roller(1);VcPanel.roller(0);
+        check(get("page").equals("root"),"expired cache accepted a selection");
+        check(!VcPanel.back() && !(Boolean)get("open"),"unacknowledged Back captured input instead of dismissing");
         VcPanel.scale(1);hold();acknowledge();VcPanel.dismiss();
         hold();check(!(Boolean)get("open"),"drawer/tab change retained focus evidence");
         VcPanel.scale(1);hold();acknowledge();
@@ -117,8 +121,8 @@ public final class VcPanelTest {
         check(!VcPanel.scale(1) && !(Boolean)get("open"),"parking/camera retained panel input");
         field(com.luka.carplay.pdc.PdcSmallStageGuard.class,"parkingControlsActive").set(null,false);
         check(!VcPanel.roller(1) && VcPanel.roller(0),"ordinary short gesture not deferred until release");
-        VcPanel.scale(1);hold();acknowledge();VcPanel.scale(-3);acknowledge();
-        VcPanel.roller(1);VcPanel.roller(0);acknowledge();VcPanel.scale(-2);acknowledge();
+        VcPanel.scale(1);hold();acknowledge();VcPanel.scale(3);acknowledge();
+        VcPanel.roller(1);VcPanel.roller(0);acknowledge();VcPanel.scale(2);acknowledge();
         Path helper=Paths.get("/mnt/app/root/carplay-altscreen/bin/carplay_mmi_action.sh");
         check(!Files.exists(helper),"fixture helper already exists");
         Files.createDirectories(helper.getParent());Files.write(helper,"#!/bin/sh\nexit 0\n".getBytes("US-ASCII"));

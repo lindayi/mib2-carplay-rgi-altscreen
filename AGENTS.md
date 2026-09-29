@@ -69,6 +69,27 @@ Earlier JSON reports are historical, not necessarily the current build.
 
 ## Vehicle evidence and the current open issue
 
+### First live VC-panel report: 2026-09-28 evening
+
+- After preparing the `3c3de7e` card, the owner reports the panel mostly works.
+  The mascot is slightly too high; the top-right panel is clipped/covered by
+  other cockpit content; scrolling feels reversed; the panel closes outright
+  after a few seconds during rotation and selection, without other bad behavior.
+  No diagnostic export or independent installed build-ID readback is available.
+- Current source lowers mascot bottom clearance by 30%, without resizing:
+  `0.70 * (ceil(videoHeight * 0.20) + 4)`, 66.5 pixels at 455 pixels high.
+  The panel is centered in the video viewport; BAP positive steps move down and
+  negative steps move up. These refinements are not yet vehicle-confirmed.
+- Host regressions reproduced two presentation races: callbacks/worker closed on
+  an expired cached acknowledgement before reading fresh native status, and
+  revision changes during EGL swap discarded acknowledgement of displayed frames.
+  Read fresh status before expiry decisions; callbacks reject stale input without
+  preempting that read. A successful same-epoch swap may acknowledge an older
+  revision; selection still requires the exact current revision. Do not extend
+  leases or accept new settings from stale/unseen frames to hide timing defects.
+  These are confirmed code defects, not a proven diagnosis of all vehicle closures.
+  Keep explicit closure reasons in logs for the next diagnostic capture.
+
 ### Returned repaired-menu trial: 2026-09-28
 
 - The full export matches installed/card JAR pins `1799993018 324187` from
@@ -85,12 +106,13 @@ Earlier JSON reports are historical, not necessarily the current build.
   zooming, and right/Back controlling Audi's drawer, without affecting main CarPlay.
   Every recorded Fct54 drawer flag was false despite the visible drawer: these
   flags cannot establish exclusive ownership or dismissal. That card had no live
-  VC panel; the later guarded integration below remains vehicle-unverified.
+  VC panel; the later guarded integration has the limited owner report above.
 - New source changes below are not part of the tested card. Status text now has
   an explicit native-node clip; successful saves name the setting and expire after
   five seconds without erasing Last result, failures or the reconnect requirement.
-  Double-size mascots reserve the lower fifth of the video plus four pixels as
-  trial clearance. This is not a measured Audi-bar boundary or proven vehicle fix.
+  That candidate used double-size mascots with the lower fifth of the video plus
+  four pixels as trial clearance; the later report above requests lowering it.
+  Neither value is a measured Audi-bar boundary.
 
 ### Failed mascot/native-menu trial: 2026-09-27 evening
 
@@ -266,7 +288,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   owner's explicit choice, long-press is enabled by default, not session-opt-in.
   It requires large-map View, live CarPlay video and a BAP zoom detent after each
   session/drawer/tab takeover to establish eligibility. It is not an OEM drawer
-  entry, supports no Audi-map-only surface, and is not vehicle-confirmed.
+  entry, supports no Audi-map-only surface, and has only partial owner confirmation.
 - `VcPanel` arbitrates press/hold/release, uses BAP scale as the sole movement
   source and restores parent focus. Ordinary Road/Trip now toggles on release.
   The opening hold/release must never select a row. Native drawer/tab/View,
@@ -279,6 +301,8 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   600 ms; the native control-worker lease is at most 400 ms. A 300 ms presentation
   lease advances only after a successful real EGL swap. Select requires the
   exact displayed revision; a worker/status heartbeat is not presentation.
+  Pending newer revisions must not invalidate a same-epoch frame actually swapped.
+  Read fresh renderer status before expiring Java's cached acknowledgement.
 - Native CPU painting happens outside the render mutex; metadata exchange does
   no I/O. Repaint on a readiness re-entry even when epoch/revision are unchanged:
   otherwise a transparent initial buffer can be incorrectly acknowledged.
