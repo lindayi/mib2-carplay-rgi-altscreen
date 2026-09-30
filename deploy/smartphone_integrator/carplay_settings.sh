@@ -10,21 +10,21 @@ cp_setting(){
     [ "$1" -le 8192 ] || { echo "SETTINGS=INVALID oversized_file" >&2; return 1; }
     awk -F= -v wanted="$cp_key" '
       BEGIN {
-        n=split("enabled mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot",keys," ")
+        n=split("enabled mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot now_playing_card trip_card",keys," ")
         for(i=1;i<=n;i++){known[keys[i]]=1;max[keys[i]]=1}
         max["mode"]=2;max["layout"]=3;max["touch_sensitivity"]=2;max["preset"]=3;max["mascot"]=4
-        value["info_default"]=value["info_road"]=value["info_return"]=value["preset"]=value["mascot"]=0
+        value["info_default"]=value["info_road"]=value["info_return"]=value["preset"]=value["mascot"]=value["now_playing_card"]=value["trip_card"]=0
       }
       /^#/ || /^$/ {next}
       {
         if(NF!=2 || $2 !~ /^[0-9]+$/ || seen[$1]++) {bad=1;next}
-        if($1=="format"){if($2 !~ /^[123]$/)bad=1;format=$2+0;next}
+        if($1=="format"){if($2 !~ /^[1234]$/)bad=1;format=$2+0;next}
         if(!known[$1] || $2<0 || $2>max[$1]){bad=1;next}
         value[$1]=$2+0
       }
       END {
         if(!format || !known[wanted])bad=1
-        count=(format==1?16:(format==2?20:n))
+        count=(format==1?16:(format==2?20:(format==3?21:n)))
         for(i=1;i<=n;i++) {
           if(i>count){if(seen[keys[i]])bad=1}
           else if(!seen[keys[i]])bad=1

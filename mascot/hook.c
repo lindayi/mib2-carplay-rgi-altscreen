@@ -1,5 +1,6 @@
 #include "mascot.h"
 #include "../vc_menu/runtime.h"
+#include "../map_cards/cards.h"
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <pthread.h>
@@ -80,6 +81,7 @@ static void *control_loop(void *unused) {
     uint64_t last_status=0;
     for(;;) {
         vc_overlay_poll();
+        cards_overlay_poll();
         int next=-1;
         char text[96];
         FILE *file=fopen(config,"r");
@@ -155,8 +157,10 @@ EGLBoolean eglSwapBuffers(EGLDisplay display,EGLSurface surface) {
     previous=choice;
     vc_panel_frame frame={0};
     if(context!=EGL_NO_CONTEXT && surface!=EGL_NO_SURFACE
-            && eglGetCurrentDisplay()==display && eglGetCurrentSurface(EGL_DRAW)==surface)
+            && eglGetCurrentDisplay()==display && eglGetCurrentSurface(EGL_DRAW)==surface) {
         vc_overlay_draw(&frame);
+        cards_overlay_draw(frame.drawn);
+    }
     EGLBoolean result=real_swap(display,surface);
     vc_overlay_presented(&frame,result==EGL_TRUE);
     return result;
@@ -171,5 +175,6 @@ EGLBoolean eglDestroyContext(EGLDisplay display,EGLContext context) {
         graphics_context=EGL_NO_CONTEXT;graphics_failed=0;previous=0;
     }
     if(result)vc_overlay_context_lost(context);
+    if(result)cards_overlay_context_lost(context);
     return result;
 }

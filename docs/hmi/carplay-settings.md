@@ -81,6 +81,7 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Main | CarPlay map + guidance / CarPlay map only / Audi map + guidance | Direct access beside Enabled. Display and RGI changes apply live when possible. The launcher excludes the AltScreen preload for a new Audi-map session; switching back then needs reconnect. |
 | Main | Reapply cluster layout | Queues the current connection's selected URL again; no restart, reconnect or crop change. Requires active cluster video and a live receiver with a latched URL. Success means queued, not phone-confirmed or guaranteed recentering. |
 | Phone map | Top / right / no ETA / original AltScreen | Reconnect; requests the iPhone layout, not direct marker positioning. |
+| Map cards | Now Playing map card; Trip progress map card | Independent, default Off, live on CarPlay map video. Fixed provisional left-side placement; Audi dial occlusion needs a parked check. |
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
@@ -122,6 +123,71 @@ restores it. Editing an individual appearance/guidance control while a preset is
 active copies its effective values into a new Custom configuration, then changes
 that control. Presets do not change master enable, map layout, information-bar
 selection, mascot, input or recovery.
+
+### Optional map cards
+
+**Carplay Altscreen -> Map cards** offers independent **Now Playing** and **Trip
+progress** switches. In the VC panel use **More settings -> Map cards**. Both
+default Off and apply live, without reconnecting or rebooting. They occupy the
+left of displayable 3's existing CarPlay video, not the small right-side maneuver
+box, the lower information bar, or a new Audi displayable.
+
+Now Playing shows the phone's supplied title, artist and known playback state,
+with artwork when a fresh cover event follows the current track. A track change
+clears the preceding cover; missing artwork does not hide the text. Paused media
+remains labelled Paused. Missing media metadata hides its card. This is not a
+new audio source, playback control, or replacement for Audi's Media screen.
+The additive `png_crc` cover event field identifies the actual generated PNG
+bytes; the older `crc` identifies the original input image and must not be used
+to validate that PNG. Missing/mismatched PNG identity omits artwork. Cover events
+have no track ID, and a phone that does not resend art after a track change may
+leave the card text-only; exact title/art association is not guaranteed.
+Text is bounded to 128 UTF-8 bytes per field, with grapheme-safe truncation and
+visual ellipsis. The embedded font covers Latin/Greek/Cyrillic and punctuation;
+unsupported fields are omitted with a diagnostic, not transliterated.
+
+Trip shows ETA, remaining time and distance, using the existing HU unit/time and
+destination-zone formatting. Unknown values are omitted. **Estimated progress**
+is `1 - remaining distance / first observed positive remaining distance`, clamped
+to 0..100%. It is not the fraction of the original journey completed, GPS history,
+or traffic delay. Joining mid-route starts a new baseline; additional distance
+can move the bar backward. Unknown distance or a zero initial distance produces
+no bar. Receiver reconnect, a new route generation, changed destination/source
+and route end reset it. Toggling a card, changing View, or visiting Audi main MMI
+does not reset the baseline. The card disappears outside active route states.
+
+Cards have fixed positions within the video viewport and translucent backgrounds.
+At 1440x455, each is 240x120: Now Playing starts at `(250,90)` and Trip at
+`(250,222)`, measured from the top-left, with background alpha 184/255.
+They retain their separate slots if only one is enabled. Both temporarily hide
+while the VC settings panel is actually drawn, so the expanded mascot chooser
+cannot cover only part of a card.
+The moving mascot remains underneath the cards and can pass behind them.
+They do **not** slide inward or auto-reposition on View changes: downstream Audi
+dials are intended to cover them in small-map View. The placement is provisional,
+not a measured dial mask. Parked photos of both Views must establish whether both
+cards are revealed/covered as intended on this car; host previews cannot prove it.
+Master Off, Audi-map-only mode, unavailable video, disconnect and expired control
+withdraw the cards. They never own steering-wheel input.
+
+The component's existing media-cache listener and an independent RGI observer
+capture bounded data even in map-only mode and while the toggles are Off. Only
+the settings worker formats text and atomically publishes a four-second
+`CARDS1` snapshot at `/ramdisk/carplay_cards.control`, bound to mirror PID and
+receiver generation. The native worker reads/paints it; GL callbacks do no file
+I/O. The control file contains media metadata: diagnostics summary reports only
+its presence, not its contents. **CONTROL_PUBLISHED is not presentation proof.**
+The native worker's render lease is at most one second; a stalled worker cannot
+keep cards alive merely because video continues. No additional EGL swaps or
+mirror telemetry are generated. Renderer errors are throttled in the existing
+mirror log, included only in the private full export.
+
+For parked acceptance, enable each card separately and then both. Check play,
+pause, track/artwork changes, route start/stop and receiver reconnect. Photograph
+wide and small-map Views without moving the cards; check title/artist readability,
+Audi-dial coverage, right-side guidance and the lower Audi bar. Open the ordinary
+VC menu and mascot chooser, then close them to confirm card restoration. Toggle
+both Off and confirm the original map presentation returns without reconnecting.
 
 ### Optional map mascots
 
@@ -312,15 +378,22 @@ be performed on the car with a fresh connection.
 
 `/mnt/persist/var/app/carplay_altscreen/preferences` is a strict, versioned
 key/index file. Java and shell validate the same complete schema. New saves use
-`format=3` (21 settings). Complete `format=1` files (16 settings) are accepted with
+`format=4` (23 settings). Complete `format=1` files (16 settings) are accepted with
 Road/exit, next-road text, 20-second return, Custom and mascot Off defaults.
-Complete `format=2` files (20 settings) retain their choices and default mascot Off. Reads do not
+Complete `format=2` files (20 settings) retain their choices and default mascot Off.
+Complete `format=3` files (21 settings) retain their mascot selection.
+All historical versions default both map cards Off. Reads do not
 rewrite old files; the next save migrates them. Incomplete or mixed-version files
 are rejected rather than filled with silent defaults. Save uses a
 flushed/synced temporary file and rename. Invalid settings select the safe disabled
 path and report an error; preference reset can repair them without enabling the
 master switch. The old `cluster_ui.url` is imported only when no new preference
 file exists. The GEM layout picker updates the new setting once it exists.
+
+Older builds cannot read format 4, even when both cards are Off. An intentional
+downgrade needs a complete preference file supported by that build or its Reset
+preferences action; unsupported data takes the disabled path, never a partially
+interpreted configuration.
 
 Normal-MMI callbacks queue work rather than running filesystem/process work on the
 HMI event thread. A preference worker remains responsive during the separate,

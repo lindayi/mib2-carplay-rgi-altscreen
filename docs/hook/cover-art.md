@@ -70,7 +70,7 @@ flowchart LR
     dec --> gen{"generation current?"}
     gen -- "no" --> drop["drop (stale session)"]
     gen -- "yes" --> fs["atomic symlink swap<br/>/var/app/icab/tmp/37/coverart.png (tmpfs)"]
-    fs --> ev["EVT_COVERART (crc, sticky)"]
+    fs --> ev["EVT_COVERART (crc, png_crc, sticky)"]
 ```
 
 - **Pre-decode budget:** `stbi_info_from_memory` reads the header and
@@ -86,6 +86,13 @@ this single worker (no libc reentrancy issues in an `LD_PRELOAD` .so). The PNG l
 regenerated each session, lost on reboot (fine: the pipeline restarts every CarPlay handshake). The
 `coverart.png` path is a symlink ping-ponged between `coverart_0.png` / `coverart_1.png` and swapped
 atomically via `rename()`.
+
+The event retains `crc` over the original input image for the native Audi picture
+bridge and adds `png_crc` over the complete generated/published PNG bytes. The
+passive map-card renderer checks `png_crc` before decoding the fixed PNG path;
+the two checksums are not interchangeable. The additional field is computed on
+the decode worker only, after successful publication, and does not change the
+native Media screen's picture ID or original-image deduplication.
 
 ## ⚙️ Java side
 

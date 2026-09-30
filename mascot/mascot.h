@@ -15,7 +15,7 @@ typedef struct {
 typedef struct {
     GLuint program, buffer, textures[MASCOT_COUNT][MASCOT_MAX_FRAMES];
     GLint rectangle, sampler;
-    int initialized;
+    int initialized, quiet;
 } mascot_graphics;
 int mascot_load(const char *path, mascot_animation animations[MASCOT_COUNT]);
 const mascot_animation *mascot_worker_assets(void);
@@ -26,5 +26,7 @@ int mascot_draw(mascot_graphics *graphics, const mascot_animation animations[MAS
                 unsigned selected, uint64_t elapsed_ms);
 int mascot_draw_image(mascot_graphics *graphics,const unsigned char *rgba,
                      unsigned width,unsigned height,int refresh);
+int mascot_draw_image_at(mascot_graphics *graphics,const unsigned char *premultiplied_rgba,
+                        unsigned width,unsigned height,int x,int top,int refresh);
 void mascot_graphics_destroy(mascot_graphics *graphics);
 #endif

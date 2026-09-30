@@ -401,11 +401,12 @@ static int write_png_file(const uint8_t* data, size_t len) {
 /* Publish cover-art-ready event on the TCP bus.
  * Sticky so a late-connecting Java client still learns the current CRC.
  * The on-disk PNG path (COVERART_FILE) is implicit and never changes. */
-static void write_coverart_notify(uint32_t crc) {
+static void write_coverart_notify(uint32_t crc, uint32_t png_crc) {
     bus_text_builder_t b;
     uint8_t scratch[128];
     bus_text_begin_with(&b, "coverart", scratch, sizeof(scratch));
     bus_text_uint(&b, "crc",  (uint64_t)crc);
+    bus_text_uint(&b, "png_crc", (uint64_t)png_crc);
     bus_text_str (&b, "path", COVERART_FILE);
     bus_send_text(EVT_COVERART, BUS_FLAG_STICKY, &b);
     LOG_DEBUG(LOG_MODULE, "bus EVT_COVERART crc=%08x", crc);
@@ -547,7 +548,7 @@ static int save_artwork(const uint8_t* data, size_t len, uint32_t generation) {
                  g_coverart.images_found, COVERART_FILE, png_len);
 
         /* Write bus notification for Java watcher */
-        write_coverart_notify(crc);
+        write_coverart_notify(crc, crc32_bytes(png, png_len));
     } else {
         LOG_ERROR(LOG_MODULE, "Failed to write artwork");
     }

@@ -2,6 +2,9 @@
 set -euo pipefail
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT"
+if [ "${1:-}" = cards ]; then
+    exec bash map_cards/test.sh
+fi
 python3 tests/mascot_pack_test.py
 ATLAS="${MASCOT_TEST_ATLAS:-$PROJECT/build/mascot-pack-tests/legacy.rgba}"
 mkdir -p build/mascot-tests
@@ -22,7 +25,8 @@ cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 ASAN_OPTIONS=detect_leaks=0 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
     build/mascot-tests/test "$ATLAS" build/mascot-tests
 cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror -shared -fPIC -fvisibility=hidden \
-    mascot/assets.c mascot/draw.c mascot/hook.c vc_menu/panel.c vc_menu/protocol.c vc_menu/runtime.c -lEGL -lGLESv2 -lm -ldl -pthread \
+    mascot/assets.c mascot/draw.c mascot/hook.c vc_menu/panel.c vc_menu/protocol.c vc_menu/runtime.c \
+    map_cards/protocol.c map_cards/paint.c map_cards/artwork.c map_cards/runtime.c -lEGL -lGLESv2 -lm -ldl -pthread \
     -o build/mascot-tests/libcarplay_mascot.so
 cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror -shared -fPIC \
     tests/mascot_swap_observer.c -lEGL -ldl -o build/mascot-tests/libobserver.so
@@ -48,6 +52,7 @@ EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
     CARPLAY_MASCOT_ATLAS="$PROJECT/build/mascot-pack-tests/16/mascots.rgba" \
     LD_PRELOAD="$PROJECT/build/mascot-tests/qnx-tmp-contract.so:$PROJECT/build/mascot-tests/libcarplay_mascot.so:$PROJECT/build/mascot-tests/libobserver.so" \
     build/mascot-tests/vc-panel-interpose build/mascot-tests/vc-panel-live.ppm build/mascot-tests/vc-panel-preview.ppm
+bash map_cards/test.sh
 python3 - <<'PY'
 from pathlib import Path
 from PIL import Image

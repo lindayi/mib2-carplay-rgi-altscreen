@@ -66,6 +66,13 @@ compare("maneuver_render/route_labels.h", "java_patch/com/luka/carplay/rgd/Route
 compare("vc_menu/panel.h", "java_patch/com/luka/carplay/settings/VcPanel.java", {
     "VC_PANEL_PREVIEW_PAGE": "PREVIEW_PAGE",
 })
+compare("map_cards/cards.h", "java_patch/com/luka/carplay/rgd/MapCards.java", {
+    "CARDS_TEXT_BYTES": "TEXT_BYTES",
+})
+compare("map_cards/cards.h", "java_patch/com/luka/carplay/settings/MapCardControl.java", {
+    "CARDS_MAX_SNAPSHOT": "MAX_SNAPSHOT", "CARDS_CONTROL_LEASE_MS": "CONTROL_LEASE_MS",
+    "CARDS_TEXT_FIELDS": "TEXT_FIELDS",
+})
 panel = constants("vc_menu/panel.h")
 pack_limit = int(re.search(r"^MAX_MASCOTS = (\d+)$",
     (ROOT / "tools/prepare_mascot_pack.py").read_text(), re.M).group(1))

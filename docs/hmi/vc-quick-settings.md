@@ -57,8 +57,10 @@ not pixel-identical OEM rendering. Typography reuses the embedded DejaVu-derived
 font; retain `maneuver_render/LICENSE.DEJAVU` with distributions.
 
 The root contains Enabled, Display mode, Map layout, Map mascot and More settings.
-More provides Guidance, Appearance, Information bar, Controls and Reapply map
-layout. These use the same `Setting` definitions, `Preferences` snapshots and
+More provides Guidance, Appearance, Information bar, Controls, Reapply map
+layout and Map cards. Map cards independently toggles the passive Now Playing
+and estimated Trip cards, both default Off; it does not change input ownership.
+These use the same `Setting` definitions, `Preferences` snapshots and
 asynchronous `SettingsRuntime` save/action path as main MMI, not a second settings
 file. Checked values reflect persisted snapshots, not optimistic local toggles.
 Save errors, transient success notices and reconnect requirements occupy the

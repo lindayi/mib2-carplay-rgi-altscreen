@@ -25,7 +25,7 @@ javac -cp "$CP:$ASM" -d /tmp /src/tests/PreferencesTest.java /src/tests/NativeMe
     /src/tests/JavaStockLinkageAudit.java /src/tests/TouchpadControllerTest.java /src/tests/SettingsRuntimeTest.java \
     /src/tests/MascotControlTest.java /src/tests/NativeMenuThreadTest.java /src/tests/JavaLogRotationTest.java \
     /src/tests/SteeringWheelTraceTest.java /src/tests/NativeMenuPresentationTest.java /src/tests/VcPanelTest.java \
-    /src/tests/VcPanelWorkerTest.java
+    /src/tests/VcPanelWorkerTest.java /src/tests/MapCardsTest.java /src/tests/MapCardControlTest.java
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP JavaLogRotationTest
 java -cp /tmp:$CP com.luka.carplay.settings.PreferencesTest /src/build/mmi-tests/preferences /src/tests/fixtures/carplay-preferences.txt
 java -cp /tmp:$ASM PatchNavigationSettingsTest /tools/out/$STOCK_JAR_NAME
@@ -41,6 +41,8 @@ cc -std=gnu99 -Wall -Wextra -Werror /src/tests/vc_panel_protocol_test.c /src/vc_
 /tmp/vc-panel-protocol /src/build/mmi-tests/vc-panel-control.txt
 java -cp /tmp:$CP com.luka.carplay.settings.VcPanelWorkerTest
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP com.luka.carplay.settings.MascotControlTest
+java -cp /tmp:$CP com.luka.carplay.rgd.MapCardsTest
+LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP com.luka.carplay.settings.MapCardControlTest /src/build/mmi-tests/map-cards-control.txt
 java -cp /tmp:$CP com.luka.carplay.settings.SettingsRuntimeTest
 bash /src/tests/settings_runtime_test.sh /src
 bash /src/tests/volatile_state_test.sh /src

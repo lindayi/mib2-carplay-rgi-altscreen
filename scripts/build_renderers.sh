@@ -82,7 +82,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 
   echo "--- mirror mascot overlay ---"
   cd /src/mascot
-  MASCOT_SRCS="assets.c draw.c hook.c ../vc_menu/panel.c ../vc_menu/protocol.c ../vc_menu/runtime.c"
+  MASCOT_SRCS="assets.c draw.c hook.c ../vc_menu/panel.c ../vc_menu/protocol.c ../vc_menu/runtime.c ../map_cards/protocol.c ../map_cards/paint.c ../map_cards/artwork.c ../map_cards/runtime.c"
   gen_stub libEGL.so.1 "\begl[A-Z][A-Za-z0-9]+" $MASCOT_SRCS
   gen_stub libGLESv2.so.1 "\bgl[A-Z][A-Za-z0-9]+" $MASCOT_SRCS
   $CC -O2 -std=gnu99 -Wall -Wextra -fPIC -fvisibility=hidden -shared \

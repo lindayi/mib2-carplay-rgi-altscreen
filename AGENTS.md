@@ -395,8 +395,9 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.
-- New saves use format 3 (21 settings); accept complete formats 1 (16 settings)
-  and 2 (20 settings) with explicit new defaults, including mascot Off, but never
+- New saves use format 4 (23 settings); accept complete formats 1 (16 settings),
+  2 (20 settings) and 3 (21 settings) with explicit new defaults, including cards Off
+  and mascot Off when absent, but never
   mixed/incomplete schemas. Reads do not migrate
   files on disk. Presets compute effective values without overwriting Custom;
   an individual appearance edit materializes the active preset into new Custom.
@@ -428,6 +429,32 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Summary export is separate from confirmed private full-log export. Actions are a
   fixed allowlist, not arbitrary shell commands. Missing runtime helpers are errors.
 - Full design/limitations: `docs\hmi\carplay-settings.md`.
+
+### Passive map cards
+
+- Now Playing and Trip are independent default-Off live settings, on displayable
+  3's existing mirror canvas only. Keep their left-side video positions fixed
+  across View changes: the owner's requested behavior is downstream Audi dial
+  occlusion, not responsive movement inward. The owner accepted provisional
+  placement pending parked calibration; no exact dial mask is established.
+- Trip progress is a labelled estimate from the first positive remaining distance
+  observed for this connection/route, not total original journey completion.
+  Clamp 0..100%; hide without a valid baseline/current distance. Added distance may
+  move it backward. Reset on receiver/route-generation/destination/source boundaries
+  and route end, not on toggles, View or main-MMI changes. Reuse BAPBridge's unit,
+  arrival-zone and duration formatting without initializing BAP or a renderer.
+- Capture phone media through the existing always-registered caching listener,
+  not the audio-focus-dependent native-media listener. RGI has an independent
+  observer so map-only mode still gets trip data. No callback I/O. Clear prior art
+  on track replacement and await a fresh event; cover-art events have no track ID.
+  The original `crc` is over the source JPEG/PNG, not the converted output.
+  Cards validate the additive `png_crc` over the published PNG bytes; never
+  substitute the original CRC or let Java/GL callbacks decode artwork.
+- Only the settings worker publishes bounded `CARDS1` snapshots on `/ramdisk`,
+  tied to mirror PID, receiver generation and expiry. Native workers read/paint;
+  render callbacks must remain I/O-free. Passive cards never own inputs.
+  CONTROL_PUBLISHED is not proof of visible pixels. Their control file contains
+  metadata; diagnostic summaries expose only presence, never text.
 
 ### Optional map mascots
 

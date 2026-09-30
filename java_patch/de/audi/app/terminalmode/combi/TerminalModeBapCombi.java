@@ -9,6 +9,7 @@ import de.audi.app.terminalmode.device.TMDevice;
 import de.audi.app.terminalmode.events.DefaultEventListener;
 import de.audi.app.terminalmode.events.TrackDataChangedEvent;
 import de.audi.app.terminalmode.events.TrackPlayPositionEvent;
+import de.audi.app.terminalmode.events.PlaybackInfoChangedEvent;
 import de.audi.app.terminalmode.osgi.IServiceManager;
 import de.audi.app.terminalmode.osgi.IServiceTracker;
 import de.audi.atip.interapp.bap.data.TimeStamp;
@@ -32,6 +33,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     private volatile CombiBAPServiceTerminalMode bapService;
     private TerminalModeBapCombi.ActiveDeviceStateListener activeDeviceListener;
     private final IAudioStateListener audioStateListener;
+    private final com.luka.carplay.rgd.MapCards mapCards=new com.luka.carplay.rgd.MapCards();
 
     public TerminalModeBapCombi(IContext icontext) {
         this.context = icontext;
@@ -62,6 +64,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         }
         this.serviceTracker.open();
         this.context.getEventBus().registerListener(this.cachingEventListener);
+        this.mapCards.start();
         this.context.getDeviceManager().addActiveDeviceListener(this.activeDeviceListener);
         this.context.getAudioManager().addAudioContextListener(this.audioStateListener);
 
@@ -76,6 +79,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     }
 
     public void deinit() {
+        this.mapCards.stop();
         try { com.luka.carplay.settings.SettingsRuntime.stop(); }
         catch(RuntimeException error){com.luka.carplay.framework.Log.e("Settings","shutdown failed",error);}
         try { com.luka.carplay.core.CarPlayApp.onDeactivateAndWait(); }
@@ -144,6 +148,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
              * is idempotent (no-op unless active), so it is safe.  It also releases the cluster pin
              * (ScreenModule.isConnected()), so the stock map and the View button work again. */
             if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isSessionConnected()) {
+                this.this$0.mapCards.resetSession();
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
@@ -199,6 +204,13 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
 
         public void updateNowPlayingData(TrackDataChangedEvent trackdatachangedevent) {
             this.lastTrackData = trackdatachangedevent;
+            this.this$0.mapCards.track(trackdatachangedevent,
+                this.this$0.context.getDeviceManager().getActiveDevice().isCarplayDevice());
+        }
+
+        public void updatePlaybackInfo(PlaybackInfoChangedEvent info) {
+            this.this$0.mapCards.playback(info,
+                this.this$0.context.getDeviceManager().getActiveDevice().isCarplayDevice());
         }
 
         public void updatePlayPosition(TrackPlayPositionEvent trackplaypositionevent) {

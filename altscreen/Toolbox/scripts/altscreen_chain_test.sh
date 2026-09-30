@@ -409,6 +409,8 @@ cleanup_volatile_runtime(){
                 "$ram_root"/carplay_mascot.control.new \
                 "$ram_root"/carplay_mascot.status \
                 "$ram_root"/carplay_mascot.status.*.new \
+                "$ram_root"/carplay_cards.control \
+                "$ram_root"/carplay_cards.control.new \
                 "$ram_root"/carplay_vc_panel.control \
                 "$ram_root"/carplay_vc_panel.control.new \
                 "$ram_root"/carplay_vc_panel.status \

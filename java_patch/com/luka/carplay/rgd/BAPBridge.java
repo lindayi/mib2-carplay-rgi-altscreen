@@ -1395,6 +1395,19 @@ public class BAPBridge {
         return remaining.length() == 0 ? arrival : arrival + " | " + remaining;
     }
 
+    /** Text-only consumer; its private bridge never initializes BAP or the renderer. */
+    String[] formatTripCard(int meters,long eta,long remaining,long sampled,int zone) {
+        lastEtaSeconds=eta;
+        lastTimeRemainingSeconds=remaining;
+        lastTimeRemainingSampleSeconds=sampled;
+        lastDestinationTimeZoneMinutes=zone;
+        String arrival=formatArrivalForText(currentArrivalSeconds());
+        if(arrival.startsWith(ROUTE_TIME_PREFIX))arrival=arrival.substring(ROUTE_TIME_PREFIX.length());
+        FormattedDistance distance=formatDistanceToDestination(meters);
+        return new String[]{arrival,formatRemainingForText(currentRemainingSeconds()),
+            RouteLabels.distance(distance.value,distance.unit)};
+    }
+
     private String buildShortSummary() {
         String remaining = formatRemainingForText(currentRemainingSeconds());
         if (remaining.length() > 0) return ROUTE_TIME_PREFIX + remaining;

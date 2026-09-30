@@ -17,6 +17,7 @@ static pthread_mutex_t pause_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pause_cond = PTHREAD_COND_INITIALIZER;
 static int pause_encode, reached_encode, resume_encode;
 static int notifications, interrupt_write, write_calls;
+static uint32_t notified_source_crc, notified_png_crc;
 static uint8_t jpeg[4096];
 static size_t jpeg_len;
 static uint32_t decode_generation;
@@ -85,7 +86,13 @@ void bus_text_begin_with(bus_text_builder_t *b, const char *name, uint8_t *buf, 
 void bus_text_str(bus_text_builder_t *b, const char *key, const char *value)
 { (void)b; (void)key; (void)value; }
 void bus_text_uint(bus_text_builder_t *b, const char *key, uint64_t value)
-{ (void)b; (void)key; (void)value; }
+{
+    (void)b;
+    assert(value <= UINT32_MAX);
+    if (!strcmp(key, "crc")) notified_source_crc = (uint32_t)value;
+    else if (!strcmp(key, "png_crc")) notified_png_crc = (uint32_t)value;
+    else assert(0);
+}
 hook_result_t bus_send_text(uint16_t type, uint8_t flags, bus_text_builder_t *b)
 { (void)flags; (void)b; assert(type == EVT_COVERART); ++notifications; return HOOK_OK; }
 
@@ -121,6 +128,9 @@ int main(void)
     assert(notifications == 1 && write_calls > 2 && g_coverart.images_found == 1);
     f = fopen(COVERART_FILE, "rb"); assert(f);
     png_len = fread(png, 1, sizeof(png), f); fclose(f);
+    assert(notified_source_crc == crc32_bytes(jpeg, jpeg_len));
+    assert(notified_png_crc == crc32_bytes(png, png_len));
+    assert(notified_source_crc != notified_png_crc);
     rgb = stbi_load_from_memory(png, (int)png_len, &width, &height, &channels, 3);
     assert(rgb && width == 256 && height == 256);
     assert(abs((int)rgb[0] - 120) <= 3 && abs((int)rgb[1] - 70) <= 3 && abs((int)rgb[2] - 20) <= 3);

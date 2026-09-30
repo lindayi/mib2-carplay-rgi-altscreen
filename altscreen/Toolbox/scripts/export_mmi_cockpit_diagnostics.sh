@@ -67,6 +67,7 @@ summary(){
     marker MASCOT_RAMDISK "$ROOT/ramdisk"
     marker MASCOT_CONTROL "$ROOT/ramdisk/carplay_mascot.control"
     marker MASCOT_STATUS "$ROOT/ramdisk/carplay_mascot.status"
+    marker MAP_CARDS_CONTROL "$ROOT/ramdisk/carplay_cards.control"
     marker VC_PANEL_CONTROL "$ROOT/ramdisk/carplay_vc_panel.control"
     marker VC_PANEL_STATUS "$ROOT/ramdisk/carplay_vc_panel.status"
     if [ -r "$ROOT/ramdisk/carplay_vc_panel.status" ]; then

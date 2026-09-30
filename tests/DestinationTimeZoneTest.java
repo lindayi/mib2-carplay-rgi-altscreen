@@ -7,6 +7,7 @@ import de.audi.app.terminalmode.IContext;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import de.audi.atip.metrics.DateMetric;
+import de.audi.atip.metrics.Distance;
 import java.lang.reflect.*;
 import java.nio.file.*;
 import java.util.TimeZone;
@@ -44,6 +45,7 @@ public final class DestinationTimeZoneTest {
         Field fw=field(CarPlayApp.class,"fwRef");Object prior=fw.get(null);
         TimeZone priorZone=TimeZone.getDefault();
         int priorFormat=DateMetric.timeFormat;
+        int priorDistance=Distance.getSystemUnit();
         IFrameworkAccess framework=(IFrameworkAccess)Proxy.newProxyInstance(DestinationTimeZoneTest.class.getClassLoader(),
             new Class[]{IFrameworkAccess.class},(p,m,a)-> {
                 if(m.getName().equals("getUTCTime"))return (ETA-600)*1000L;
@@ -77,6 +79,28 @@ public final class DestinationTimeZoneTest {
                 render(bridge,out,s,offsets[i],clocks[i]);
                 check(out.text.contains(" dest")== (offsets[i]!=-480),"cross-zone label mismatch");
             }
+            Method card=BAPBridge.class.getDeclaredMethod("formatTripCard",int.class,long.class,
+                long.class,long.class,int.class);
+            card.setAccessible(true);
+            BAPBridge passive=new BAPBridge();
+            Distance.setSystemUnit(Distance.KM);
+            for(int i=0;i<offsets.length;i++) {
+                String[] text=(String[])card.invoke(passive,10000,ETA,600L,ETA-600,offsets[i]);
+                check(text[0].startsWith(clocks[i]),"map card shares arrival/zone formatter");
+                check(text[1].equals("10 min"),"map card duration remains UTC based");
+                check(text[2].equals("10 km"),"map card uses native destination distance formatter");
+                check(text[0].contains(" dest")== (offsets[i]!=-480),"map card destination-zone label");
+            }
+            DateMetric.timeFormat=11;
+            String[] twelve=(String[])card.invoke(passive,-1,ETA,600L,ETA-600,330);
+            check(twelve[0].startsWith("5:15 AM") && twelve[2].equals(""),"map card 12h and unknown distance");
+            DateMetric.timeFormat=0;
+            Distance.setSystemUnit(Distance.MILES);
+            String[] imperial=(String[])card.invoke(passive,16093,ETA,600L,ETA-600,32767);
+            check(imperial[2].equals("10 mi"),"map card follows HU imperial distance");
+            String[] aged=(String[])card.invoke(passive,-1,-1L,900L,ETA-900,32767);
+            check(aged[1].equals("10 min"),"map card remaining-only sample ages like existing Trip bar");
+            check(!(Boolean)field(BAPBridge.class,"initialized").get(passive),"card formatting never initializes BAP");
             parse(rg,"destination_timezone_minutes:n:330\n");
             DateMetric.timeFormat=11;
             render(bridge,out,s,330,"5:15 AM");DateMetric.timeFormat=0;
@@ -110,7 +134,7 @@ public final class DestinationTimeZoneTest {
                     render(bridge,out,state(nativeRg),expected[i],expectedClocks[i]);
                 }
             }
-        } finally {fw.set(null,prior);TimeZone.setDefault(priorZone);DateMetric.timeFormat=priorFormat;}
+        } finally {fw.set(null,prior);TimeZone.setDefault(priorZone);DateMetric.timeFormat=priorFormat;Distance.setSystemUnit(priorDistance);}
         System.out.println("DestinationTimeZoneTest: signed/fractional offsets, rollover, 12/24h, HU fallback, UTC duration, dirty flags and lifecycle resets PASS");
     }
 }

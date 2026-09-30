@@ -35,9 +35,21 @@ public final class PreferencesTest {
         if(args.length>1)check(valid.equals(new String(Files.readAllBytes(Paths.get(args[1])),"UTF-8")),"shell/Java fixture format");
         expectInvalid(valid+"enabled=1\n");
         expectInvalid(valid.replace("mode=0","mode=3"));
-        expectInvalid(valid.replace("format=3","format=4"));
-        expectInvalid(valid.replace("format=3","format=1"));
-        expectInvalid(valid.replace("format=3","format=2"));
+        expectInvalid(valid.replace("format=4","format=5"));
+        expectInvalid(valid.replace("format=4","format=1"));
+        expectInvalid(valid.replace("format=4","format=2"));
+        expectInvalid(valid.replace("format=4","format=3"));
+        expectInvalid(valid.replace("trip_card=0\n",""));
+        expectInvalid(valid.replace("now_playing_card=0","now_playing_card=2"));
+        String version3=valid.substring(0,valid.indexOf("now_playing_card=")).replace("format=4","format=3");
+        if(args.length>1)check(version3.equals(new String(Files.readAllBytes(
+            Paths.get(args[1]).resolveSibling("carplay-preferences-v3.txt")),"UTF-8")),"historical v3 fixture");
+        Files.write(file.toPath(),version3.getBytes("UTF-8"));
+        preferences.refresh();
+        check(preferences.error().length()==0 && !preferences.snapshot().on(Setting.NOW_PLAYING_CARD)
+            && !preferences.snapshot().on(Setting.TRIP_CARD),"v3 cards default Off");
+        check(Preferences.read(file,8192).equals(version3),"v3 read never rewrites");
+        expectInvalid(version3+"trip_card=0\n");
         expectInvalid(valid.replace("mascot=0\n",""));
         expectInvalid(valid.replace("mascot=0","mascot="+(lastMascot+1)));
         expectInvalid(valid.replace("info_return=0\n",""));
@@ -45,7 +57,7 @@ public final class PreferencesTest {
         expectInvalid(valid.replace("road=1\n",""));
         expectInvalid(valid.replace("enabled=0","enabled=+1"));
         expectInvalid(valid+"command=reboot\n");
-        String version2=valid.substring(0,valid.indexOf("mascot=")).replace("format=3","format=2");
+        String version2=valid.substring(0,valid.indexOf("mascot=")).replace("format=4","format=2");
         if(args.length>1)check(version2.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v2.txt")),"UTF-8")),"historical v2 fixture");
         Files.write(file.toPath(),version2.getBytes("UTF-8"));
@@ -53,7 +65,7 @@ public final class PreferencesTest {
         check(preferences.error().length()==0 && preferences.snapshot().get(Setting.MASCOT)==0,"v2 mascot defaults Off");
         check(Preferences.read(file,8192).equals(version2),"v2 read never rewrites");
         expectInvalid(version2+"mascot=0\n");
-        String version1=valid.substring(0,valid.indexOf("info_default=")).replace("format=3","format=1");
+        String version1=valid.substring(0,valid.indexOf("info_default=")).replace("format=4","format=1");
         if(args.length>1)check(version1.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v1.txt")),"UTF-8")),"historical v1 fixture");
         Files.write(file.toPath(),version1.getBytes("UTF-8"));
@@ -65,10 +77,12 @@ public final class PreferencesTest {
         expectInvalid(version1.replace("road=1\n",""));
         expectInvalid(version1+"preset=0\n");
         preferences.set(Setting.INFO_DEFAULT,1);
-        check(Preferences.read(file,8192).startsWith("format=3\n"),"next save upgrades schema");
+        check(Preferences.read(file,8192).startsWith("format=4\n"),"next save upgrades schema");
         preferences.set(Setting.DISTANCE,0);
         preferences.set(Setting.ROAD_SCROLL,1);
         preferences.set(Setting.MASCOT,lastMascot);
+        preferences.set(Setting.NOW_PLAYING_CARD,1);
+        preferences.set(Setting.TRIP_CARD,1);
         int[] custom=preferences.snapshot().copy();
         int[][] presetValues={{0,1,1,1,0,1,0},{1,0,1,0,0,0,1},{1,1,1,1,0,0,0},{1,1,1,1,1,0,0}};
         for(int preset=0;preset<4;preset++) {
@@ -79,7 +93,8 @@ public final class PreferencesTest {
                 check(preferences.snapshot().copy()[id]==custom[id],"preset destroyed Custom");
             }
             check(preferences.snapshot().get(Setting.INFO_DEFAULT)==1 && !preferences.snapshot().on(Setting.ENABLED)
-                && preferences.snapshot().get(Setting.MASCOT)==lastMascot,
+                && preferences.snapshot().get(Setting.MASCOT)==lastMascot
+                && preferences.snapshot().on(Setting.NOW_PLAYING_CARD) && preferences.snapshot().on(Setting.TRIP_CARD),
                 "preset changes unrelated settings");
         }
         preferences.set(Setting.PRESET,0);
@@ -100,7 +115,7 @@ public final class PreferencesTest {
         try {preferences.set(Setting.ENABLED,1);throw new AssertionError("write should fail");}
         catch(IOException expected){}
         check(Arrays.equals(before,Files.readAllBytes(file.toPath())),"failed write preserves prior settings");
-        for(String page:new String[]{"root","presentation","information","guidance","appearance","controls","diagnostics","recovery","status","confirm:reset","confirm:export_full","confirm:restart_video"}) {
+        for(String page:new String[]{"root","cards","presentation","information","guidance","appearance","controls","diagnostics","recovery","status","confirm:reset","confirm:export_full","confirm:restart_video"}) {
             MenuModel.Row[] rows=MenuModel.page(page,preferences.snapshot(),new String[]{"Build test"},"Ready").rows;
             check(rows.length>0 && rows[0].target.equals("back")==page.startsWith("confirm:"),"physical Back navigation on "+page);
             for(MenuModel.Row row:rows)check(!row.target.contains("reboot") && !row.target.contains("restore"),"no maintenance action");
@@ -113,6 +128,7 @@ public final class PreferencesTest {
         check(MenuModel.parent("choice:"+Setting.INFO_DEFAULT).equals("information"),"information Back");
         check(MenuModel.parent("choice:"+Setting.PRESET).equals("appearance"),"preset Back");
         check(MenuModel.parent("choice:"+Setting.MASCOT).equals("appearance"),"mascot Back");
+        check(MenuModel.parent("choice:"+Setting.TRIP_CARD).equals("cards"),"card Back");
         boolean mode=false,reapply=false;
         for(MenuModel.Row row:MenuModel.page("root",preferences.snapshot(),new String[0],"Ready").rows) {
             mode|=row.target.equals("choice:"+Setting.MODE);

@@ -39,6 +39,7 @@ public final class SettingsRuntime {
     private static int lastLayout=-1;
     private static volatile String mirrorHealth="UNKNOWN",clusterContext="UNKNOWN";
     private static volatile String mascotHealth="OFF";
+    private static volatile String cardHealth="OFF";
     private static int lastEffective=-1;
     private static long lastRevision=-1;
     public interface Listener { void changed(); }
@@ -194,6 +195,15 @@ public final class SettingsRuntime {
             if(!mascotState.equals(mascotHealth))Log.e("Settings","Map mascot unavailable",e);
         }
         if(!mascotState.equals(mascotHealth)){mascotHealth=mascotState;changed();}
+        String cards;
+        boolean cardsAllowed=effective && ready && sessionVideo && s.get(Setting.MODE)!=2;
+        try {
+            cards=MapCardControl.publish(cardsAllowed && s.on(Setting.NOW_PLAYING_CARD),cardsAllowed && s.on(Setting.TRIP_CARD));
+        } catch(IOException e) {
+            cards="CONTROL_ERROR";
+            if(!cards.equals(cardHealth))Log.e("Settings","Map cards unavailable",e);
+        }
+        if(!cards.equals(cardHealth)){cardHealth=cards;changed();}
         CarPlayApp.setGuidanceEnabled(s.get(Setting.MODE)!=1);
         ScreenModule.setVideoAllowed(s.get(Setting.MODE)!=2 && sessionVideo);
         CarPlayApp.setFeaturesEnabled(effective);
@@ -353,6 +363,7 @@ public final class SettingsRuntime {
             "Cockpit integration: "+(CarPlayApp.isActive()?"Active":"Inactive"),
             "Mirror health: "+mirrorHealth,
             "Map mascot renderer: "+mascotHealth,
+            "Map cards control (not presentation): "+cardHealth,
             "VC quick settings: "+VcPanel.status(),
             "Last cluster context: "+clusterContext,
             "Video marker: "+(readyMarker?"Present (not pixel proof)":"Absent"),

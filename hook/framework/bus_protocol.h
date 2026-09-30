@@ -76,7 +76,7 @@
 #define EVT_SYNC_END            0x0003  /* snapshot replay finished          */
 #define EVT_PONG                0x0004  /* reply to CMD_PING                 */
 
-#define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
+#define EVT_COVERART            0x0010  /* text: crc:n:<source-u32> png_crc:n:<png-u32> path:s:<path> */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
 

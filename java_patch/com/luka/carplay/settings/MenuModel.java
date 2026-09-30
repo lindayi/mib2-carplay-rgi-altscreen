@@ -49,6 +49,8 @@ public final class MenuModel {
         if(id==Setting.LAYOUT)return "Request the phone's cluster-map layout. Reconnect CarPlay to apply; no MMI reboot.";
         if(id==Setting.PRESET)return "Custom is retained. Editing a preset creates a new Custom configuration.";
         if(id==Setting.MASCOT)return "Animation on the CarPlay cluster map only. The VC menu previews it; select to apply live.";
+        if(id==Setting.NOW_PLAYING_CARD)return "Show phone media on a fixed translucent left map card. Applies live; Audi dials may cover it.";
+        if(id==Setting.TRIP_CARD)return "Show ETA, remaining time/distance and estimated progress since this connection first observed the route. Rerouting can move the bar backward.";
         if(id==Setting.DISTANCE)return "Show distance to the next maneuver in the small guidance overlay.";
         if(id==Setting.ROAD)return "Show the next road or exit in the guidance overlay, not the current road.";
         if(id==Setting.LANES)return "Show the phone's available lane guidance beside the maneuver.";
@@ -71,6 +73,7 @@ public final class MenuModel {
         if(target.equals("back"))return "Cancel without applying this action. The physical Back button also returns.";
         if(target.equals("action:reapply_layout"))return "Request this connection's map layout again without reconnecting. Recentering is not guaranteed.";
         if(target.equals("presentation"))return "Choose the layout requested from the phone for the cluster map.";
+        if(target.equals("cards"))return "Optional fixed left-side map cards. Placement behind Audi dials needs a parked check.";
         if(target.equals("information"))return "Configure Road and Trip text in the VC lower information bar.";
         if(target.equals("guidance"))return "Choose the details shown around the small maneuver arrow.";
         if(target.equals("appearance"))return "Adjust overlay text and background, presets, and the optional map mascot.";
@@ -95,6 +98,7 @@ public final class MenuModel {
         if(page.startsWith("choice:")) {
             int id=Integer.parseInt(page.substring(7));
             if(id==Setting.MODE)return "root";
+            if(id==Setting.NOW_PLAYING_CARD || id==Setting.TRIP_CARD)return "cards";
             if(id==Setting.PRESET || id==Setting.MASCOT)return "appearance";
             if(id>=Setting.INFO_DEFAULT)return "information";
             if(id<=Setting.LAYOUT)return "presentation";
@@ -113,7 +117,7 @@ public final class MenuModel {
         String title=page.startsWith("choice:")?Setting.ALL[Integer.parseInt(page.substring(7))].label:
             page.equals("root")?"Carplay Altscreen":page.equals("presentation")?"Cockpit presentation":
             page.equals("guidance")?"Guidance details":page.equals("appearance")?"Overlay appearance":
-            page.equals("information")?"VC information bar":page.equals("controls")?"Controls":page.equals("diagnostics")?"Status & diagnostics":
+            page.equals("cards")?"Map cards":page.equals("information")?"VC information bar":page.equals("controls")?"Controls":page.equals("diagnostics")?"Status & diagnostics":
             page.equals("recovery")?"Recovery":page.equals("status")?"System status":page.equals("result")?"Last result":"Confirm action";
         String information="";
         boolean document=false,paginated=false;
@@ -121,6 +125,7 @@ public final class MenuModel {
             settings(rows,new int[]{Setting.ENABLED,Setting.MODE},prefs);
             item(rows,"Reapply cluster layout","action:reapply_layout");
             item(rows,"Phone map layout","presentation");
+            item(rows,"Map cards","cards");
             item(rows,"VC information bar","information");
             item(rows,"Guidance details","guidance");
             item(rows,"Overlay appearance","appearance");
@@ -129,6 +134,7 @@ public final class MenuModel {
             item(rows,"Recovery","recovery");
             item(rows,"Reset display/control preferences","confirm:reset");
         } else if(page.equals("presentation"))settings(rows,new int[]{Setting.LAYOUT},prefs);
+        else if(page.equals("cards"))settings(rows,new int[]{Setting.NOW_PLAYING_CARD,Setting.TRIP_CARD},prefs);
         else if(page.equals("information")) {
             settings(rows,new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},prefs);
         }

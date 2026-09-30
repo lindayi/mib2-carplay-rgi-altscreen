@@ -113,6 +113,15 @@ public final class VcPanelTest {
         check(com.luka.carplay.core.SteeringWheelInputModule.consumePanelBack(
             de.audi.app.terminalmode.keyevents.KeyState.RELEASED),"panel Back release leaked");
         check(get("page").equals("root") && (Integer)get("focus")==3,"Back lost parent focus");
+        acknowledge();VcPanel.scale(1);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+        check(get("page").equals("more"),"More settings entry");
+        acknowledge();VcPanel.scale(5);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+        check(get("page").equals("cards"),"sixth More row opens Map cards");
+        String cardPage=(String)snapshot.invoke(null,1000L);
+        check(cardPage.contains("Now Playing map card") && cardPage.contains("Trip progress map card"),
+            "both independent card controls visible");
+        acknowledge();VcPanel.back();acknowledge();VcPanel.back();
+        check(get("page").equals("root") && (Integer)get("focus")==4,"Map cards restores physical Back focus");
         acknowledge();keys.updateKey2(4,41,1,3,1);keys.updateKey2(1,16,1,4,1);
         check(!com.luka.carplay.core.SteeringWheelInputModule.consumePanelBack(
             de.audi.app.terminalmode.keyevents.KeyState.PRESSED),"console event retained wheel Back marker");

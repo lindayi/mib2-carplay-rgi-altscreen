@@ -47,6 +47,10 @@ No application heartbeat on this leg - Java relies on TCP FIN/RST + `setKeepAliv
 ## 🧭 Direction
 
 - **EVT_*** hook->Java: `EVT_RGD_UPDATE` (0x0020), `EVT_COVERART` (0x0010), `EVT_HELLO`, sync markers.
+  `EVT_COVERART` includes `crc:n:<source-image CRC32>`,
+  `png_crc:n:<published PNG CRC32>` and `path:s:<fixed PNG path>`.
+  Existing cover-picture IDs continue to use `crc`; passive cards validate the
+  actual PNG bytes using `png_crc`. Missing PNG identity means text-only cards.
 - **CMD_*** Java->hook: `CMD_SYNC_REQ` (0x0100) requests a sticky snapshot. The `CMD_ALT_*` (0x0110-0x0116) defines in `bus_protocol.h` are altScreen leftovers with no
   handler in this hook.
 

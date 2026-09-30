@@ -152,6 +152,12 @@ features below follow it automatically.
   **Reapply cluster layout** action resends the current connection's layout without
   restarting or reconnecting; it does not apply a newly saved layout early.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
+- **Optional left-side map cards:** independently enable Now Playing and Trip progress
+  in **Carplay Altscreen -> Map cards** (VC: **More settings -> Map cards**).
+  Both default Off. Translucent fixed-position cards leave the right-side guidance
+  alone; their intended hiding behind Audi dials in small View needs parked
+  calibration. Trip progress is estimated from this connection's first observed
+  remaining distance, not the original journey. See [behavior and limits](docs/hmi/carplay-settings.md#optional-map-cards).
 - **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
   **Carplay Altscreen**. The root directly exposes master enable and presentation
   mode. Grouped controls cover phone layout, the existing VC information bar,
