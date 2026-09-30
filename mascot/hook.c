@@ -17,7 +17,7 @@ static swap_function real_swap;
 static destroy_function real_destroy;
 static pthread_once_t once=PTHREAD_ONCE_INIT;
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
-static mascot_animation animations[MASCOT_COUNT];
+static const mascot_animation *animations;
 static int selected,loaded,render_state;
 static mascot_graphics graphics;
 static EGLContext graphics_context=EGL_NO_CONTEXT;
@@ -75,7 +75,6 @@ static void *control_loop(void *unused) {
     (void)unused;
     const char *config=setting_path("CARPLAY_MASCOT_CONFIG","/ramdisk/carplay_mascot.control");
     const char *ready=setting_path("ALT111_MIRROR_BASE_READY_FILE","/tmp/mmi-mirror-basevideo.ready");
-    const char *atlas=setting_path("CARPLAY_MASCOT_ATLAS","/mnt/app/root/carplay-altscreen/bin/mirror/mascots.rgba");
     int attempted=0;
     const char *last="";
     uint64_t last_status=0;
@@ -94,19 +93,19 @@ static void *control_loop(void *unused) {
         if(access(ready,F_OK)!=0)next=0;
         if(next>0 && !attempted) {
             attempted=1;
-            int valid=mascot_load(atlas,animations);
-            pthread_mutex_lock(&lock);loaded=valid;pthread_mutex_unlock(&lock);
+            const mascot_animation *assets=mascot_worker_assets();
+            pthread_mutex_lock(&lock);animations=assets;loaded=assets!=NULL;pthread_mutex_unlock(&lock);
         }
         pthread_mutex_lock(&lock);
-        int choice=next>0 && loaded?next:0;
+        int available=next>0 && loaded && animations[next-1].count;
+        int choice=available?next:0;
         if(choice!=selected)render_state=0;
         selected=choice;
         control_deadline=choice?monotonic_ms()+1000:0;
         int rendered=render_state;
         pthread_mutex_unlock(&lock);
-        const char *state=next<0?"CONTROL_STALE":next==0?"OFF":!loaded?"ASSET_ERROR":
-            rendered<0?"GRAPHICS_ERROR":rendered==1?"RACCOON":rendered==2?"NIAN":
-            rendered==3?"CAPYBARA":rendered==4?"LIZARD":"QUEUED";
+        const char *state=next<0?"CONTROL_STALE":next==0?"OFF":!available?"ASSET_ERROR":
+            rendered<0?"GRAPHICS_ERROR":rendered>0?"ACTIVE":"QUEUED";
         uint64_t now=monotonic_ms();
         if(strcmp(last,state) || now-last_status>=1000) {
             status(state,strcmp(last,state)!=0);last=state;last_status=now;

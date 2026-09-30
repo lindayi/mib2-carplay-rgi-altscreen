@@ -122,6 +122,31 @@ fail:
     mascot_graphics_destroy(g);
     return 0;
 }
+static int refresh_image(mascot_graphics *g,const mascot_animation *image) {
+    GLuint texture=0,probe=0;
+    glGenTextures(1,&texture);glGenFramebuffers(1,&probe);
+    int good=texture && probe;
+    if(good) {
+        glBindTexture(GL_TEXTURE_2D,texture);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,image->width,image->height,0,GL_RGBA,GL_UNSIGNED_BYTE,image->pixels);
+        glBindFramebuffer(GL_FRAMEBUFFER,probe);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,texture,0);
+        good=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    if(probe)glDeleteFramebuffers(1,&probe);
+    if(good){glDeleteTextures(1,&g->textures[0][0]);g->textures[0][0]=texture;}
+    else {
+        if(texture)glDeleteTextures(1,&texture);
+        fprintf(stderr,"MASCOT=GRAPHICS_ERROR image upload failed\n");
+    }
+    return good;
+}
 static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsigned selected,uint64_t elapsed_ms,int image,int refresh) {
     if(selected==0)return 1;
     if(selected>MASCOT_COUNT)return 0;
@@ -129,6 +154,7 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     glGetIntegerv(GL_FRAMEBUFFER_BINDING,&framebuffer);glGetIntegerv(GL_VIEWPORT,viewport);
     if(framebuffer!=0 || viewport[2]<128 || viewport[3]<64)return 0;
     const mascot_animation *sprite=&a[selected-1];
+    if(!sprite->pixels || !sprite->count || !sprite->duration)return 0;
     float width=(image?1.f:2.f)*sprite->width,height=(image?1.f:2.f)*sprite->height;
     /* Trial clearance for the VC-local street/Trip overlay, not a measured bar boundary. */
     float bottom=image?floorf((viewport[3]-height)/2.f):(ceilf(viewport[3]*0.20f)+4.f)*0.70f;
@@ -136,11 +162,8 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     if(bottom+height>viewport[3])return 0;
     saved_state state;save(&state);
     int good;
-    if(image && refresh && g->initialized) {
-        mascot_graphics next={0};
-        good=initialize(&next,a);
-        if(good){mascot_graphics_destroy(g);*g=next;}
-    } else good=g->initialized || initialize(g,a);
+    if(image && refresh && g->initialized)good=refresh_image(g,sprite);
+    else good=g->initialized || initialize(g,a);
     if(good) {
         float x=floorf((viewport[2]-width)/2.f),draw_width=width;
         if(!image && viewport[2]>width) {
@@ -148,7 +171,7 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
             double travel=fmod(elapsed_ms*0.048,2*span);
             int returning=travel>=span;
             x=(float)(returning?2*span-travel:travel);
-            if(selected!=1)x=(float)span-x;
+            if(sprite->faces_left)x=(float)span-x;
             /* Reflect the quad, not frame order, so the return leg faces forward. */
             if(returning){x+=width;draw_width=-width;}
         }
@@ -173,9 +196,7 @@ int mascot_draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
 }
 int mascot_draw_image(mascot_graphics *g,const unsigned char *rgba,unsigned width,unsigned height,int refresh) {
     mascot_animation a[MASCOT_COUNT]={{0}};
-    for(unsigned i=0;i<MASCOT_COUNT;i++) {
-        a[i].width=width;a[i].height=height;a[i].count=1;a[i].duration=1000;a[i].delay[0]=1000;
-        a[i].pixels=(unsigned char *)rgba;
-    }
+    a[0].width=width;a[0].height=height;a[0].count=1;a[0].duration=1000;a[0].delay[0]=1000;
+    a[0].pixels=(unsigned char *)rgba;
     return draw(g,a,1,0,1,refresh);
 }

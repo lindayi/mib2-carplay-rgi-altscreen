@@ -9,7 +9,7 @@
 #define HEIGHT 400
 static unsigned char pixels[WIDTH*HEIGHT*4],baseline[sizeof(pixels)];
 static vc_panel_page root={
-    "Carplay Altscreen","Settings preview - no vehicle input",5,{
+    "Carplay Altscreen","Settings preview - no vehicle input",5,0,{
         {"Enabled","",VC_ROW_TOGGLE,1},
         {"Display mode","Map + guidance",VC_ROW_LINK,0},
         {"Map layout","Card on top",VC_ROW_LINK,0},
@@ -18,7 +18,7 @@ static vc_panel_page root={
     }
 };
 static vc_panel_page mascots={
-    "Map mascot","Appears only on the CarPlay cluster map",5,{
+    "Map mascot","Appears only on the CarPlay cluster map",5,0,{
         {"Off","",VC_ROW_CHOICE,1},
         {"Raccoon","",VC_ROW_CHOICE,0},
         {"Nian","",VC_ROW_CHOICE,0},

@@ -150,16 +150,31 @@ public final class VcPanelTest {
         field(com.luka.carplay.pdc.PdcSmallStageGuard.class,"parkingControlsActive").set(null,false);
         check(!VcPanel.roller(1) && VcPanel.roller(0),"ordinary short gesture not deferred until release");
         VcPanel.scale(1);hold();acknowledge();VcPanel.scale(3);acknowledge();
-        VcPanel.roller(1);VcPanel.roller(0);acknowledge();VcPanel.scale(4);acknowledge();
-        check(((String)snapshot.invoke(null,1000L)).contains("Capybara"),"Capybara missing from VC choices");
-        check(((String)snapshot.invoke(null,1000L)).contains("Lizard"),"Lizard missing from VC choices");
+        VcPanel.roller(1);VcPanel.roller(0);acknowledge();
+        int lastMascot=Setting.ALL[Setting.MASCOT].choices.length-1;
+        long beforePreview=prefs.snapshot().revision;
+        check(((String)snapshot.invoke(null,1000L)).contains("PREVIEW 1\n"),"Off preview missing");
+        if(lastMascot>=6) {
+            for(int start=4;start<=lastMascot;start+=4) {
+                VcPanel.scale(100);acknowledge();
+                check(((String)snapshot.invoke(null,1000L)).contains("PREVIEW 18\n"),"page link mistaken for mascot");
+                VcPanel.roller(1);VcPanel.roller(0);acknowledge();
+                check((Integer)get("choiceOffset")==start,"pagination offset");
+                check(((String)snapshot.invoke(null,1000L)).contains("PREVIEW "+(start+1)+"\n"),"paged preview ID");
+            }
+        }
+        VcPanel.scale(lastMascot>=6?lastMascot%4:lastMascot);acknowledge();
+        String preview=(String)snapshot.invoke(null,1000L);
+        check(preview.contains(Setting.ALL[Setting.MASCOT].choices[lastMascot])
+            && preview.contains("PREVIEW "+(lastMascot+1)+"\n"),"focused mascot preview ID");
+        check(prefs.snapshot().revision==beforePreview && prefs.snapshot().get(Setting.MASCOT)==0,"preview saved a selection");
         Path helper=Paths.get("/mnt/app/root/carplay-altscreen/bin/carplay_mmi_action.sh");
         check(!Files.exists(helper),"fixture helper already exists");
         Files.createDirectories(helper.getParent());Files.write(helper,"#!/bin/sh\nexit 0\n".getBytes("US-ASCII"));
         VcPanel.roller(1);VcPanel.roller(0);
         long end=System.currentTimeMillis()+4000;
-        while(prefs.snapshot().get(Setting.MASCOT)!=4 && System.currentTimeMillis()<end)Thread.sleep(10);
-        check(prefs.snapshot().get(Setting.MASCOT)==4,"Lizard not persisted by shared settings worker");
+        while(SettingsRuntime.busy() && System.currentTimeMillis()<end)Thread.sleep(10);
+        check(prefs.snapshot().get(Setting.MASCOT)==lastMascot,"last mascot not persisted by shared settings worker");
         SettingsRuntime.stop();VcPanel.stop();Files.delete(helper);
         Files.deleteIfExists(root.resolve("preferences"));Files.deleteIfExists(root.resolve("layout"));Files.delete(root);
         System.out.println("VC panel: default hold, short/release arbitration, ack/revision leases, scale, Back, View/drawer/session/parking gates and shared save PASS");

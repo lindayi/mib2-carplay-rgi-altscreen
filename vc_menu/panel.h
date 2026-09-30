@@ -8,6 +8,9 @@
 #define VC_PANEL_DEPTH 4
 #define VC_PANEL_WIDTH 420
 #define VC_PANEL_HEIGHT 288
+#define VC_PANEL_PREVIEW_WIDTH 640
+#define VC_PANEL_MASCOTS 16
+#define VC_PANEL_PREVIEW_PAGE 18
 
 enum vc_row_kind { VC_ROW_VALUE, VC_ROW_TOGGLE, VC_ROW_LINK, VC_ROW_CHOICE };
 typedef struct {
@@ -20,6 +23,7 @@ typedef struct {
     char title[40];
     char hint[64];
     unsigned count;
+    unsigned preview; /* 0: hidden, 1: Off, 2..17: mascot ID + 1, 18: page link. */
     vc_panel_row rows[VC_PANEL_ROWS];
 } vc_panel_page;
 typedef struct {
@@ -41,5 +45,9 @@ int vc_panel_renderer_init(vc_panel_renderer *renderer);
 void vc_panel_renderer_destroy(vc_panel_renderer *renderer);
 int vc_panel_paint(const vc_panel_renderer *renderer, const vc_panel *panel,
     unsigned char *rgba, size_t bytes, unsigned width, unsigned height, unsigned stride);
+unsigned vc_panel_width(const vc_panel_page *page);
+void vc_panel_preview(const vc_panel_renderer *renderer,const vc_panel_page *page,
+    unsigned char *rgba,unsigned width,unsigned height,unsigned stride,
+    const unsigned char *pixels,unsigned sprite_width,unsigned sprite_height,const char *message);
 
 #endif

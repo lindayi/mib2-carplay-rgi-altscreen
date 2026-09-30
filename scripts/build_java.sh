@@ -31,12 +31,20 @@ BUILD_ID_RAW=${CARPLAY_BUILD_ID:-$(git -C "$PROJECT_DIR" describe --always --dir
 BUILD_ID=$(printf '%s' "$BUILD_ID_RAW" | tr -cd 'A-Za-z0-9._-')
 
 echo "=== CarPlay Java Patch Build (Docker $IMG, stock $STOCK_JAR_NAME) ==="
+PACK_MOUNT="${MASCOT_PACK:-$PROJECT_DIR/java_resources}"
+if [ -n "${MASCOT_PACK:-}" ]; then
+  for f in catalog.json MascotCatalog.java mascots.rgba; do
+    [ -s "$MASCOT_PACK/$f" ] || { echo "ERROR: missing mascot pack $f"; exit 1; }
+  done
+fi
 
 docker run --rm \
   -v "$PROJECT_DIR":/src \
   -v "$TOOLS_DIR":/tools:ro \
   -e BUILD_ID="$BUILD_ID" \
   -e STOCK_JAR_NAME="$STOCK_JAR_NAME" \
+  -v "$PACK_MOUNT":/mascot-pack:ro \
+  -e CUSTOM_MASCOT_PACK="${MASCOT_PACK:+1}" \
   "$IMG" bash -c '
   set -e
   SRC=/src/java_patch
@@ -55,10 +63,22 @@ docker run --rm \
   sed "s/@BUILD_ID@/$BUILD_ID/g" "$SRC/com/luka/carplay/core/CarPlayApp.java" > "$GEN/com/luka/carplay/core/CarPlayApp.java"
   grep -v "/com/luka/carplay/core/CarPlayApp.java$" "$SRCLIST" > "$SRCLIST.tmp"; mv "$SRCLIST.tmp" "$SRCLIST"
   printf "%s\n" "$GEN/com/luka/carplay/core/CarPlayApp.java" >> "$SRCLIST"
+  if [ -n "$CUSTOM_MASCOT_PACK" ]; then
+    mkdir -p "$GEN/com/luka/carplay/settings"
+    cp /mascot-pack/MascotCatalog.java "$GEN/com/luka/carplay/settings/"
+    grep -v "/com/luka/carplay/settings/MascotCatalog.java$" "$SRCLIST" > "$SRCLIST.tmp"; mv "$SRCLIST.tmp" "$SRCLIST"
+    printf "%s\n" "$GEN/com/luka/carplay/settings/MascotCatalog.java" >> "$SRCLIST"
+  fi
 
   javac -source 1.4 -target 1.4 -cp "$CP" -sourcepath "$GEN:$SRC" -d "$OUT" -Xlint:-options @"$SRCLIST"
   # Compact generated metrics/Unicode tables (VC route text) live inside the jar.
   cp -R /src/java_resources/. "$OUT/"
+  if [ -n "$CUSTOM_MASCOT_PACK" ]; then
+    cp /mascot-pack/catalog.json "$OUT/com/luka/carplay/settings/mascot-catalog.json"
+    cp "$GEN/com/luka/carplay/settings/MascotCatalog.java" "$OUT/com/luka/carplay/settings/mascot-catalog.java"
+  else
+    cp "$SRC/com/luka/carplay/settings/MascotCatalog.java" "$OUT/com/luka/carplay/settings/mascot-catalog.java"
+  fi
   ASM="/tools/tools/uninline/lib/asm-9.7.jar:/tools/tools/uninline/lib/asm-tree-9.7.jar"
   javac -cp "$ASM" -d "$GEN" /src/tools/PatchNavigationSettings.java
   java -cp "$GEN:$ASM" PatchNavigationSettings "/tools/out/$STOCK_JAR_NAME" "$OUT"

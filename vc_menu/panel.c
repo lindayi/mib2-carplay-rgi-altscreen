@@ -13,7 +13,7 @@ static int text_valid(const char *text,size_t capacity) {
     return 0;
 }
 static int page_valid(const vc_panel_page *page) {
-    if(!page || !page->count || page->count>VC_PANEL_ROWS ||
+    if(!page || !page->count || page->count>VC_PANEL_ROWS || page->preview>VC_PANEL_PREVIEW_PAGE ||
             !text_valid(page->title,sizeof(page->title)) || !page->title[0] ||
             !text_valid(page->hint,sizeof(page->hint)))return 0;
     for(unsigned i=0;i<page->count;i++) {
@@ -97,9 +97,13 @@ typedef struct {
     unsigned char *rgba;
     unsigned width,height,stride;
     int origin_x,origin_y;
+    unsigned panel_width;
 } canvas;
+unsigned vc_panel_width(const vc_panel_page *page) {
+    return page->preview?VC_PANEL_PREVIEW_WIDTH:VC_PANEL_WIDTH;
+}
 static void pixel(canvas *c,int x,int y,unsigned rgb,unsigned alpha) {
-    if(x<0 || y<0 || x>=VC_PANEL_WIDTH || y>=VC_PANEL_HEIGHT)return;
+    if(x<0 || y<0 || (unsigned)x>=c->panel_width || y>=VC_PANEL_HEIGHT)return;
     x+=c->origin_x;y+=c->origin_y;
     if(x<0 || y<0 || (unsigned)x>=c->width || (unsigned)y>=c->height)return;
     unsigned char *p=c->rgba+(size_t)y*c->stride+(size_t)x*4;
@@ -160,16 +164,22 @@ int vc_panel_paint(const vc_panel_renderer *renderer,const vc_panel *panel,
                   unsigned char *rgba,size_t bytes,unsigned width,unsigned height,unsigned stride) {
     if(!panel || !panel->depth)return 1;
     if(!renderer || !renderer->font || !rgba || panel->depth>VC_PANEL_DEPTH ||
-            width<VC_PANEL_WIDTH+32 || height<VC_PANEL_HEIGHT+32 ||
+            width<vc_panel_width(&panel->pages[panel->depth-1])+32 || height<VC_PANEL_HEIGHT+32 ||
             width>4096 || height>2160 || stride<(size_t)width*4 ||
             bytes<(size_t)stride*height || !page_valid(&panel->pages[panel->depth-1]) ||
             panel->focus[panel->depth-1]>=panel->pages[panel->depth-1].count) {
         fprintf(stderr,"VC_MENU=INVALID_SURFACE_OR_STATE\n");return 0;
     }
     const vc_panel_page *page=&panel->pages[panel->depth-1];
-    canvas c={rgba,width,height,stride,(int)width-VC_PANEL_WIDTH-16,((int)height-VC_PANEL_HEIGHT)/2};
-    rect(&c,0,0,VC_PANEL_WIDTH,VC_PANEL_HEIGHT,0x121519,248);
-    rect(&c,0,0,VC_PANEL_WIDTH,2,0xaeb2b6,180);
+    unsigned panel_width=vc_panel_width(page);
+    canvas c={rgba,width,height,stride,(int)width-(int)panel_width-16,((int)height-VC_PANEL_HEIGHT)/2,panel_width};
+    rect(&c,0,0,panel_width,VC_PANEL_HEIGHT,0x121519,248);
+    rect(&c,0,0,panel_width,2,0xaeb2b6,180);
+    if(page->preview) {
+        rect(&c,VC_PANEL_WIDTH,44,1,192,0x44494e,255);
+        text(&c,renderer->font,"Preview",VC_PANEL_WIDTH+20,48,180,.95f,0xdfe1e3);
+        text(&c,renderer->font,"OK to apply",VC_PANEL_WIDTH+20,216,180,.8f,0xadb2b8);
+    }
     text(&c,renderer->font,page->title,20,8,380,1.35f,0xf4f4f4);
     rect(&c,20,37,380,1,0x52565a,255);
     for(unsigned i=0;i<page->count;i++) {
@@ -210,4 +220,24 @@ int vc_panel_paint(const vc_panel_renderer *renderer,const vc_panel *panel,
     text(&c,renderer->font,page->hint,20,250,380,.8f,0xadb2b8);
     text(&c,renderer->font,"OK  Select     Back  Return",20,270,380,.7f,0x92989f);
     return 1;
+}
+void vc_panel_preview(const vc_panel_renderer *renderer,const vc_panel_page *page,
+                     unsigned char *rgba,unsigned width,unsigned height,unsigned stride,
+                     const unsigned char *pixels,unsigned sprite_width,unsigned sprite_height,const char *message) {
+    canvas c={rgba,width,height,stride,(int)width-VC_PANEL_PREVIEW_WIDTH-16,
+        ((int)height-VC_PANEL_HEIGHT)/2,VC_PANEL_PREVIEW_WIDTH};
+    if(!page->preview)return;
+    if(message) {
+        text(&c,renderer->font,message,VC_PANEL_WIDTH+20,130,180,.85f,0xadb2b8);
+        return;
+    }
+    if(!pixels || !sprite_width || !sprite_height)return;
+    float scale=2.f;
+    if(sprite_width*scale>180)scale=180.f/sprite_width;
+    unsigned w=(unsigned)(sprite_width*scale),h=(unsigned)(sprite_height*scale);
+    int x=VC_PANEL_WIDTH+(220-(int)w)/2,y=92+(100-(int)h)/2;
+    for(unsigned dy=0;dy<h;dy++)for(unsigned dx=0;dx<w;dx++) {
+        const unsigned char *p=pixels+((unsigned)(dy/scale)*sprite_width+(unsigned)(dx/scale))*4;
+        pixel(&c,x+dx,y+dy,((unsigned)p[0]<<16)|((unsigned)p[1]<<8)|p[2],p[3]);
+    }
 }

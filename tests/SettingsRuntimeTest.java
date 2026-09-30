@@ -60,8 +60,9 @@ public final class SettingsRuntimeTest {
             "inactive session must not enable the mascot");
         SettingsRuntime.action("export_summary");
         awaitFile(Paths.get("/tmp/menu-short-started"));
-        SettingsRuntime.set(Setting.MASCOT,2);
-        awaitValue(Setting.MASCOT,2);
+        int mascot=Math.min(2,Setting.ALL[Setting.MASCOT].choices.length-1);
+        SettingsRuntime.set(Setting.MASCOT,mascot);
+        awaitValue(Setting.MASCOT,mascot);
         SettingsRuntime.set(Setting.TEXT_SIZE,0);
         awaitValue(Setting.TEXT_SIZE,0);
         long wait=System.currentTimeMillis()+5000;

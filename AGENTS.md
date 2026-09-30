@@ -335,6 +335,13 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   otherwise a transparent initial buffer can be incorrectly acknowledged.
   Validate a fresh texture allocation before acknowledging changed UI pixels.
   Test the real 1440x455 EGL composite, not only model geometry or status strings.
+- Only the mascot choice page expands to 640x288 for a right-side focused animated
+  preview; ordinary pages stay 420x288. Previewing never saves. Sample frames on
+  the existing 100 ms worker, share immutable decoded assets, and track image
+  serial separately from input revision. Fresh texture validation must precede
+  acknowledgement, including same-revision animation and readiness re-entry.
+  Keep PREVIEW IDs/limits aligned in Java/C and `check_local_protocols.py`.
+  Horizontal Audi-layer clearance still requires a parked check.
 - MU1316 raw MFW keys: roller 40, cancel 41, side-menu left/right 99/100.
   Raw state 2 is **double press**, 3 is long press (4/5 further long states).
   DSI observation and BAP drawer-open flags do not grant exclusive wheel input.
@@ -367,6 +374,9 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Reuse native widgets/fonts/focus and preserve OEM rows/model bindings. Hide those
   rows only while our submenu is open. Keep action labels and reconnect state truthful.
 - Main-MMI `MenuModel.Page` separates titles/information from actionable rows.
+  Normal pages use physical Back only, with no explicit Back row. Confirmation
+  pages retain Cancel as the default. Every selectable option has native infoline
+  help; keep save failures and reconnect notices in the separate feedback layer.
   `CarplayMenuChrome` uses the existing title bar and a non-menu native label;
   restore the original title models/bounds on exit and hide/reuse the label on disconnect.
   Stock `AbstractWidget.propagateDisconnecting()` caches the child count; removing a
@@ -430,8 +440,12 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   file I/O stays on workers, not HMI or GL callbacks; no extra swaps/telemetry or stall masking.
   Keep Off a no-GL path, restore caller state/alpha, and clear cached GL names on
   context destruction (EGL handles can be reused).
-- Build the bounded runtime atlas from private local GIFs with
-  `tools/build_mascot_assets.py`; keep artwork/derived PNGs out of Git. Native
+- Build local 0..16-entry packs with `tools/prepare_mascot_pack.py`; keep third-party
+  artwork/derived PNGs out of Git. Explicit `MASCOT_PACK` must match Java build and
+  SD staging. JAR choices/catalog, generated shell bounds and MASCOT02 atlas are
+  one checked package. Default builds contain no artwork but retain a valid empty
+  atlas and the VC library preload. `create_example_mascot.py` generates original
+  CC0 geometric artwork; public host suites require no private assets. Native
   build output and generated atlas are both required at SD staging, included in
   both checksum manifests and the installer's explicit mirror copy list.
   Retained local inputs are `carplay-build-inputs\mascot-assets\raccoon.gif`,
@@ -445,12 +459,14 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   Lizard reel uploader is confirmed but no distribution grant was found.
   Keep primary evidence and qualifications in `docs\hmi\carplay-settings.md`;
   do not treat search-suggested creators or another reel's terms as exact proof.
-- Stable mascot IDs are Off=0, Raccoon=1, Nian=2, Capybara=3, Lizard=4. Keep Java choices,
+- The private `mascot-assets/pack.json` preserves IDs Off=0, Raccoon=1, Nian=2,
+  Capybara=3, Lizard=4; the Windows Java/SD adapter regenerates and explicitly selects
+  it. Public packs use array-position IDs: append without reordering to preserve
+  selections; choose Off before pack removal/replacement/downgrade. Keep Java choices,
   shell validation, native control bounds/atlas count and diagnostic state
   allowlists aligned. Format-3 preferences retain all existing values; an old
   build may reject newer values, so choose Off before an intentional downgrade.
-  Atlas generation requires all four GIFs; SD staging rejects an older
-  atlas. Capybara uses its four original frame delays, exterior-white removal,
+  SD staging rejects mismatched/legacy-only packs. Capybara uses its four original frame delays, exterior-white removal,
   the common size/clearance, and initially leftward travel to match its artwork.
 - Mascots now turn at both video-viewport edges, with their full canvas inside
   the viewport when it fits. Preserve 48-video-pixel/second travel, original

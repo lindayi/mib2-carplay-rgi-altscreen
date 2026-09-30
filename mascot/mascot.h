@@ -4,12 +4,13 @@
 #include <stddef.h>
 #include <GLES2/gl2.h>
 
-#define MASCOT_COUNT 4
+#define MASCOT_COUNT 16
 #define MASCOT_MAX_FRAMES 32
 typedef struct {
     unsigned width, height, count, duration;
     unsigned delay[MASCOT_MAX_FRAMES];
     unsigned char *pixels;
+    unsigned faces_left;
 } mascot_animation;
 typedef struct {
     GLuint program, buffer, textures[MASCOT_COUNT][MASCOT_MAX_FRAMES];
@@ -17,6 +18,7 @@ typedef struct {
     int initialized;
 } mascot_graphics;
 int mascot_load(const char *path, mascot_animation animations[MASCOT_COUNT]);
+const mascot_animation *mascot_worker_assets(void);
 void mascot_free(mascot_animation animations[MASCOT_COUNT]);
 int mascot_config(const char *text, uint64_t now_ms, unsigned pid);
 unsigned mascot_frame(const mascot_animation *animation, uint64_t elapsed_ms);

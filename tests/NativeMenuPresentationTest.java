@@ -74,13 +74,14 @@ public final class NativeMenuPresentationTest {
         for(int id=0;id<Setting.ALL.length;id++)pages.add("choice:"+id);
         for(String name:pages) {
             MenuModel.Page page=MenuModel.page(name,prefs,status,message);
-            check(page.rows[0].target.equals("back"),"Back/Cancel missing: "+name);
+            check(page.rows[0].target.equals("back")==name.startsWith("confirm:"),"unexpected Back/Cancel row: "+name);
             Set<String> keys=new HashSet<>();
             for(MenuModel.Row row:page.rows) {
                 check(row.target.length()>0 && keys.add(row.focusKey()),"non-action or ambiguous focus");
                 check(!row.label.equals(page.title) && !row.label.equals(message),"title/notice is an option");
                 for(String line:status)check(!row.label.equals(line),"status value is an option");
                 check(!row.label.contains("[reconnect]"),"hint still attached to option label");
+                check(row.help.length()>0,"missing native focused-option explanation: "+row.label);
                 CarplayMenuItem item=new CarplayMenuItem(new CarplayMenuController(),row,990001);
                 check(item.isFocusable(),"real action not focusable");
                 check(item.getType()!=MenuItemController.TYPE_LABEL,"informational menu row returned");
@@ -102,8 +103,8 @@ public final class NativeMenuPresentationTest {
             }
         }
         MenuModel.Page root=MenuModel.page("root",prefs,status,message);
-        MenuModel.Row enabled=root.rows[1];
-        check(enabled.setting==Setting.ENABLED && root.focusIndex(null)==1,"root should open on Enabled");
+        MenuModel.Row enabled=root.rows[0];
+        check(enabled.setting==Setting.ENABLED && root.focusIndex(null)==0,"root should open on Enabled");
         MenuModel.Row changed=new MenuModel.Row(enabled.label,enabled.target,enabled.setting,1-enabled.value,true,!enabled.checked,enabled.help);
         check(enabled.focusKey().equals(changed.focusKey()),"changing switch loses focus");
         check(MenuModel.page("status",prefs,status,message).information.contains("Map mascot renderer: NIAN"),"status missing");

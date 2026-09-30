@@ -11,6 +11,15 @@ int main(int argc,char **argv) {
     assert(request.page.count==1 && request.page.rows[0].checked && request.epoch==7 && request.connection==2);
     strcpy(text,sample);assert(vc_panel_decode(text,1501,42,&request) && !request.page.count);
     strcpy(text,sample);assert(vc_panel_decode(text,1000,43,&request) && !request.page.count);
+    for(unsigned preview=1;preview<=18;preview++) {
+        snprintf(text,sizeof(text),"%sPREVIEW %u\n",sample,preview);
+        assert(vc_panel_decode(text,1000,42,&request) && request.page.preview==preview);
+    }
+    const char *suffixes[]={"PREVIEW 0\n","PREVIEW 19\n","PREVIEW -1\n","PREVIEW 1","PREVIEW 2\nextra","PREVIEW 2\nPREVIEW 3\n"};
+    for(unsigned i=0;i<sizeof(suffixes)/sizeof(suffixes[0]);i++) {
+        snprintf(text,sizeof(text),"%s%s",sample,suffixes[i]);
+        assert(!vc_panel_decode(text,1000,42,&request));
+    }
     for(unsigned n=0;n<strlen(sample);n++) {
         memcpy(text,sample,n);text[n]=0;
         assert(!vc_panel_decode(text,1000,42,&request));

@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#define IMAGE_WIDTH (VC_PANEL_WIDTH+32)
+#define IMAGE_WIDTH (VC_PANEL_PREVIEW_WIDTH+32)
 #define IMAGE_HEIGHT (VC_PANEL_HEIGHT+32)
 #define IMAGE_BYTES (IMAGE_WIDTH*IMAGE_HEIGHT*4)
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -24,6 +24,8 @@ static unsigned front;
 static uint64_t deadline,frame_expiry;
 static unsigned frame_revision,texture_revision;
 static uint64_t texture_epoch;
+static uint64_t image_serial,texture_serial,preview_started;
+static unsigned image_width=VC_PANEL_WIDTH+32,preview_frame;
 static int state;
 static mascot_graphics graphics;
 static EGLContext context=EGL_NO_CONTEXT;
@@ -55,17 +57,37 @@ void vc_overlay_poll(void) {
     if(access(ready && ready[0]?ready:"/tmp/mmi-mirror-basevideo.ready",F_OK)!=0)request.page.count=0;
     pthread_mutex_lock(&mutex);
     int repaint=request.page.count && (!current.page.count || request.epoch!=current.epoch || request.revision!=current.revision);
+    int preview_changed=request.epoch!=current.epoch || request.page.preview!=current.page.preview || !current.page.count;
     unsigned back=1-front;
     pthread_mutex_unlock(&mutex);
+    unsigned width=vc_panel_width(&request.page)+32,animation_frame=0;
+    const mascot_animation *animation=NULL;
+    const char *preview_message=NULL;
+    if(request.page.count && request.page.preview) {
+        if(preview_changed)preview_started=mono_ms();
+        if(request.page.preview==VC_PANEL_PREVIEW_PAGE)preview_message="Choose a mascot";
+        else if(request.page.preview==1)preview_message="Mascot Off";
+        else {
+            const mascot_animation *assets=mascot_worker_assets();
+            if(assets && assets[request.page.preview-2].count) {
+                animation=assets+request.page.preview-2;
+                animation_frame=mascot_frame(animation,mono_ms()-preview_started);
+                if(animation_frame!=preview_frame)repaint=1;
+            } else preview_message="Preview unavailable";
+        }
+    }
     if(repaint) {
         vc_panel panel={0};
         memset(buffers[back],0,IMAGE_BYTES);
-        for(unsigned y=16;y<VC_PANEL_HEIGHT+16;y++)for(unsigned x=16;x<VC_PANEL_WIDTH+16;x++)
-            buffers[back][(y*IMAGE_WIDTH+x)*4+3]=255;
+        for(unsigned y=16;y<VC_PANEL_HEIGHT+16;y++)for(unsigned x=16;x<width-16;x++)
+            buffers[back][(y*width+x)*4+3]=255;
         if(!vc_panel_renderer_init(&font) || !vc_panel_open(&panel,&request.page))error=1;
         else {
             panel.focus[0]=request.focus;
-            if(!vc_panel_paint(&font,&panel,buffers[back],IMAGE_BYTES,IMAGE_WIDTH,IMAGE_HEIGHT,IMAGE_WIDTH*4))error=1;
+            if(!vc_panel_paint(&font,&panel,buffers[back],IMAGE_BYTES,width,IMAGE_HEIGHT,width*4))error=1;
+            else vc_panel_preview(&font,&request.page,buffers[back],width,IMAGE_HEIGHT,width*4,
+                animation?animation->pixels+(size_t)animation_frame*animation->width*animation->height*4:NULL,
+                animation?animation->width:0,animation?animation->height:0,preview_message);
         }
     }
     pthread_mutex_lock(&mutex);
@@ -74,7 +96,7 @@ void vc_overlay_poll(void) {
     else if(!current.page.count || request.epoch!=current.epoch){state=0;frame_expiry=0;}
     if(valid)current=request;
     else current.page.count=0;
-    if(repaint && !error)front=back;
+    if(repaint && !error){front=back;image_width=width;image_serial++;preview_frame=animation_frame;}
     uint64_t now=wall_ms(),remaining=current.expires>now?current.expires-now:0;
     deadline=current.page.count && !error?mono_ms()+(remaining<400?remaining:400):0;
     uint64_t expiry=frame_expiry,epoch=current.epoch;
@@ -116,9 +138,9 @@ void vc_overlay_draw(vc_panel_frame *frame) {
         memset(&graphics,0,sizeof(graphics));context=active;texture_revision=0;texture_epoch=0;frame_expiry=0;
     }
     frame->epoch=current.epoch;frame->revision=current.revision;
-    int refresh=texture_epoch!=frame->epoch || texture_revision!=frame->revision;
-    frame->drawn=mascot_draw_image(&graphics,buffers[front],IMAGE_WIDTH,IMAGE_HEIGHT,refresh);
-    if(frame->drawn){texture_epoch=frame->epoch;texture_revision=frame->revision;}
+    int refresh=texture_epoch!=frame->epoch || texture_revision!=frame->revision || texture_serial!=image_serial;
+    frame->drawn=mascot_draw_image(&graphics,buffers[front],image_width,IMAGE_HEIGHT,refresh);
+    if(frame->drawn){texture_epoch=frame->epoch;texture_revision=frame->revision;texture_serial=image_serial;}
     else {state=-1;frame_expiry=0;}
     pthread_mutex_unlock(&mutex);
 }

@@ -63,6 +63,16 @@ compare("maneuver_render/route_labels.h", "java_patch/com/luka/carplay/rgd/Route
     "CR_LABEL_DISTANCE_BYTES": "DISTANCE_BYTES", "CR_LABEL_ROAD_BYTES": "ROAD_BYTES",
 })
 # ponytail: altscreen_render/AltscreenControlServer compare dropped (RGI-only fork has no altscreen).
+compare("vc_menu/panel.h", "java_patch/com/luka/carplay/settings/VcPanel.java", {
+    "VC_PANEL_PREVIEW_PAGE": "PREVIEW_PAGE",
+})
+panel = constants("vc_menu/panel.h")
+pack_limit = int(re.search(r"^MAX_MASCOTS = (\d+)$",
+    (ROOT / "tools/prepare_mascot_pack.py").read_text(), re.M).group(1))
+if not (pack_limit == numeric(panel["VC_PANEL_MASCOTS"]) ==
+        numeric(constants("mascot/mascot.h")["MASCOT_COUNT"]) ==
+        numeric(panel["VC_PANEL_PREVIEW_PAGE"]) - 2):
+    raise SystemExit("Mascot pack/control/preview count mismatch")
 print(f"Local transport constants: {checks} matching Java/C ports, opcodes, flags, sizes and limits")
 jar = ROOT / "build/carplay_hook.jar"
 if not jar.exists():

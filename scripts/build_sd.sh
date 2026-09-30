@@ -12,7 +12,7 @@
 #                       GEM menu, MIB2 Toolbox) with @CARPLAY_JAR_SIZE@/@CARPLAY_JAR_CKSUM@
 #                       placeholders where its scripts pin the HMI JAR identity
 #          build/       carplay_hook.jar, libcarplay_hook.so, maneuver_render (built here)
-#                       libcarplay_mascot.so and locally generated mascot-assets/mascots.rgba
+#                       libcarplay_mascot.so; optional explicitly selected MASCOT_PACK
 #          deploy/      the RGI wrapper/supervisor scripts; deploy/altscreen/carplay_child.json
 # Output:  build/sd/    copy its contents onto the SD root
 #
@@ -39,16 +39,17 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     bash "$PROJECT_DIR/scripts/build_renderers.sh"
 fi
 for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
-    "$PROJECT_DIR/build/libcarplay_mascot.so" "$PROJECT_DIR/build/mascot-assets/mascots.rgba"; do
+    "$PROJECT_DIR/build/libcarplay_mascot.so"; do
     [ -s "$f" ] || { echo "ERROR: missing build artifact $f"; exit 1; }
 done
 
-python3 - "$PROJECT_DIR/build/mascot-assets/mascots.rgba" <<'PY'
-import sys
-with open(sys.argv[1], "rb") as atlas:
-    if atlas.read(12) != b"MASCOT01\x04\x00\x00\x00":
-        sys.exit("ERROR: regenerate the four-mascot atlas with --lizard before staging")
-PY
+PACK_TEMP=$(mktemp -d)
+trap 'rm -rf "$PACK_TEMP"' EXIT
+PACK_ARGS=()
+[ -z "${MASCOT_PACK:-}" ] || PACK_ARGS=(--pack "$MASCOT_PACK")
+python3 "$PROJECT_DIR/tools/prepare_mascot_pack.py" --stage "$JAR" "${PACK_ARGS[@]}" \
+    --shell-source "$PROJECT_DIR/deploy/smartphone_integrator/carplay_settings.sh" \
+    --shell-output "$PACK_TEMP/carplay_settings.sh" --atlas-output "$PACK_TEMP/mascots.rgba"
 
 echo "=== MMI-Cockpit-Carplay SD (AltScreen + RGI) -> $OUT ==="
 case "$OUT" in "$PROJECT_DIR"/build/*) rm -rf "$OUT" ;; *) [ ! -e "$OUT" ] || { echo "ERROR: $OUT exists; remove it or use a path under build/"; exit 1; } ;; esac
@@ -78,7 +79,7 @@ if [ "${ALTSCREEN_FULL_FPS:-1}" = 1 ]; then
 else
     ALTS_FPS="stock (15 fps)"
 fi
-cp "$PROJECT_DIR/build/libcarplay_mascot.so" "$PROJECT_DIR/build/mascot-assets/mascots.rgba" "$OUT/$ALTS_MIRROR_DIR/"
+cp "$PROJECT_DIR/build/libcarplay_mascot.so" "$PACK_TEMP/mascots.rgba" "$OUT/$ALTS_MIRROR_DIR/"
 chmod 755 "$OUT/$ALTS_MIRROR_DIR/libcarplay_mascot.so"
 if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
 (cd "$OUT/$ALTS_MIRROR_DIR"; $MSHA libcarplay_mascot.so mascots.rgba >> SHA256SUMS; $MSHA -c SHA256SUMS >/dev/null)
@@ -94,6 +95,7 @@ cp "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" 
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_cleanup.sh" \
    "$PROJECT_DIR/deploy/altscreen/carplay_child.json" "$OUT/$RGI_DIR/"
 chmod 755 "$OUT/$RGI_DIR"/*.sh "$OUT/$RGI_DIR/maneuver_render" "$OUT/$RGI_DIR/libcarplay_hook.so"
+cp "$PACK_TEMP/carplay_settings.sh" "$OUT/$RGI_DIR/carplay_settings.sh"
 
 # The one HMI JAR (RGI Java + the AltScreen ctx-81 video context). AltScreen's INSTALL,
 # START and STATUS refuse any JAR whose POSIX cksum/size differ from the pinned pair.

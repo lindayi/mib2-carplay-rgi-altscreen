@@ -77,7 +77,7 @@ int main(int argc,char **argv) {
     } else if(missing) {
         await("state=ASSET_ERROR\n");unchanged();
     } else {
-        await("state=RACCOON\n");
+        await("state=ACTIVE\n");
         int swaps=count();usleep(1000000);assert(count()==swaps);
         present();glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,frame);
         assert(memcmp(baseline,frame,sizeof(frame)));
@@ -85,9 +85,9 @@ int main(int argc,char **argv) {
         glClear(GL_COLOR_BUFFER_BIT);assert(!eglSwapBuffers(display,EGL_NO_SURFACE));
         assert(eglGetError()!=EGL_SUCCESS);
         glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,frame);assert(!memcmp(baseline,frame,sizeof(frame)));
-        publish(2,getpid(),4000);await("state=NIAN\n");
-        publish(3,getpid(),4000);await("state=CAPYBARA\n");
-        publish(4,getpid(),4000);await("state=LIZARD\n");
+        publish(2,getpid(),4000);await("state=ACTIVE\n");
+        publish(3,getpid(),4000);await("state=ACTIVE\n");
+        publish(4,getpid(),4000);await("state=ACTIVE\n");
         assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
         assert(eglDestroyContext(display,context));
         context=eglCreateContext(display,config,EGL_NO_CONTEXT,version);
@@ -96,12 +96,12 @@ int main(int argc,char **argv) {
         present();usleep(1000000);present();
         glReadPixels(0,0,512,256,GL_RGBA,GL_UNSIGNED_BYTE,frame);assert(memcmp(baseline,frame,sizeof(frame)));
         publish(1,getpid()+1,4000);await("state=CONTROL_STALE\n");unchanged();
-        publish(1,getpid(),4000);await("state=RACCOON\n");
+        publish(1,getpid(),4000);await("state=ACTIVE\n");
         publish(1,getpid(),-1);await("state=CONTROL_STALE\n");unchanged();
-        publish(1,getpid(),4000);await("state=RACCOON\n");
+        publish(1,getpid(),4000);await("state=ACTIVE\n");
         assert(unlink(ready)==0);await("state=OFF\n");unchanged();
         f=fopen(ready,"w");assert(f);fclose(f);
-        publish(1,getpid(),4000);await("state=RACCOON\n");
+        publish(1,getpid(),4000);await("state=ACTIVE\n");
         char fifo[520];snprintf(fifo,sizeof(fifo),"%s.fifo",control);
         assert(mkfifo(fifo,0600)==0);assert(rename(fifo,control)==0);
         usleep(1300000);unchanged();

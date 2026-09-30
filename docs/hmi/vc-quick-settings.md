@@ -67,6 +67,10 @@ non-selectable hint area. Main-MMI Last result retains complete details.
 Titles, hints and the fixed control footer are not menu rows. Back restores
 parent focus; choices start at the saved value. There are at most six selectable
 rows per page, with bounded ASCII labels and ellipsis for long display text.
+Lists larger than six choices use four values per page plus Previous/Next links.
+These links never save a preference. Mascot choices have a right-hand animated
+preview of the focused value, without changing the saved/map mascot. Off and
+pagination links show explanatory text, not an animation.
 Export, install, reset and receiver-restart actions are not included.
 
 `vc_menu/panel.c` paints a 420x288 panel, reduced from 420x348 after the latest
@@ -81,6 +85,18 @@ with 84 pixels above and 83 below (30 more on each side). This is a map-video ca
 cockpit. Audi's VC-local layers may still occlude it; final placement needs a
 parked-car check. Do not squeeze it into the 328x181 maneuver box.
 
+Only the mascot chooser expands horizontally to **640x288** (padded 672x320):
+at 1440x455 its visible bounds are x=400..1039, with the same vertical clearance.
+The original 420-pixel list and its fonts stay unchanged. The worker composites
+the preview in a 180x100 region to the right, at most twice atlas size, sampling
+original frame timing on its existing 100 ms poll. This is a bounded 10 Hz menu
+preview, not a change to the map animation's frame timing. CPU painting and atlas
+loading remain on the single worker, outside the GL mutex. Immutable decoded
+artwork is shared with the map mascot. Each changed preview image gets a fresh,
+validated texture without recompiling shaders or changing the Java revision.
+Only actual successful swaps renew presentation; animation alone grants no input
+ownership. Host pixels and timing do not establish Audi-layer clearance.
+
 ## Runtime and acknowledgement contract
 
 `VcPanel.java` owns navigation and gesture state. Raw key callbacks only publish
@@ -92,6 +108,9 @@ The native metadata lock covers no file I/O or CPU text painting.
 - Header: `VCPANEL1 pid epoch revision expires_ms connection count focus`.
 - Open snapshots then contain title, hint and `count` rows, each
   `kind checked<TAB>label<TAB>value`. Closed snapshots have count/focus zero.
+- A mascot chooser appends `PREVIEW n`: 1 means Off, 2..17 mean mascot IDs 1..16,
+  and 18 means a pagination link. Zero, out-of-range values and additional
+  trailing content are invalid; ordinary pages omit the extension.
 - Status: `/ramdisk/carplay_vc_panel.status`, one line
   `VCPANEL1 pid epoch revision expires_ms connection state`.
   State is 1 for presented, 0 for withdrawn/pending, -1 for a renderer error.

@@ -41,7 +41,13 @@ int vc_panel_decode(char *text,uint64_t now,unsigned pid,vc_panel_request *reque
                 !string(&p,'\n',r.page.rows[i].value,sizeof(r.page.rows[i].value)))return 0;
         r.page.rows[i].kind=kind;r.page.rows[i].checked=checked;
     }
-    if(*p)return 0;
+    if(*p) {
+        uint64_t preview;
+        if(strncmp(p,"PREVIEW ",8))return 0;
+        p+=8;
+        if(!number(&p,'\n',&preview) || !preview || preview>VC_PANEL_PREVIEW_PAGE || *p)return 0;
+        r.page.preview=preview;
+    }
     if(r.pid!=pid || r.expires<=now || r.expires-now>1000)r.page.count=0;
     *request=r;return 1;
 }

@@ -45,7 +45,8 @@ public class CarplayMenuController extends MenuController implements SettingsRun
         if(entry==null) {
             Object[] children=getChildren().toArray();
             for(int i=0;i<children.length;i++)if(super.isMenuItem((AbstractWidget)children[i]))original.add(children[i]);
-            entry=new CarplayMenuItem(this,new MenuModel.Row("Carplay Altscreen","root",-1,0,false,false,""),990000);
+            entry=new CarplayMenuItem(this,new MenuModel.Row("Carplay Altscreen","root",-1,0,false,false,
+                "Cockpit map, guidance, appearance and CarPlay controls."),990000);
             add(entry);
         }
         if(getInitContext().getScreen() instanceof CarplaySettingsScreen)

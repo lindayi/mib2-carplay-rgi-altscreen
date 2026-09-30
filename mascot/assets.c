@@ -20,13 +20,17 @@ int mascot_load(const char *path, mascot_animation animations[MASCOT_COUNT]) {
     FILE *file=fopen(path,"rb");
     unsigned count;
     char magic[8];
-    int valid=file && fread(magic,1,8,file)==8 && !memcmp(magic,"MASCOT01",8)
-        && number(file,&count) && count==MASCOT_COUNT;
-    for(unsigned i=0;valid && i<MASCOT_COUNT;i++) {
+    int valid=file && fread(magic,1,8,file)==8;
+    int legacy=valid && !memcmp(magic,"MASCOT01",8);
+    valid=valid && (legacy || !memcmp(magic,"MASCOT02",8))
+        && number(file,&count) && count<=MASCOT_COUNT && (!legacy || count==4);
+    for(unsigned i=0;valid && i<count;i++) {
         mascot_animation *a=&loaded[i];
         valid=number(file,&a->width) && number(file,&a->height) && number(file,&a->count)
             && a->width>0 && a->width<=128 && a->height>0 && a->height<=64
             && a->count>=2 && a->count<=MASCOT_MAX_FRAMES;
+        if(legacy)a->faces_left=i!=0;
+        else valid=valid && number(file,&a->faces_left) && a->faces_left<=1;
         for(unsigned f=0;valid && f<a->count;f++) {
             valid=number(file,&a->delay[f]) && a->delay[f]>=20 && a->delay[f]<=2000;
             a->duration+=a->delay[f];
@@ -52,12 +56,14 @@ int mascot_config(const char *text, uint64_t now_ms, unsigned pid) {
     const char prefix[]="MASCOT2 ";
     if(strncmp(text,prefix,sizeof(prefix)-1))return -1;
     const char *p=text+sizeof(prefix)-1;
-    if(*p<'0' || *p>'0'+MASCOT_COUNT || p[1]!=' ')return -1;
-    int selected=*p-'0';
-    p+=2;
     if(*p<'0' || *p>'9')return -1;
     errno=0;
     char *end;
+    unsigned long selection=strtoul(p,&end,10);
+    if(errno || *end!=' ' || selection>MASCOT_COUNT)return -1;
+    int selected=(int)selection;
+    p=end+1;
+    if(*p<'0' || *p>'9')return -1;
     unsigned long long owner=strtoull(p,&end,10);
     if(errno || *end!=' ' || (owner!=pid && (owner!=0 || selected!=0)))return -1;
     p=end+1;
@@ -67,7 +73,20 @@ int mascot_config(const char *text, uint64_t now_ms, unsigned pid) {
     if(expiry<now_ms || expiry-now_ms>5000)return -1;
     return selected;
 }
+const mascot_animation *mascot_worker_assets(void) {
+    /* Called only by the one control worker; published animations are immutable. */
+    static mascot_animation animations[MASCOT_COUNT];
+    static int attempted,valid;
+    if(!attempted) {
+        const char *path=getenv("CARPLAY_MASCOT_ATLAS");
+        attempted=1;
+        valid=mascot_load(path && path[0]?path:
+            "/mnt/app/root/carplay-altscreen/bin/mirror/mascots.rgba",animations);
+    }
+    return valid?animations:NULL;
+}
 unsigned mascot_frame(const mascot_animation *a, uint64_t elapsed_ms) {
+    if(!a->duration || !a->count)return 0;
     unsigned t=(unsigned)(elapsed_ms%a->duration);
     for(unsigned i=0;i<a->count;i++) {
         if(t<a->delay[i])return i;

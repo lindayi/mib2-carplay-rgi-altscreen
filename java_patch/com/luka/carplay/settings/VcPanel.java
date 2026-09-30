@@ -10,6 +10,7 @@ import java.util.StringTokenizer;
 public final class VcPanel {
     static final String CONTROL="/ramdisk/carplay_vc_panel.control";
     static final String STATUS="/ramdisk/carplay_vc_panel.status";
+    private static final int PREVIEW_PAGE=18;
     private static final Object LOCK=new Object();
     private static boolean running,open,pressed,held,largeMap,mapConfirmed;
     private static int run,connection=-1,confirmedConnection=-1,pressConnection=-1,pid,revision,shownRevision;
@@ -18,13 +19,14 @@ public final class VcPanel {
     private static String page="root",problem="",lastHint="";
     private static final String[] parents=new String[4];
     private static final int[] focuses=new int[4];
-    private static int depth,focus;
+    private static int depth,focus,choiceOffset;
     private static long preferencesRevision=-1;
 
     private static final class Page {
         String title;
         int[] settings;
         String[] links;
+        int choiceCount,choiceStart;
         Page(String title,int[] settings,String[] links){this.title=title;this.settings=settings;this.links=links;}
         int count(){return settings==null?links.length:settings.length;}
     }
@@ -148,12 +150,27 @@ public final class VcPanel {
         if(page.equals("information"))return new Page("Information bar",new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},null);
         if(page.equals("controls"))return new Page("Controls",new int[]{Setting.ZOOM,Setting.ZOOM_SPEED,Setting.TOUCHPAD,Setting.TOUCH_SENSITIVITY},null);
         int id=Integer.parseInt(page.substring(7));
-        return new Page(Setting.ALL[id].label,null,Setting.ALL[id].choices);
+        String[] choices=Setting.ALL[id].choices;
+        int start=choices.length>6?choiceOffset:0;
+        int count=Math.min(choices.length-start,choices.length>6?4:6);
+        boolean previous=start>0,next=start+count<choices.length;
+        String[] labels=new String[count+(previous?1:0)+(next?1:0)];
+        System.arraycopy(choices,start,labels,0,count);
+        if(previous)labels[count]="Previous page";
+        if(next)labels[labels.length-1]="Next page";
+        Page result=new Page(Setting.ALL[id].label,null,labels);
+        result.choiceCount=count;result.choiceStart=start;
+        return result;
     }
     private static void enter(String next) {
         if(depth>=parents.length){error("VC panel navigation depth exceeded");closeLocked("navigation depth");return;}
         parents[depth]=page;focuses[depth++]=focus;page=next;focus=0;
-        if(next.startsWith("choice:"))focus=Preferences.get().snapshot().get(Integer.parseInt(next.substring(7)));
+        if(next.startsWith("choice:")) {
+            int id=Integer.parseInt(next.substring(7));
+            int selected=Preferences.get().snapshot().get(id);
+            choiceOffset=Setting.ALL[id].choices.length>6?selected/4*4:0;
+            focus=selected-choiceOffset;
+        }
         revision++;
     }
     private static void setting(int id) {
@@ -165,8 +182,14 @@ public final class VcPanel {
         if(SettingsRuntime.busy())return;
         Log.i("VcPanel","select page="+page+" row="+focus+" epoch="+epoch);
         if(page.startsWith("choice:")) {
-            SettingsRuntime.set(Integer.parseInt(page.substring(7)),focus);
-            back();
+            Page choices=model();
+            if(focus<choices.choiceCount) {
+                SettingsRuntime.set(Integer.parseInt(page.substring(7)),choices.choiceStart+focus);
+                back();
+            } else {
+                choiceOffset+=choices.links[focus].equals("Previous page")?-4:4;
+                focus=0;
+            }
         } else if(page.equals("root")) {
             if(focus==0){SettingsRuntime.set(Setting.ENABLED,0);closeLocked("master off");}
             else if(focus==4)enter("more");
@@ -205,7 +228,9 @@ public final class VcPanel {
             int id=m.settings==null?-1:m.settings[i],kind=2,checked=0;
             String label=m.links==null?Setting.ALL[id].label:m.links[i],value="";
             if(page.startsWith("choice:")) {
-                kind=3;checked=prefs.get(Integer.parseInt(page.substring(7)))==i?1:0;
+                if(i<m.choiceCount) {
+                    kind=3;checked=prefs.get(Integer.parseInt(page.substring(7)))==m.choiceStart+i?1:0;
+                }
             } else {
                 if(page.equals("root") && i<4)id=new int[]{Setting.ENABLED,Setting.MODE,Setting.LAYOUT,Setting.MASCOT}[i];
                 if(id>=0) {
@@ -216,6 +241,8 @@ public final class VcPanel {
             out.append(kind).append(' ').append(checked).append('\t').append(text(label,39)).append('\t')
                 .append(text(value,31)).append('\n');
         }
+        if(page.equals("choice:"+Setting.MASCOT))
+            out.append("PREVIEW ").append(focus<m.choiceCount?m.choiceStart+focus+1:PREVIEW_PAGE).append('\n');
         return out.toString();
     }
     static long[] parseStatus(String value) throws IOException {

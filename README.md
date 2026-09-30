@@ -158,10 +158,12 @@ features below follow it automatically.
   Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
   recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
   reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
-- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / Raccoon / Nian / Capybara / Lizard**.
+- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / locally configured choices**.
   Default Off; animates along the bottom of the cluster navigation canvas, above
   the separate text bar. No main-MMI overlay or extra maneuver-box content.
-  See [local assets, implementation and vehicle limits](docs/hmi/carplay-settings.md#optional-map-mascots).
+  Packs support up to 16 animations, with focused animated previews in the VC menu.
+  Public builds need no artwork; an original CC0 robot example can be generated locally.
+  See [local packs, implementation and vehicle limits](docs/hmi/carplay-settings.md#optional-map-mascots).
 - **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
   health summary and bounded private log tails to the SD card without stopping,
   restarting, restoring or uninstalling anything.
@@ -218,9 +220,11 @@ input classes. The initial menu installation requires the normal Toolbox update,
 INSTALL/reboot/START/reboot sequence; subsequent menu preferences never reboot MMI.
 Run `TOOLS_DIR=<jxe2jar> ./scripts/test_mmi_settings.sh` for the menu/storage/session
 tests and `./scripts/test_route_labels.sh` for live overlay-option previews.
-Before SD staging, generate `build/mascot-assets/mascots.rgba` from local GIFs as
-documented in [map mascots](docs/hmi/carplay-settings.md#optional-map-mascots).
-`./scripts/test_mascots.sh` exercises the compositor with host EGL/GLES2.
+Builds default to no artwork while retaining the VC menu. To include your own
+animations, generate a pack and explicitly pass the same `MASCOT_PACK` directory
+to Java build and SD staging; see [map mascots](docs/hmi/carplay-settings.md#optional-map-mascots).
+`./scripts/test_mascots.sh` exercises synthetic packs and the compositor with host
+EGL/GLES2, Pillow and FFmpeg, without requiring the owner's artwork.
 
 ## 🔧 Build
 

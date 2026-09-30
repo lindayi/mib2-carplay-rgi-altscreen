@@ -21,13 +21,12 @@ public final class MascotControlTest {
             "atomic snapshots cannot use QNX shared memory");
         check(!Files.exists(owner) && !Files.exists(status),"fixture paths occupied");
         String pid=ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+        int count=Setting.ALL[Setting.MASCOT].choices.length;
         try {
-            MascotControl.publish(1);
+            MascotControl.publish(count>1?1:0);
             check(Preferences.read(control.toFile(),96).startsWith("MASCOT2 0 0 "),"missing owner gates On");
             write(owner,pid+"\n");
-            check(Setting.ALL[Setting.MASCOT].choices[3].equals("Capybara"),"stable Capybara choice ID");
-            check(Setting.ALL[Setting.MASCOT].choices[4].equals("Lizard"),"stable Lizard choice ID");
-            for(int selected=1;selected<=4;selected++) {
+            for(int selected=1;selected<count;selected++) {
                 long start=System.currentTimeMillis();MascotControl.publish(selected);
                 String packet=Preferences.read(control.toFile(),96);
                 check(packet.startsWith("MASCOT2 "+selected+" "+pid+" ") && packet.endsWith("\n"),"canonical PID-bound packet");
@@ -38,11 +37,13 @@ public final class MascotControlTest {
             check(Preferences.read(control.toFile(),96).startsWith("MASCOT2 0 0 "),"Off packet");
             String record="pid="+pid+"\nstate=RACCOON\nexpires="+(System.currentTimeMillis()+4000)+"\n";
             write(status,record);check(MascotControl.status().equals("RACCOON"),"live status");
+            write(status,record.replace("RACCOON","ACTIVE"));
+            check(MascotControl.status().equals("ACTIVE"),"generic active status");
             write(status,record.replace("RACCOON","CAPYBARA"));
             check(MascotControl.status().equals("CAPYBARA"),"live Capybara status");
             write(status,record.replace("RACCOON","LIZARD"));
             check(MascotControl.status().equals("LIZARD"),"live Lizard status");
-            for(int selected:new int[]{-1,5}) {
+            for(int selected:new int[]{-1,count}) {
                 try {MascotControl.publish(selected);throw new AssertionError("invalid selection accepted");}
                 catch(IOException expected){}
             }
@@ -54,7 +55,7 @@ public final class MascotControlTest {
             invalidStatus(status,record.replace("RACCOON","<script>"));
             invalidStatus(status,"pid="+pid+"\nstate=RACCOON\n");
             write(owner,"bad\n");
-            try {MascotControl.publish(1);throw new AssertionError("bad owner accepted");}catch(IOException expected){}
+            if(count>1)try {MascotControl.publish(1);throw new AssertionError("bad owner accepted");}catch(IOException expected){}
             Files.delete(control);Files.createDirectory(control);
             try {MascotControl.publish(0);throw new AssertionError("publish failure hidden");}catch(IOException expected){}
         } finally {

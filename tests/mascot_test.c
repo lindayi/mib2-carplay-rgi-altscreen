@@ -66,9 +66,10 @@ static void parsers(const char *atlas,const char *bad) {
     assert(mascot_config("MASCOT2 2 42 4000\n",1000,42)==2);
     assert(mascot_config("MASCOT2 3 42 4000\n",1000,42)==3);
     assert(mascot_config("MASCOT2 4 42 4000\n",1000,42)==4);
+    assert(mascot_config("MASCOT2 16 42 4000\n",1000,42)==16);
     assert(mascot_config("MASCOT2 0 0 4000\n",1000,42)==0);
     const char *invalid[]={"MASCOT1 1 4000\n","MASCOT2 1 43 4000\n","MASCOT2 1 0 4000\n",
-        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 5 42 4000\n","MASCOT2 1 42 4000\nx",
+        "MASCOT2 1 42 999\n","MASCOT2 1 42 6001\n","MASCOT2 17 42 4000\n","MASCOT2 1 42 4000\nx",
         "MASCOT2 1 42 -4000\n","MASCOT2 1 42 184467440737095516160\n","MASCOT2 1 42 4000",""};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++)assert(mascot_config(invalid[i],1000,42)==-1);
     FILE *f=fopen(atlas,"rb");assert(f);assert(fseek(f,0,SEEK_END)==0);long n=ftell(f);assert(n>100);
@@ -92,6 +93,7 @@ int main(int argc,char **argv) {
     snprintf(path,sizeof(path),"%s/bad.rgba",argv[2]);parsers(argv[1],path);
     mascot_animation a[MASCOT_COUNT]={{0}};assert(mascot_load(argv[1],a));
     for(unsigned i=0;i<MASCOT_COUNT;i++) {
+        if(!a[i].count)continue;
         assert(mascot_frame(a+i,0)==0);assert(mascot_frame(a+i,a[i].delay[0])==1);
         assert(mascot_frame(a+i,a[i].duration)==0);
     }
@@ -134,6 +136,7 @@ int main(int argc,char **argv) {
     }
     fail_shader=fail_texture=0;
     for(unsigned mascot=1;mascot<=MASCOT_COUNT;mascot++) {
+        if(!a[mascot-1].count)continue;
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
         assert(mascot_draw(&g,a,mascot,3000));snapshot(&final);
@@ -148,7 +151,7 @@ int main(int argc,char **argv) {
     mascot_graphics_destroy(&g);
     unsigned char solid[20*40*4];memset(solid,255,sizeof(solid));
     mascot_animation fixture[MASCOT_COUNT]={{.width=20,.height=40,.count=1,.duration=100,.delay={100},.pixels=solid}};
-    for(unsigned i=1;i<MASCOT_COUNT;i++)fixture[i]=fixture[0];
+    for(unsigned i=1;i<MASCOT_COUNT;i++){fixture[i]=fixture[0];fixture[i].faces_left=1;}
     for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);
@@ -195,6 +198,7 @@ int main(int argc,char **argv) {
     glViewport(31,19,320,160);
     for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
         double span=320-2*a[selected-1].width;
+        if(!a[selected-1].count)continue;
         unsigned t=(unsigned)round(1.5*span/.048);
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST);glColorMask(0,1,0,0);

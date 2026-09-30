@@ -27,13 +27,13 @@ public final class MenuModel {
         public int focusIndex(String saved) {
             for(int i=0;i<rows.length;i++)if(rows[i].focusKey().equals(saved))return i;
             if(document)return 0;
-            for(int i=1;i<rows.length;i++)if(rows[i].target.equals("choose") && rows[i].checked)return i;
-            return rows.length>1?1:0;
+            for(int i=0;i<rows.length;i++)if(rows[i].target.equals("choose") && rows[i].checked)return i;
+            return 0;
         }
     }
     private MenuModel(){}
     private static void item(ArrayList rows,String label,String target) {
-        rows.add(new Row(label,target,-1,0,false,false,""));
+        rows.add(new Row(label,target,-1,0,false,false,actionHelp(target)));
     }
     private static void settings(ArrayList rows,int[] ids,Preferences.Snapshot prefs) {
         for(int i=0;i<ids.length;i++) {
@@ -44,13 +44,51 @@ public final class MenuModel {
         }
     }
     private static String help(int id) {
-        if(Setting.ALL[id].reconnect)return "Saved changes apply after you reconnect CarPlay. No MMI reboot.";
         if(id==Setting.ENABLED)return "Off releases cockpit features now; the extra stream stops on the next CarPlay session.";
         if(id==Setting.MODE)return "Applies live where possible. Switching from an Audi-map receiver session needs reconnect.";
+        if(id==Setting.LAYOUT)return "Request the phone's cluster-map layout. Reconnect CarPlay to apply; no MMI reboot.";
         if(id==Setting.PRESET)return "Custom is retained. Editing a preset creates a new Custom configuration.";
-        if(id==Setting.MASCOT)return "Animation on the CarPlay cluster map only. Off removes it live.";
-        if(id>=Setting.INFO_DEFAULT && id<=Setting.INFO_RETURN)return "Uses the existing VC information bar. Arrival uses the destination time zone when supplied.";
-        return "Applies live. No MMI reboot.";
+        if(id==Setting.MASCOT)return "Animation on the CarPlay cluster map only. The VC menu previews it; select to apply live.";
+        if(id==Setting.DISTANCE)return "Show distance to the next maneuver in the small guidance overlay.";
+        if(id==Setting.ROAD)return "Show the next road or exit in the guidance overlay, not the current road.";
+        if(id==Setting.LANES)return "Show the phone's available lane guidance beside the maneuver.";
+        if(id==Setting.PROGRESS)return "Show progress toward the next maneuver with the arrow's fill.";
+        if(id==Setting.TEXT_SIZE)return "Enlarge distance and road text in the small guidance overlay.";
+        if(id==Setting.ROAD_SCROLL)return "Shorten or scroll the bounded road label; scrolling cannot recover omitted text.";
+        if(id==Setting.BACKGROUND)return "Choose a solid or reduced backing behind the guidance overlay.";
+        if(id==Setting.ZOOM)return "Let the steering-wheel roller zoom the CarPlay cluster map.";
+        if(id==Setting.ZOOM_SPEED)return "Choose how quickly roller steps change the CarPlay map scale.";
+        if(id==Setting.TOUCHPAD)return "Enable touchpad navigation in CarPlay; Audi's normal controls are unchanged.";
+        if(id==Setting.TOUCH_SENSITIVITY)return "Adjust how strongly touchpad movement affects CarPlay navigation.";
+        if(id==Setting.RECOVERY)return "Allow bounded recovery of cockpit video only; normal startup remains enabled.";
+        if(id==Setting.VERBOSE)return "Record extra diagnostic detail on the next CarPlay session. Reconnect to apply.";
+        if(id==Setting.INFO_DEFAULT)return "Choose the VC lower information bar's initial page for each route or session.";
+        if(id==Setting.INFO_ROAD)return "Choose next-road or current-road text in the VC lower bar, not the small overlay.";
+        if(id==Setting.INFO_RETURN)return "Return the VC lower bar to its default page, or keep your choice until the route ends.";
+        throw new IllegalArgumentException("Unknown setting help");
+    }
+    private static String actionHelp(String target) {
+        if(target.equals("back"))return "Cancel without applying this action. The physical Back button also returns.";
+        if(target.equals("action:reapply_layout"))return "Request this connection's map layout again without reconnecting. Recentering is not guaranteed.";
+        if(target.equals("presentation"))return "Choose the layout requested from the phone for the cluster map.";
+        if(target.equals("information"))return "Configure Road and Trip text in the VC lower information bar.";
+        if(target.equals("guidance"))return "Choose the details shown around the small maneuver arrow.";
+        if(target.equals("appearance"))return "Adjust overlay text and background, presets, and the optional map mascot.";
+        if(target.equals("controls"))return "Adjust CarPlay roller zoom and touchpad behavior.";
+        if(target.equals("diagnostics"))return "View runtime status and export diagnostics to the SD card.";
+        if(target.equals("recovery"))return "Configure automatic recovery or request a cockpit-video-only restart.";
+        if(target.equals("status"))return "View the build, receiver session, preferences and renderer status.";
+        if(target.equals("result"))return "Read the last action result, including retained failure details.";
+        if(target.equals("action:export_summary"))return "Write a selected status summary to SD without restarting or restoring.";
+        if(target.equals("confirm:export_full") || target.equals("action:export_full"))
+            return "Export private raw logs to SD. They may include trip or device information; nothing is uploaded.";
+        if(target.equals("confirm:restart_video") || target.equals("action:restart_video"))
+            return "Restart cockpit video only. It may briefly blank; main CarPlay is not restarted.";
+        if(target.equals("confirm:reset") || target.equals("action:reset"))
+            return "Reset project display and control preferences, preserving the master switch, Audi settings and pairing.";
+        if(target.equals("text:previous"))return "Read the preceding page of information.";
+        if(target.equals("text:next"))return "Read the next page of information.";
+        throw new IllegalArgumentException("Unknown action help: "+target);
     }
     public static String parent(String page) {
         if(page.equals("root"))return "";
@@ -71,7 +109,7 @@ public final class MenuModel {
     }
     public static Page page(String page,Preferences.Snapshot prefs,String[] status,String message) {
         ArrayList rows=new ArrayList();
-        item(rows,page.startsWith("confirm:")?"Cancel":"Back","back");
+        if(page.startsWith("confirm:"))item(rows,"Cancel","back");
         String title=page.startsWith("choice:")?Setting.ALL[Integer.parseInt(page.substring(7))].label:
             page.equals("root")?"Carplay Altscreen":page.equals("presentation")?"Cockpit presentation":
             page.equals("guidance")?"Guidance details":page.equals("appearance")?"Overlay appearance":

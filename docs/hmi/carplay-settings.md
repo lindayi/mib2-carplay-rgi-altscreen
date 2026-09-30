@@ -43,7 +43,10 @@ disabled or label-shaped menu options.
 - Switches use native checkboxes; exclusive choices use native radio buttons.
   Choice pages initially focus the selected value. Back restores the parent
   selection, and status notifications preserve focus when a switch changes.
-- Explanations use Audi's native focused-item infoline. Reconnect instructions
+- Normal pages have no selectable Back row: use the physical Back button,
+  including to leave the root for Audi's Navigation Settings. Confirmation pages
+  retain an explicit Cancel row and initially focus it.
+- Every option has an explanation in Audi's native focused-item infoline. Reconnect instructions
   are help/notice text, not suffixes appended to selectable labels.
 - A separate, non-menu native label below the list shows save/action feedback and
   any pending CarPlay reconnect. Successful saves name the setting/value and
@@ -52,7 +55,7 @@ disabled or label-shaped menu options.
   **Status & diagnostics -> Last result**, where the complete message remains
   available, including failures.
 - **System status** and **Last result** use a read-only text area above their
-  Back/Previous page/Next page controls. Page numbers appear in the title bar.
+  Previous page/Next page controls. Physical Back returns. Page numbers appear in the title bar.
   Previous/Next wrap around, and are disabled when there is only one page.
   The native text-node subtree is clipped to that area's bounds, including after
   paging/resizing; widget bounds alone do not constrain native glyph drawing.
@@ -81,7 +84,7 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
-| Appearance | Map mascot: Off / Raccoon / Nian / Capybara / Lizard | Default Off. Live on the CarPlay cluster map only; not in the maneuver box, native information bar, main MMI or Audi map. |
+| Appearance | Map mascot: Off / local pack choices (up to 16) | Default Off. Live on the CarPlay cluster map only; animated focused previews in the VC menu, not main MMI. |
 | Controls | CarPlay wheel zoom and speed; touchpad DPAD bridge and sensitivity | Live. Disabling the touchpad bridge restores stock raw-pad forwarding; ordinary knob input remains stock. |
 | Diagnostics | Read-only status and last result, summary export, confirmed full export, next-session verbosity | Status and export are immediate. Logging applies to the next session. Full exports contain private raw logs; they are not anonymized. |
 | Recovery | Automatic mirror recovery; confirmed video-only restart | Live, but only for an installed, armed video-enabled session. No USB, dio_manager or MMI restart command is exposed. |
@@ -122,8 +125,15 @@ selection, mascot, input or recovery.
 
 ### Optional map mascots
 
-**Overlay appearance -> Map mascot** selects Off, Raccoon, Nian, Capybara or Lizard.
-The VC panel's **Map mascot** page offers the same choices. A transparent,
+**Overlay appearance -> Map mascot** selects Off or one of the locally configured
+animations. Public builds default to Off only. The owner's private pack preserves
+Raccoon, Nian, Capybara and Lizard in their original order.
+The VC panel's **Map mascot** page offers the same choices, with four choices per
+page plus Previous/Next links when needed. Its right-hand animated preview follows
+focus without saving or changing the mascot on the map. OK applies the choice;
+Back leaves it unchanged. Off previews no animation. The preview page is 640x288,
+centered, while ordinary pages remain 420x288. Missing art shows
+**Preview unavailable** rather than hiding the menu. A transparent,
 80-video-pixel-high animation (twice the former width and height) travels across
 the lower navigation canvas. Following owner feedback that the enlarged mascot
 sat too high, its bottom clearance is 70% of the previous value:
@@ -157,7 +167,8 @@ raw transparent margin again when applying the owner's 30% clearance reduction.
 the receiver or HMI. It composites immediately before that mirror's EGL swap;
 there is no new displayable, context writer, independent redraw timer or swap.
 Animation therefore pauses if real video presentation pauses; it cannot conceal
-a decoder stall by advancing mirror telemetry. Off performs no mascot GL work.
+a decoder stall by advancing mirror telemetry. Off performs no map-mascot GL work;
+an open preview still uses the existing VC panel's texture.
 Graphics state, viewport bounds and destination alpha are preserved.
 
 The settings worker publishes a PID-bound, four-second RAM-file lease at
@@ -169,7 +180,7 @@ The control format is
 (`MASCOT2 <selection> <mirror-pid> <expiry-ms>`). The native worker requires that
 lease and the mirror's video-ready marker. Old-process, expired, master-disabled,
 bypass and Audi-map sessions cannot enable it. Normal-MMI Status shows the
-reported renderer state, not proof of visible vehicle pixels. Asset/control/GL
+reported renderer state (`ACTIVE` for any selected animation), not proof of visible vehicle pixels. Asset/control/GL
 failures are logged; asset failure disables only the mascot for that mirror
 process, and GL failures retry at most once every five seconds. A stalled control
 worker loses its render-side lease after one second. Native status-write errors
@@ -177,21 +188,63 @@ include operation, errno and path, with repeated identical errors limited to onc
 per 30 seconds. `CONTROL_ERROR` and `STATUS_ERROR` distinguish Java publication
 from status-reading failures.
 
-GIF decoding and background removal happen on the host, not the HU. Supply the
-owner's local GIFs to `tools/build_mascot_assets.py` (Python/Pillow):
+GIF decoding and background removal happen on the host, not the HU. Create a
+local JSON file (paths are relative to it):
 
-```sh
-python3 tools/build_mascot_assets.py --raccoon <local-raccoon.gif> \
-    --nian <local-nian.gif> --capybara <local-capybara.gif> --lizard <local-lizard.gif> \
-    --output build/mascot-assets/mascots.rgba
+```json
+{
+  "format": 1,
+  "mascots": [
+    {"name": "My mascot", "file": "my-animation.gif", "facing": "left", "background": "transparent"}
+  ]
+}
 ```
 
-The native build produces the library; SD staging requires both it and the
-generated four-animation atlas; staging rejects an older atlas.
-Existing IDs stay Off=0, Raccoon=1, Nian=2 and Capybara=3; Lizard appends ID 4.
-The preference format remains version 3, and existing selections are preserved.
-Older builds may not support newer mascot values: select Off before an intentional
-downgrade rather than relying on an older build's invalid-preference safe path.
+Use unique printable ASCII names of 1..24 characters, excluding Off. `facing`
+is `left` or `right` and must match the original animation; it controls initial
+travel direction, not an initial artwork flip. Background is `transparent` or
+`exterior-white` (remove edge-connected near-white, preserving enclosed white).
+The array may contain 0..16 entries. Each GIF needs 2..32 frames with 20..2000 ms
+delays; conversion normalizes the common animation canvas to height 40, width
+at most 128. Final atlas size is capped at 16 MiB.
+
+```sh
+python3 tools/prepare_mascot_pack.py --config /local/art/pack.json --output build/my-pack
+export MASCOT_PACK="$PWD/build/my-pack"
+./scripts/build_java.sh
+# Build native artifacts as usual, then stage with the same MASCOT_PACK:
+SKIP_BUILD=1 ./scripts/build_sd.sh
+```
+
+With Docker, explicitly mount the generated pack and set `MASCOT_PACK` to its
+**container** path for staging. `build_java.sh` mounts the host pack itself.
+There is no runtime GIF browser or catalog file I/O on HMI callbacks. The generated
+Java choices, embedded catalog, shell preference bounds and native `MASCOT02`
+atlas form one package; staging rejects mixed JAR/catalog/atlas inputs.
+Do not copy only the atlas or JAR into an already-staged package.
+Without `MASCOT_PACK`, Java builds Off-only choices and staging creates a valid
+empty atlas, retaining the mirror library preload and the complete VC panel.
+The legacy four-input `build_mascot_assets.py` remains for historical fixtures;
+its `MASCOT01` output alone is not a current SD pack.
+
+For an original example requiring no third-party artwork:
+
+```sh
+python3 tools/create_example_mascot.py --output build/example-art
+python3 tools/prepare_mascot_pack.py --config build/example-art/pack.json --output build/example-pack
+```
+
+The generated geometric robot artwork is dedicated under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); this does not change
+the licenses of the code, fonts or any supplied third-party art.
+
+Array position is the persistent ID (Off=0, first entry=1). Preserve existing
+entry order and append new entries when retaining saved selections. The owner's
+private manifest keeps Raccoon=1, Nian=2, Capybara=3, Lizard=4. Format 3 preferences
+are unchanged. **Choose Off before replacing/reordering/removing a pack, switching
+to no artwork, or downgrading.** A removed out-of-range selection fails strict
+preference validation and takes the existing disabled safe path, with an error;
+an in-range reordered ID otherwise refers to the new artwork at that position.
 Source GIFs, derived artwork and SHA256 provenance stay in
 private inputs/ignored build output, not Git. No redistribution license for the
 current modified atlas has been established. The binary-only mirror is not rebuilt or
@@ -321,7 +374,7 @@ both default pages, pinned selection, live changes, destination-zone arithmetic
 and synthetic native-TLV-to-Java/BAP transmission. `test_altscreen_e2e.sh` checks matching
 package installation, preservation, diagnostic actions and recovery.
 
-`./scripts/test_mascots.sh` uses the local generated atlas and host EGL/GLES2.
+`./scripts/test_mascots.sh` generates synthetic packs and uses host EGL/GLES2.
 It checks bounded parsing, real rendered pixels, viewport clipping, destination
 alpha, exact doubled dimensions/raised bounds using opaque fixtures, caller
 graphics state, frame/wrap timing, injected graphics failures,

@@ -16,8 +16,8 @@ public final class PreferencesTest {
         File legacy=root.resolve("cluster_ui.url").toFile();
         Files.write(legacy.toPath(),"maps:/car/instrumentcluster/map?maneuverLayout=rightaligned".getBytes("UTF-8"));
         Preferences preferences=new Preferences(file,legacy);
-        check(Arrays.equals(Setting.ALL[Setting.MASCOT].choices,
-            new String[]{"Off","Raccoon","Nian","Capybara","Lizard"}),"stable mascot IDs");
+        int lastMascot=Setting.ALL[Setting.MASCOT].choices.length-1;
+        check(lastMascot>=0 && lastMascot<=16 && Setting.ALL[Setting.MASCOT].choices[0].equals("Off"),"bounded local catalog");
         check(preferences.snapshot().on(Setting.ENABLED),"missing preference keeps existing On behavior");
         check(preferences.snapshot().get(Setting.LAYOUT)==1,"legacy layout retained");
         for(int id=0;id<Setting.ALL.length;id++) {
@@ -39,7 +39,7 @@ public final class PreferencesTest {
         expectInvalid(valid.replace("format=3","format=1"));
         expectInvalid(valid.replace("format=3","format=2"));
         expectInvalid(valid.replace("mascot=0\n",""));
-        expectInvalid(valid.replace("mascot=0","mascot=5"));
+        expectInvalid(valid.replace("mascot=0","mascot="+(lastMascot+1)));
         expectInvalid(valid.replace("info_return=0\n",""));
         expectInvalid(valid.replace("preset=0","preset=4"));
         expectInvalid(valid.replace("road=1\n",""));
@@ -68,7 +68,7 @@ public final class PreferencesTest {
         check(Preferences.read(file,8192).startsWith("format=3\n"),"next save upgrades schema");
         preferences.set(Setting.DISTANCE,0);
         preferences.set(Setting.ROAD_SCROLL,1);
-        preferences.set(Setting.MASCOT,4);
+        preferences.set(Setting.MASCOT,lastMascot);
         int[] custom=preferences.snapshot().copy();
         int[][] presetValues={{0,1,1,1,0,1,0},{1,0,1,0,0,0,1},{1,1,1,1,0,0,0},{1,1,1,1,1,0,0}};
         for(int preset=0;preset<4;preset++) {
@@ -79,7 +79,7 @@ public final class PreferencesTest {
                 check(preferences.snapshot().copy()[id]==custom[id],"preset destroyed Custom");
             }
             check(preferences.snapshot().get(Setting.INFO_DEFAULT)==1 && !preferences.snapshot().on(Setting.ENABLED)
-                && preferences.snapshot().get(Setting.MASCOT)==4,
+                && preferences.snapshot().get(Setting.MASCOT)==lastMascot,
                 "preset changes unrelated settings");
         }
         preferences.set(Setting.PRESET,0);
@@ -102,12 +102,12 @@ public final class PreferencesTest {
         check(Arrays.equals(before,Files.readAllBytes(file.toPath())),"failed write preserves prior settings");
         for(String page:new String[]{"root","presentation","information","guidance","appearance","controls","diagnostics","recovery","status","confirm:reset","confirm:export_full","confirm:restart_video"}) {
             MenuModel.Row[] rows=MenuModel.page(page,preferences.snapshot(),new String[]{"Build test"},"Ready").rows;
-            check(rows.length>0 && rows[0].target.equals("back"),"back navigation on "+page);
+            check(rows.length>0 && rows[0].target.equals("back")==page.startsWith("confirm:"),"physical Back navigation on "+page);
             for(MenuModel.Row row:rows)check(!row.target.contains("reboot") && !row.target.contains("restore"),"no maintenance action");
         }
         for(int id=0;id<Setting.ALL.length;id++) {
             MenuModel.Row[] rows=MenuModel.page("choice:"+id,preferences.snapshot(),new String[0],"Ready").rows;
-            check(rows.length==Setting.ALL[id].choices.length+1,"all validated choices shown");
+            check(rows.length==Setting.ALL[id].choices.length,"all validated choices shown");
         }
         check(MenuModel.parent("choice:"+Setting.MODE).equals("root"),"presentation control returns to root");
         check(MenuModel.parent("choice:"+Setting.INFO_DEFAULT).equals("information"),"information Back");
