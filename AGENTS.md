@@ -437,6 +437,17 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   across View changes: the owner's requested behavior is downstream Audi dial
   occlusion, not responsive movement inward. The owner accepted provisional
   placement pending parked calibration; no exact dial mask is established.
+- The curved candidate shares `(139,70), 210x240`, alpha 220/255, with a lower
+  circular exclusion centered `(244,385)`, radius 124. Only the mirrored KDK
+  content reference `(139,110), 210x153` is source-backed; skin, circle and
+  displayable-3 registration remain photo estimates. Single-section layouts use
+  the same outer pocket; both Off draws nothing. Do not move the right RGI planes.
+- Overflow title/artist scroll independently at 20 pixels/second with 1.8-second
+  endpoint pauses, clipped per line. Advance on the existing worker's monotonic
+  clock; repaint only changed content/offsets, without extra EGL swaps. `CARDS2`
+  carries an observed-track revision so album-only or transport-clipped label
+  changes can reset both lines, unlike artwork/playback/Trip updates. It is not a
+  phone track ID. Re-enabling media and lease/readiness recovery reset scrolling.
 - Trip progress is a labelled estimate from the first positive remaining distance
   observed for this connection/route, not total original journey completion.
   Clamp 0..100%; hide without a valid baseline/current distance. Added distance may
@@ -450,11 +461,15 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   The original `crc` is over the source JPEG/PNG, not the converted output.
   Cards validate the additive `png_crc` over the published PNG bytes; never
   substitute the original CRC or let Java/GL callbacks decode artwork.
-- Only the settings worker publishes bounded `CARDS1` snapshots on `/ramdisk`,
+- Only the settings worker publishes bounded `CARDS2` snapshots on `/ramdisk`,
   tied to mirror PID, receiver generation and expiry. Native workers read/paint;
   render callbacks must remain I/O-free. Passive cards never own inputs.
   CONTROL_PUBLISHED is not proof of visible pixels. Their control file contains
   metadata; diagnostic summaries expose only presence, never text.
+- Native arrival validation must accept actual BAPBridge 12/24-hour output and
+  its ` dest` suffix, not just five-byte `HH:mm`. The earlier parser rejected
+  otherwise valid complete card snapshots. Keep Java-formatter-to-native
+  fixtures; host rendering/fixture success is not vehicle confirmation.
 
 ### Optional map mascots
 

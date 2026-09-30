@@ -36,9 +36,25 @@ static int hex(unsigned char c) {
     if(c>='A' && c<='F')return c-'A'+10;
     return -1;
 }
+static int arrival_valid(const char *text) {
+    if(!*text)return 1;
+    const char *p=text;
+    unsigned hour=0,digits=0;
+    while(*p>='0' && *p<='9' && digits<2){hour=hour*10+(unsigned)(*p++-'0');digits++;}
+    if(!digits || *p++!=':')return 0;
+    if(*p<'0' || *p>'5')return 0;
+    p++;
+    if(*p<'0' || *p>'9')return 0;
+    p++;
+    int twelve=!strncmp(p," AM",3) || !strncmp(p," PM",3);
+    if(twelve){if(hour<1 || hour>12)return 0;p+=3;}
+    else if(digits!=2 || hour>23)return 0;
+    return !*p || !strcmp(p," dest");
+}
 int cards_decode(const char *data,size_t size,uint64_t now,unsigned pid,cards_request *out) {
     cards_request r={0};
-    if(!data || !out || size>CARDS_MAX_SNAPSHOT || size<7 || memcmp(data,"CARDS1 ",7))return 0;
+    if(!data || !out || size>CARDS_MAX_SNAPSHOT || size<7 || memcmp(data,"CARDS",5)
+            || data[5]!='0'+CARDS_PROTOCOL_VERSION || data[6]!=' ')return 0;
     const char *p=data+7,*end=data+size;
     uint64_t n;
     if(!number(&p,end,UINT_MAX,' ',&n) || n!=pid)return 0;
@@ -55,8 +71,9 @@ int cards_decode(const char *data,size_t size,uint64_t now,unsigned pid,cards_re
         if(!number(&p,end,1000,' ',&n))return 0;
         r.progress=(int)n;
     }
-    if(!number(&p,end,UINT32_MAX,'\n',&n))return 0;
+    if(!number(&p,end,UINT32_MAX,' ',&n))return 0;
     r.art_crc=(uint32_t)n;
+    if(!number(&p,end,INT64_MAX,'\n',&r.track))return 0;
     for(unsigned line=0;line<CARDS_TEXT_FIELDS;line++) {
         size_t bytes=0;
         while(p<end && *p!='\n') {
@@ -75,9 +92,6 @@ int cards_decode(const char *data,size_t size,uint64_t now,unsigned pid,cards_re
     if(p!=end)return 0;
     if(r.text[2][0] && strcmp(r.text[2],"Playing") && strcmp(r.text[2],"Paused") &&
             strcmp(r.text[2],"Stopped"))return 0;
-    const char *eta=r.text[3];
-    if(*eta && (strlen(eta)!=5 || eta[0]<'0' || eta[0]>'2' || eta[1]<'0' || eta[1]>'9' ||
-            (eta[0]=='2' && eta[1]>'3') || eta[2]!=':' ||
-            eta[3]<'0' || eta[3]>'5' || eta[4]<'0' || eta[4]>'9'))return 0;
+    if(!arrival_valid(r.text[3]))return 0;
     *out=r;return 1;
 }

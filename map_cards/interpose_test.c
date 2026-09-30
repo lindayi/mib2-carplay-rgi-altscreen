@@ -19,7 +19,7 @@ static unsigned long long now(void) {
 }
 static void publish(unsigned media,unsigned trip) {
     FILE *f=fopen(CARDS_CONTROL_PATH ".new","w");assert(f);
-    assert(fprintf(f,"CARDS1 %u %llu 9 %u %u 500 0\n"
+    assert(fprintf(f,"CARDS2 %u %llu 9 %u %u 500 0 1\n"
         "436166c3a9206d75736963\n417274697374\n506175736564\n31343a3332\n312068\n3530206d69\n",
         (unsigned)getpid(),now()+4000,media,trip)>0);
     assert(!fclose(f));assert(!rename(CARDS_CONTROL_PATH ".new",CARDS_CONTROL_PATH));
@@ -44,10 +44,28 @@ static int changed(int x,int top) {
     return p[0]!=102 || p[1]!=153 || p[2]!=204;
 }
 static void wait_cards(int media,int trip) {
+    cards_request request={.media=media,.trip=trip,.progress=500};
+    const char *text[]={"Caf\xc3\xa9 music","Artist","Paused","14:32","1 h","50 mi"};
+    for(unsigned i=0;i<6;i++)strcpy(request.text[i],text[i]);
+    cards_painter painter={0};assert(cards_painter_init(&painter));
+    unsigned char expected[CARDS_IMAGE_BYTES];cards_scroll zero={0};
+    assert(!cards_paint(&painter,&request,NULL,zero,expected));
+    cards_painter_destroy(&painter);
     unsigned long long until=now()+2000;
     do {
         frame();
-        if(changed(250,90)==media && changed(250,222)==trip)return;
+        int matches=1;
+        for(int y=0;y<CARDS_IMAGE_HEIGHT && matches;y++)for(int x=0;x<CARDS_WIDTH;x++) {
+            const unsigned char *src=expected+((size_t)y*CARDS_WIDTH+x)*4;
+            const unsigned char *actual=pixels+((454-CARDS_TOP-y)*1440+CARDS_X+x)*4;
+            const unsigned background[]={102,153,204};
+            for(unsigned c=0;c<3;c++) {
+                int composed=src[c]+(background[c]*(255-src[3])+127)/255;
+                if(abs((int)actual[c]-composed)>1){matches=0;break;}
+            }
+            if(!matches)break;
+        }
+        if(matches)return;
         usleep(20000);
     } while(now()<until);
     fprintf(stderr,"Map card interpose state missing %d/%d\n",media,trip);assert(0);
@@ -82,10 +100,10 @@ int main(void) {
         unsigned long long until=now()+2000;
         do {
             menu(preview_page);frame();
-            if(!changed(250,90) && !changed(250,222) && changed(720,100))break;
+            if(!changed(CARDS_X+12,CARDS_TOP+44) && changed(720,100))break;
             usleep(20000);
         } while(now()<until);
-        assert(!changed(250,90) && !changed(250,222) && changed(720,100));
+        assert(!changed(CARDS_X+12,CARDS_TOP+44) && changed(720,100));
         preview(preview_page?"hook-chooser-suppression":"hook-menu-suppression");
         assert(!unlink("/ramdisk/carplay_vc_panel.control"));publish(1,1);wait_cards(1,1);
     }
@@ -102,7 +120,7 @@ int main(void) {
     /* The shared worker blocks in the legacy mascot reader while video swaps continue. */
     unsigned long long until=now()+1400;
     do {frame();usleep(20000);} while(now()<until);
-    assert(!changed(250,90) && !changed(250,222));
+    assert(!changed(CARDS_X+12,CARDS_TOP+44));
     unlink("/ramdisk/carplay_mascot.control");unlink(CARDS_CONTROL_PATH);
     unlink("/ramdisk/cards-interpose.ready");
     assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));

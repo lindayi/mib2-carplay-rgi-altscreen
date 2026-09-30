@@ -58,12 +58,29 @@ public final class MapCardsTest {
             check(!copy().media && !copy().trip,"no fabricated initial data");
             cards.track(track("Song"),false);check(!copy().media,"non-CarPlay media excluded");
             cards.track(track("Song"),true);
+            long firstTrack=copy().trackRevision;
+            check(firstTrack>0,"track identity published");
+            cards.track(track("Song"),true);
+            check(copy().trackRevision==firstTrack,"duplicate metadata retains scroll origin");
             cards.playback(new PlaybackInfoChangedEvent(PlaybackInfoChangedEvent.PlaybackState.PAUSED),true);
             check(copy().media && copy().playback.equals("Paused"),"paused title retained without inventing playback");
             send(peer,CarplayBus.EVT_COVERART,"crc:n:999\npath:s:/var/app/icab/tmp/37/coverart.png\n");
             check(copy().art==0,"original-input CRC cannot identify generated PNG");
             send(peer,CarplayBus.EVT_COVERART,"crc:n:999\npng_crc:n:123\npath:s:/var/app/icab/tmp/37/coverart.png\n");
             check(copy().art==123,"fresh artwork event associated with known track");
+            check(copy().trackRevision==firstTrack,"playback and artwork do not replace track");
+            cards.track(new TrackDataChangedEvent("Song",123000,"Another album","Artist","",""),true);
+            check(copy().trackRevision>firstTrack && copy().art==0,"album-only change replaces track");
+            firstTrack=copy().trackRevision;
+            cards.track(new TrackDataChangedEvent("Song",124000,"Another album","Artist","",""),true);
+            check(copy().trackRevision>firstTrack,"changed duration replaces indistinguishable labels");
+            String prefix=new String(new char[150]).replace('\0','a');
+            cards.track(track(prefix+"A"),true);
+            firstTrack=copy().trackRevision;
+            String clipped=MapCards.snapshot(true,false).title;
+            cards.track(track(prefix+"B"),true);
+            check(copy().trackRevision>firstTrack && MapCards.snapshot(true,false).title.equals(clipped),
+                "track token detects replacement beyond transport-clipped labels");
             cards.track(track("New song"),true);check(copy().art==0,"new track never reuses prior artwork");
             cards.track(track("Bad\ud800"),true);
             check(MapCards.snapshot(true,false).title.equals(""),"malformed Unicode omitted, not replaced with fabricated text");
@@ -77,10 +94,12 @@ public final class MapCardsTest {
             check(copy().trip && copy().progress==0 && copy().zone==-300,"first observed route baseline");
             send(peer,CarplayBus.EVT_RGD_UPDATE,"dist_dest_m:n:7500\n");
             check(copy().progress==250,"distance-based progress, not maneuver progress");
+            firstTrack=copy().trackRevision;
             check(!cards.copy(bus.connectionGeneration(),true,false,false).trip,"independent Off");
             check(copy().progress==250,"toggle does not reset baseline");
             send(peer,CarplayBus.EVT_RGD_UPDATE,"visible_in_app:n:0\n");
             check(copy().progress==250,"main MMI departure does not reset route");
+            check(copy().trackRevision==firstTrack,"route, toggles and View do not replace media");
             send(peer,CarplayBus.EVT_RGD_UPDATE,"dist_dest_m:n:11000\n");
             check(copy().progress==0,"reroute can move backward, never negative");
             send(peer,CarplayBus.EVT_RGD_UPDATE,"dist_dest_m:n:0\n");
@@ -115,6 +134,8 @@ public final class MapCardsTest {
             cards.stop();
             cards.track(track("Late song"),true);
             check(!copy().media,"late component callback rejected");
+            cards.start();cards.track(track("Last song"),true);
+            check(copy().trackRevision>firstTrack,"component restart cannot recycle observed track token");
             check(MapCards.clean(" \nA\tB\r ").equals("A B"),"controls normalized without file I/O");
         } finally {
             cards.stop();if(peer!=null)peer.close();bus.stop();

@@ -30,7 +30,8 @@ cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror -shared -fPIC -fvisibility
 cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror -shared -fPIC \
     tests/mascot_swap_observer.c -lEGL -ldl -o build/map-card-tests/libobserver.so
 cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror map_cards/interpose_test.c \
-    -lEGL -lGLESv2 -ldl -o build/map-card-tests/interpose
+    map_cards/paint.c map_cards/protocol.c \
+    -lEGL -lGLESv2 -ldl -lm -o build/map-card-tests/interpose
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
     LD_PRELOAD="$PWD/build/map-card-tests/libcarplay_mascot.so:$PWD/build/map-card-tests/libobserver.so" \
     build/map-card-tests/interpose

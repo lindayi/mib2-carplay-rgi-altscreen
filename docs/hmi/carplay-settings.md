@@ -142,8 +142,16 @@ bytes; the older `crc` identifies the original input image and must not be used
 to validate that PNG. Missing/mismatched PNG identity omits artwork. Cover events
 have no track ID, and a phone that does not resend art after a track change may
 leave the card text-only; exact title/art association is not guaranteed.
-Text is bounded to 128 UTF-8 bytes per field, with grapheme-safe truncation and
-visual ellipsis. The embedded font covers Latin/Greek/Cyrillic and punctuation;
+Text is bounded to 128 UTF-8 bytes per field, with grapheme-safe truncation.
+Overflowing title and artist lines scroll independently at 20 video pixels/second:
+pause 1.8 seconds at the start, reveal the end, pause there 1.8 seconds, then repeat.
+Short text stays stationary. Scrolling reveals only the bounded transported text,
+not an unlimited title. Each line is clipped to its own rectangle above the dial
+cutout. An observed title/artist/album/duration change resets both lines; playback,
+artwork and Trip updates do not. Re-enabling media or recovering a lost native
+worker/video lease starts the lines again. Metadata has no true track identifier:
+indistinguishable repeated tracks cannot reliably be detected.
+The embedded font covers Latin/Greek/Cyrillic and punctuation;
 unsupported fields are omitted with a diagnostic, not transliterated.
 
 Trip shows ETA, remaining time and distance, using the existing HU unit/time and
@@ -156,10 +164,18 @@ no bar. Receiver reconnect, a new route generation, changed destination/source
 and route end reset it. Toggling a card, changing View, or visiting Audi main MMI
 does not reset the baseline. The card disappears outside active route states.
 
-Cards have fixed positions within the video viewport and translucent backgrounds.
-At 1440x455, each is 240x120: Now Playing starts at `(250,90)` and Trip at
-`(250,222)`, measured from the top-left, with background alpha 184/255.
-They retain their separate slots if only one is enabled. Both temporarily hide
+Cards share one fixed, translucent, curved pocket. At 1440x455 its estimated
+bounds are `(139,70), 210x240`, measured from the top-left, with background alpha
+220/255. Its upper outer shoulder slopes inward; the lower center excludes a
+circle centered at `(244,385)` with radius 124. The horizontal anchor mirrors the
+known right KDK content reference `(1091,110), 210x153`; the full skin/cutout and
+alignment to displayable 3 are photo-based estimates, not measured Audi masks.
+Both on gives compact music and Trip sections. Music-only uses larger artwork
+(64 rather than 44 video pixels) and full-width title/artist rows; without artwork
+the text moves higher. Trip-only gives ETA, remaining time and distance separate,
+larger rows. Both Off removes the entire pocket. Missing media/route data uses
+the same single-section layouts; neither leaves an empty disabled section.
+The outer position and silhouette stay unchanged. Both temporarily hide
 while the VC settings panel is actually drawn, so the expanded mascot chooser
 cannot cover only part of a card.
 The moving mascot remains underneath the cards and can pass behind them.
@@ -173,8 +189,13 @@ withdraw the cards. They never own steering-wheel input.
 The component's existing media-cache listener and an independent RGI observer
 capture bounded data even in map-only mode and while the toggles are Off. Only
 the settings worker formats text and atomically publishes a four-second
-`CARDS1` snapshot at `/ramdisk/carplay_cards.control`, bound to mirror PID and
-receiver generation. The native worker reads/paints it; GL callbacks do no file
+`CARDS2` snapshot at `/ramdisk/carplay_cards.control`, bound to mirror PID and
+receiver generation, with a monotonically assigned observed-track revision.
+Java and native must be upgraded together; old/mixed versions are rejected.
+Arrival validation accepts the formatter's 24-hour and AM/PM clocks, including
+its ` dest` suffix. The native worker reads/paints and advances scrolling from
+monotonic time; unchanged offsets reuse the existing texture, including endpoint
+pauses and short labels. GL callbacks do no file
 I/O. The control file contains media metadata: diagnostics summary reports only
 its presence, not its contents. **CONTROL_PUBLISHED is not presentation proof.**
 The native worker's render lease is at most one second; a stalled worker cannot
@@ -183,7 +204,9 @@ mirror telemetry are generated. Renderer errors are throttled in the existing
 mirror log, included only in the private full export.
 
 For parked acceptance, enable each card separately and then both. Check play,
-pause, track/artwork changes, route start/stop and receiver reconnect. Photograph
+pause, track/artwork changes, route start/stop and receiver reconnect. Check long
+title/artist endpoints, a short track afterward, and the HU's 12/24-hour time setting.
+Photograph
 wide and small-map Views without moving the cards; check title/artist readability,
 Audi-dial coverage, right-side guidance and the lower Audi bar. Open the ordinary
 VC menu and mascot chooser, then close them to confirm card restoration. Toggle

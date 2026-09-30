@@ -11,9 +11,11 @@ public final class MapCards implements CarplayBus.Observer {
     public static final int TEXT_BYTES=128;
     private static MapCards active;
     private static BAPBridge formatter;
+    private static long nextTrack;
     private boolean running;
     private int connection=-1,routeState=-1,sourceSupportsRg=-1,meters=-1,baseline=-1;
-    private long routeGeneration=-1,eta=-1,remaining=-1,sampled=-1,art;
+    private long routeGeneration=-1,eta=-1,remaining=-1,sampled=-1,art,trackRevision;
+    private int trackDuration=-1;
     private int zone=RouteGuidance.State.UNKNOWN_TIMEZONE;
     private String destination,source,title="",artist="",album="",playback="";
 
@@ -38,7 +40,11 @@ public final class MapCards implements CarplayBus.Observer {
     }
     private void reset(int next) {
         connection=next;routeState=sourceSupportsRg=-1;routeGeneration=-1;source=null;clearTrip();
-        title=artist=album=playback="";art=0;
+        title=artist=album=playback="";art=trackRevision=0;trackDuration=-1;
+    }
+    private static synchronized long nextTrackRevision() {
+        if(nextTrack==Long.MAX_VALUE)nextTrack=0;
+        return ++nextTrack;
     }
     private boolean accept(int generation) {
         if(!running || generation<0 || generation!=CarplayBus.getInstance().connectionGeneration()
@@ -50,8 +56,12 @@ public final class MapCards implements CarplayBus.Observer {
         int generation=CarplayBus.getInstance().connectionGeneration();
         if(!carplay || !accept(generation))return;
         String nextTitle=clean(track.getTitle()),nextArtist=clean(track.getArtist()),nextAlbum=clean(track.getAlbum());
-        if(!title.equals(nextTitle) || !artist.equals(nextArtist) || !album.equals(nextAlbum))art=0;
+        if(!title.equals(nextTitle) || !artist.equals(nextArtist) || !album.equals(nextAlbum)
+                || trackDuration!=track.getDuration()) {
+            art=0;trackRevision=nextTrackRevision();
+        }
         title=nextTitle;artist=nextArtist;album=nextAlbum;
+        trackDuration=track.getDuration();
     }
     public synchronized void playback(PlaybackInfoChangedEvent info,boolean carplay) {
         int generation=CarplayBus.getInstance().connectionGeneration();
@@ -133,7 +143,7 @@ public final class MapCards implements CarplayBus.Observer {
     }
     public static final class Snapshot {
         public int connection=-1,progress=-1,meters=-1,zone=RouteGuidance.State.UNKNOWN_TIMEZONE;
-        public long art,eta=-1,remaining=-1,sampled=-1;
+        public long art,trackRevision,eta=-1,remaining=-1,sampled=-1;
         public boolean media,trip;
         public String title="",artist="",playback="";
         public String[] tripText={"","",""};
@@ -146,7 +156,7 @@ public final class MapCards implements CarplayBus.Observer {
         out.connection=generation;
         out.media=mediaEnabled && (title.length()!=0 || artist.length()!=0);
         out.trip=tripEnabled && (routeState==1 || routeState==6) && (meters>=0 || eta>=0 || remaining>=0);
-        if(out.media){out.title=title;out.artist=artist;out.playback=playback;out.art=art;}
+        if(out.media){out.title=title;out.artist=artist;out.playback=playback;out.art=art;out.trackRevision=trackRevision;}
         if(out.trip) {
             out.meters=meters;out.zone=zone;out.eta=eta;out.remaining=remaining;out.sampled=sampled;
             if(baseline>0 && meters>=0)out.progress=(int)Math.max(0L,Math.min(1000L,

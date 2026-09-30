@@ -21,6 +21,9 @@ static mascot_graphics graphics;
 static EGLContext context=EGL_NO_CONTEXT;
 static GLint texture_viewport[4];
 static int graphics_error,lease_expired;
+static uint64_t scroll_origin,media_track,media_connection;
+static int media_active;
+static cards_scroll painted_scroll;
 
 static uint64_t mono_ms(void) {
     struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);
@@ -55,7 +58,7 @@ static const char *read_control(cards_request *request) {
     return error;
 }
 static int same_content(const cards_request *a,const cards_request *b) {
-    return a->connection==b->connection && a->media==b->media && a->trip==b->trip &&
+    return a->connection==b->connection && a->track==b->track && a->media==b->media && a->trip==b->trip &&
         a->progress==b->progress && a->art_crc==b->art_crc && !memcmp(a->text,b->text,sizeof(a->text));
 }
 void cards_overlay_poll(void) {
@@ -79,6 +82,9 @@ void cards_overlay_poll(void) {
     static uint32_t attempted_crc;
     static uint64_t attempted_connection,next_art_attempt;
     uint64_t now=mono_ms();
+    if(request.media && (!media_active || expired || request.track!=media_track ||
+            request.connection!=media_connection))scroll_origin=now;
+    media_active=request.media;media_track=request.track;media_connection=request.connection;
     uint32_t wanted=request.media?request.art_crc:0;
     int art_changed=wanted!=attempted_crc || request.connection!=attempted_connection;
     if(art_changed || !wanted) {
@@ -91,15 +97,17 @@ void cards_overlay_poll(void) {
         next_art_attempt=mono_ms()+1000;
         if(!art_error)art_changed=1;
     }
+    cards_scroll scroll=cards_scroll_at(&request,&artwork,now-scroll_origin);
     int repaint=(request.media || request.trip) &&
-        (expired || art_changed || !same_content(&request,&painted));
+        (expired || art_changed || !same_content(&request,&painted) ||
+         scroll.title!=painted_scroll.title || scroll.artist!=painted_scroll.artist);
     if(repaint) {
         if(!cards_painter_init(&painter)) {
             error="FONT_ALLOCATION_ERROR";diagnostic(0,error,0);
         } else {
-            unsigned omitted=cards_paint(&painter,&request,&artwork,buffers[back]);
+            unsigned omitted=cards_paint(&painter,&request,&artwork,scroll,buffers[back]);
             if(omitted)diagnostic(2,"UNSUPPORTED_TEXT_OMITTED",omitted);
-            painted=request;
+            painted=request;painted_scroll=scroll;
         }
     }
     uint64_t wall=wall_ms(),remaining=request.expires>wall?request.expires-wall:0;

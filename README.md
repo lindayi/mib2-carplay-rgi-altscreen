@@ -154,8 +154,10 @@ features below follow it automatically.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Optional left-side map cards:** independently enable Now Playing and Trip progress
   in **Carplay Altscreen -> Map cards** (VC: **More settings -> Map cards**).
-  Both default Off. Translucent fixed-position cards leave the right-side guidance
-  alone; their intended hiding behind Audi dials in small View needs parked
+  Both default Off. A translucent curved left pocket leaves right-side guidance
+  alone; a single enabled section uses the available space. Long titles/artists
+  scroll independently, with pauses at each end. The pocket stays fixed across
+  View changes; its intended hiding behind Audi dials in small View needs parked
   calibration. Trip progress is estimated from this connection's first observed
   remaining distance, not the original journey. See [behavior and limits](docs/hmi/carplay-settings.md#optional-map-cards).
 - **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->

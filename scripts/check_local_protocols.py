@@ -70,6 +70,7 @@ compare("map_cards/cards.h", "java_patch/com/luka/carplay/rgd/MapCards.java", {
     "CARDS_TEXT_BYTES": "TEXT_BYTES",
 })
 compare("map_cards/cards.h", "java_patch/com/luka/carplay/settings/MapCardControl.java", {
+    "CARDS_PROTOCOL_VERSION": "PROTOCOL_VERSION",
     "CARDS_MAX_SNAPSHOT": "MAX_SNAPSHOT", "CARDS_CONTROL_LEASE_MS": "CONTROL_LEASE_MS",
     "CARDS_TEXT_FIELDS": "TEXT_FIELDS",
 })

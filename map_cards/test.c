@@ -40,8 +40,9 @@ void __wrap_glTexImage2D(GLenum t,GLint l,GLint i,GLsizei w,GLsizei h,GLint b,GL
     if(!fail_texture)__real_glTexImage2D(t,l,i,w,h,b,f,y,p);
 }
 static size_t encode(char *out,const cards_request *r) {
-    size_t n=(size_t)sprintf(out,"CARDS1 %u %llu %llu %u %u %d %u\n",r->pid,
-        (unsigned long long)r->expires,(unsigned long long)r->connection,r->media,r->trip,r->progress,r->art_crc);
+    size_t n=(size_t)sprintf(out,"CARDS%d %u %llu %llu %u %u %d %u %llu\n",CARDS_PROTOCOL_VERSION,r->pid,
+        (unsigned long long)r->expires,(unsigned long long)r->connection,r->media,r->trip,r->progress,r->art_crc,
+        (unsigned long long)r->track);
     for(unsigned i=0;i<CARDS_TEXT_FIELDS;i++) {
         for(const unsigned char *s=(const unsigned char *)r->text[i];*s;s++)
             n+=(size_t)sprintf(out+n,"%02x",*s);
@@ -56,41 +57,46 @@ static void write_control(const cards_request *r) {
     assert(!rename(CARDS_CONTROL_PATH ".new",CARDS_CONTROL_PATH));
 }
 static void parse_tests(void) {
-    const char *valid="CARDS1 42 104000 0 1 1 -1 4294967295\n\n\n\n\n\n\n";
+    const char *valid="CARDS2 42 104000 0 1 1 -1 4294967295 9223372036854775807\n\n\n\n\n\n\n";
     cards_request r;
     assert(cards_decode(valid,strlen(valid),100000,42,&r));
-    assert(r.art_crc==UINT32_MAX && r.progress==-1);
+    assert(r.art_crc==UINT32_MAX && r.progress==-1 && r.track==INT64_MAX);
     assert(cards_decode(valid,strlen(valid),104000,42,&r));
     assert(!cards_decode(valid,strlen(valid),104001,42,&r));
     assert(!cards_decode(valid,strlen(valid),99999,42,&r));
     assert(!cards_decode(valid,strlen(valid),100000,43,&r));
     const char *bad[]={
-        "CARDS1 42 104000 -1 1 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 9223372036854775808 1 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1 +42 104000 0 1 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 2 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 2 0 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 -2 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 1001 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 +1 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 ffffffff\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 4294967296\n\n\n\n\n\n\n",
-        "CARDS1 42 18446744073709551616 0 1 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1  42 104000 0 1 1 0 0\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0 \n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\r\n\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n00\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n0a\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n7f\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\nc080\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\neda080\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\nf4908080\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\ne280\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n0\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\ngg\n\n\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n\n\n416374697665\n\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n\n\n\n32343a3030\n\n\n",
-        "CARDS1 42 104000 0 1 1 0 0\n\n\n\n31323a3630\n\n\n"
+        "CARDS1 42 104000 0 1 1 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 -1 1 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 9223372036854775808 1 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 +42 104000 0 1 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 2 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 2 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 -2 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 1001 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 +1 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 ffffffff 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 4294967296 0\n\n\n\n\n\n\n",
+        "CARDS2 42 18446744073709551616 0 1 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2  42 104000 0 1 1 0 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0 \n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\r\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 -1\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 +1\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 9223372036854775808\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0\n\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n00\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n0a\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n7f\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\nc080\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\neda080\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\nf4908080\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\ne280\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n0\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\ngg\n\n\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n\n\n416374697665\n\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n\n\n\n32343a3030\n\n\n",
+        "CARDS2 42 104000 0 1 1 0 0 0\n\n\n\n31323a3630\n\n\n"
     };
     for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++)
         assert(!cards_decode(bad[i],strlen(bad[i]),100000,42,&r));
@@ -110,12 +116,23 @@ static void parse_tests(void) {
     strcpy(source.text[2],"Paused");strcpy(source.text[3],"23:59");
     size=encode(bytes,&source);assert(cards_decode(bytes,size,100000,42,&r));
     assert(!strcmp(r.text[0],source.text[0]));
+    const char *clocks[]={"00:00","23:59 dest","5:15 AM dest","12:59 PM","1:00 AM","12:00 AM dest"};
+    for(unsigned i=0;i<sizeof(clocks)/sizeof(clocks[0]);i++) {
+        strcpy(source.text[3],clocks[i]);size=encode(bytes,&source);
+        assert(cards_decode(bytes,size,100000,42,&r) && !strcmp(r.text[3],clocks[i]));
+    }
+    const char *bad_clocks[]={"0:00 AM","13:00 PM","5:00","23:59 extra","12:60 PM","12:00 am",
+        ":00","1","12:","12:0","12:00 PM dest extra","12:00PM","12:00 AM "};
+    for(unsigned i=0;i<sizeof(bad_clocks)/sizeof(bad_clocks[0]);i++) {
+        strcpy(source.text[3],bad_clocks[i]);size=encode(bytes,&source);
+        assert(!cards_decode(bytes,size,100000,42,&r));
+    }
 }
 static void check_shared_fixture(const char *bytes,size_t size) {
     cards_request r;
     assert(cards_decode(bytes,size,0,123,&r));
     assert(r.pid==123 && r.expires==4000 && r.connection==7);
-    assert(r.media==1 && r.trip==1 && r.progress==250 && r.art_crc==0);
+    assert(r.media==1 && r.trip==1 && r.progress==250 && r.art_crc==0 && r.track==33);
     const char *expected[]={"Test song","Test artist","Paused","12:34","25 min","10 mi"};
     for(unsigned i=0;i<6;i++)assert(!strcmp(r.text[i],expected[i]));
     assert(cards_decode(bytes,size,4000,123,&r));
@@ -123,17 +140,17 @@ static void check_shared_fixture(const char *bytes,size_t size) {
     assert(!cards_decode(bytes,size,0,124,&r));
 }
 static void shared_fixture_tests(void) {
-    cards_request source={.pid=123,.expires=4000,.connection=7,.media=1,.trip=1,.progress=250};
+    cards_request source={.pid=123,.expires=4000,.connection=7,.media=1,.trip=1,.progress=250,.track=33};
     const char *text[]={"Test song","Test artist","Paused","12:34","25 min","10 mi"};
     for(unsigned i=0;i<6;i++)strcpy(source.text[i],text[i]);
     char bytes[CARDS_MAX_SNAPSHOT+1];
     check_shared_fixture(bytes,encode(bytes,&source));
-    puts("CARDS1 native-generated shared fixture: PASS");
+    puts("CARDS2 native-generated shared fixture: PASS");
     const char *path="build/mmi-tests/map-cards-control.txt";
     FILE *f=fopen(path,"rb");
     if(!f) {
         if(errno==ENOENT) {
-            puts("CARDS1 Java fixture absent: standalone native fixture checked");
+            puts("CARDS2 Java fixture absent: standalone native fixture checked");
             return;
         }
         perror(path);abort();
@@ -142,7 +159,19 @@ static void shared_fixture_tests(void) {
     assert(!ferror(f) && feof(f) && size<=CARDS_MAX_SNAPSHOT);
     assert(!fclose(f));
     check_shared_fixture(bytes,size);
-    puts("CARDS1 Java-generated build/mmi-tests/map-cards-control.txt: PASS");
+    puts("CARDS2 Java-generated build/mmi-tests/map-cards-control.txt: PASS");
+    const char *names[]={"24h","12h"},*expected[]={"05:15 dest","5:15 AM dest"};
+    for(unsigned i=0;i<2;i++) {
+        char path[128];snprintf(path,sizeof(path),"build/mmi-tests/map-cards-arrival-%s.txt",names[i]);
+        FILE *arrival=fopen(path,"rb");
+        if(!arrival && errno==ENOENT){printf("Java clock fixture %s absent; parser cases checked\n",names[i]);continue;}
+        assert(arrival);
+        size=fread(bytes,1,sizeof(bytes),arrival);
+        assert(!ferror(arrival) && feof(arrival) && !fclose(arrival));
+        cards_request request;assert(cards_decode(bytes,size,0,123,&request));
+        assert(request.trip && !strcmp(request.text[3],expected[i]));
+        printf("Java formatter -> CARDS2 -> native %s destination-clock fixture: PASS\n",names[i]);
+    }
 }
 static uint32_t file_crc(const char *path) {
     FILE *f=fopen(path,"rb");assert(f);
@@ -222,11 +251,12 @@ static void bounds(int media,int trip,int viewport_x,int viewport_top,int width,
     for(int y=0;y<455;y++)for(int x=0;x<1440;x++) {
         assert(at(x,y)[3]==94);
         int local_x=x-viewport_x,local_y=y-viewport_top;
-        int card_y=local_y-CARDS_TOP;
-        int expected=local_x>=CARDS_X && local_x<CARDS_X+CARDS_WIDTH &&
+        int card_x=local_x-CARDS_X,card_y=local_y-CARDS_TOP;
+        float dx=card_x-104.5f,dy=card_y-314.5f;
+        int expected=(media || trip) && card_x>=0 && card_x<210 && card_y>=0 && card_y<240 &&
+            (card_x>=99 || card_y*99>=(99-card_x)*40) && dx*dx+dy*dy>=124*124 &&
             local_x<width && local_y>=0 && local_y<height &&
-            ((media && card_y>=0 && card_y<CARDS_HEIGHT) ||
-             (trip && card_y>=CARDS_HEIGHT+CARDS_GAP && card_y<CARDS_IMAGE_HEIGHT));
+            local_x>=0;
         assert(changed(x,y)==expected);
         changed_count+=changed(x,y);
     }
@@ -238,6 +268,135 @@ static void no_gl(int menu) {
     assert(queries==before && uploads==uploaded);
 }
 static void *blocked_worker(void *unused) {(void)unused;cards_overlay_poll();return NULL;}
+static void scroll_tests(cards_painter *painter,cards_request r) {
+    assert(cards_scroll_offset(0,UINT64_MAX)==0 && cards_scroll_offset(-12,3000)==0);
+    assert(cards_scroll_offset(100,0)==0 && cards_scroll_offset(100,1800)==0);
+    assert(cards_scroll_offset(100,1850)==1 && cards_scroll_offset(100,4300)==50);
+    assert(cards_scroll_offset(100,6800)==100 && cards_scroll_offset(100,8599)==100);
+    assert(cards_scroll_offset(100,8600)==0);
+    unsigned char start[CARDS_IMAGE_BYTES],moving[CARDS_IMAGE_BYTES],empty[CARDS_IMAGE_BYTES];
+    cards_scroll zero={0};
+    r.art_crc=0;
+    assert(!cards_paint(painter,&r,NULL,zero,start));
+    cards_scroll step=cards_scroll_at(&r,NULL,3800);
+    assert(step.title>0 && step.artist>0);
+    assert(!cards_paint(painter,&r,NULL,step,moving));
+    unsigned title_changed=0,artist_changed=0;
+    for(int y=0;y<CARDS_IMAGE_HEIGHT;y++)for(int x=0;x<CARDS_WIDTH;x++) {
+        size_t i=((size_t)y*CARDS_WIDTH+x)*4;
+        if(memcmp(start+i,moving+i,4)) {
+            assert(x>=12 && x<198 && y>=53 && y<108);
+            if(y<81)title_changed++;else artist_changed++;
+        }
+    }
+    assert(title_changed>30 && artist_changed>30);
+    strcpy(r.text[0],"Song");strcpy(r.text[1],"Artist");
+    for(unsigned t=0;t<30000;t+=100) {
+        step=cards_scroll_at(&r,NULL,t);
+        assert(!step.title && !step.artist);
+    }
+    r.text[0][0]=0;assert(!cards_paint(painter,&r,NULL,zero,empty));
+    strcpy(r.text[0],"W");assert(!cards_paint(painter,&r,NULL,zero,start));
+    int x0=198,x1=0,y0=81,y1=53;
+    for(int y=53;y<81;y++)for(int x=12;x<198;x++) {
+        size_t i=((size_t)y*CARDS_WIDTH+x)*4;
+        if(memcmp(start+i,empty+i,4)) {
+            if(x<x0)x0=x;
+            if(x>x1)x1=x;
+            if(y<y0)y0=y;
+            if(y>y1)y1=y;
+        }
+    }
+    assert(x1-x0>10 && y1-y0>10);
+    memset(r.text[0],'i',110);r.text[0][0]='j';r.text[0][110]='W';r.text[0][111]=0;
+    cards_scroll end={0};
+    for(unsigned t=0;t<120000;t+=50) {
+        step=cards_scroll_at(&r,NULL,t);if(step.title>end.title)end=step;
+    }
+    assert(end.title>100);assert(!cards_paint(painter,&r,NULL,end,moving));
+    int found=0;
+    for(int x=160;x+(x1-x0)<198;x++) {
+        int matches=1;
+        for(int y=y0;y<=y1 && matches;y++)for(int dx=0;dx<=x1-x0;dx++)
+            if(memcmp(start+((size_t)y*CARDS_WIDTH+x0+dx)*4,
+                      moving+((size_t)y*CARDS_WIDTH+x+dx)*4,4)){matches=0;break;}
+        if(matches)found=1;
+    }
+    assert(found); /* The complete last glyph, including its ink bearing, is visible at the endpoint. */
+}
+static void assert_frame(cards_painter *painter,const cards_request *r,const cards_art *art,uint64_t elapsed) {
+    unsigned char expected[CARDS_IMAGE_BYTES];
+    assert(!cards_paint(painter,r,art,cards_scroll_at(r,art,elapsed),expected));
+    clear();cards_overlay_draw(0);capture(NULL);
+    const unsigned background[]={102,153,204};
+    for(int y=0;y<CARDS_IMAGE_HEIGHT;y++)for(int x=0;x<CARDS_WIDTH;x++) {
+        const unsigned char *src=expected+((size_t)y*CARDS_WIDTH+x)*4,*actual=at(CARDS_X+x,CARDS_TOP+y);
+        for(unsigned c=0;c<3;c++) {
+            int composed=src[c]+(background[c]*(255-src[3])+127)/255;
+            assert(abs((int)actual[c]-composed)<=1);
+        }
+        assert(actual[3]==94);
+    }
+}
+static void runtime_scroll_tests(cards_request r,uint32_t crc) {
+    cards_painter painter={0};assert(cards_painter_init(&painter));
+    cards_art art={0};assert(!cards_art_load(CARDS_ART_PATH,crc,&art));
+    r.media=r.trip=1;r.art_crc=0;r.track=100;r.progress=630;
+    uint64_t start=mono,elapsed=0;
+    cards_scroll previous={0};
+    for(unsigned t=0;t<=10000;t+=100) {
+        mono=start+t;wall+=100;r.expires=wall+4000;write_control(&r);
+        unsigned before=uploads;
+        cards_overlay_poll();assert_frame(&painter,&r,NULL,t);
+        cards_scroll current=cards_scroll_at(&r,NULL,t);
+        if(t)assert(uploads==before+(current.title!=previous.title || current.artist!=previous.artist));
+        previous=current;
+        if(t==0)capture("scroll-start");
+        if(t==3800)capture("scroll-moving");
+        if(t==10000)capture("scroll-late");
+        elapsed=t;
+    }
+    assert(previous.title!=previous.artist);
+    r.progress=100;strcpy(r.text[2],"Paused");
+    write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,NULL,elapsed);
+    r.art_crc=crc;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,elapsed);
+    r.trip=0;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,elapsed);
+    r.trip=1;r.track++;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);
+    /* Keep the worker live through the initial pause instead of hiding a lease expiry. */
+    for(unsigned t=100;t<=2600;t+=100) {
+        mono+=100;wall+=100;r.expires=wall+4000;write_control(&r);cards_overlay_poll();
+    }
+    assert_frame(&painter,&r,&art,2600);
+    r.media=0;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);
+    r.media=1;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);
+    mono+=1001;wall+=1001;no_gl(0);
+    r.expires=wall+4000;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);
+    strcpy(r.text[0],"Song");strcpy(r.text[1],"Artist");r.track++;
+    write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);
+    unsigned uploaded=uploads;
+    for(unsigned t=0;t<10000;t+=100) {
+        mono+=100;wall+=100;r.expires=wall+4000;write_control(&r);cards_overlay_poll();cards_overlay_draw(0);
+    }
+    assert(uploads==uploaded);
+    strcpy(r.text[0],"Purple Rain");strcpy(r.text[1],"Prince");strcpy(r.text[2],"Playing");
+    strcpy(r.text[3],"12:15");strcpy(r.text[4],"35 min");strcpy(r.text[5],"24.6 mi");r.progress=300;r.track++;
+    const char *names[]={"both-off","music-only","trip-only","both-enabled"};
+    for(unsigned flags=0;flags<4;flags++) {
+        r.media=flags&1;r.trip=flags>>1;r.expires=wall+4000;write_control(&r);cards_overlay_poll();
+        assert_frame(&painter,&r,&art,0);capture(names[flags]);
+        unsigned char bitmap[CARDS_IMAGE_BYTES];cards_scroll zero={0};
+        assert(!cards_paint(&painter,&r,&art,zero,bitmap));
+        char path[160];snprintf(path,sizeof(path),"build/map-card-tests/%s.rgba",names[flags]);
+        FILE *f=fopen(path,"wb");assert(f);
+        assert(fwrite(bitmap,1,sizeof(bitmap),f)==sizeof(bitmap));assert(!fclose(f));
+    }
+    strcpy(r.text[3],"5:15 AM dest");strcpy(r.text[4],"1193046 h 28 min");strcpy(r.text[5],"999999 mi");
+    write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);capture("long-trip-values");
+    assert(at(CARDS_X+12,CARDS_TOP+181)[0]==at(CARDS_X+12,CARDS_TOP+44)[0]);
+    r.trip=0;r.art_crc=0;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,NULL,0);
+    capture("music-only-no-art");
+    cards_art_free(&art);cards_painter_destroy(&painter);
+}
 int main(void) {
     parse_tests();
     shared_fixture_tests();
@@ -248,8 +407,12 @@ int main(void) {
     strcpy(r.text[3],"14:32");strcpy(r.text[4],"1 h 24 min");strcpy(r.text[5],"62.5 mi");
     cards_painter painter={0};assert(cards_painter_init(&painter));
     unsigned char bitmap[CARDS_IMAGE_BYTES],other[CARDS_IMAGE_BYTES];
-    assert(!cards_paint(&painter,&r,NULL,bitmap));
-    assert(bitmap[3]==CARDS_BODY_ALPHA && bitmap[0]==13 && bitmap[1]==15 && bitmap[2]==18);
+    cards_scroll zero={0};
+    assert(!cards_paint(&painter,&r,NULL,zero,bitmap));
+    const unsigned char *fill=bitmap+(44*CARDS_WIDTH+12)*4;
+    assert(fill[3]==220 && fill[0]==16 && fill[1]==18 && fill[2]==22);
+    assert(!bitmap[3] && !bitmap[(191*CARDS_WIDTH+105)*4+3]);
+    assert(bitmap[(190*CARDS_WIDTH+105)*4+3] && bitmap[(239*CARDS_WIDTH)*4+3]);
     int opaque=0;
     for(size_t i=0;i<sizeof(bitmap);i+=4) {
         assert(bitmap[i]<=bitmap[i+3] && bitmap[i+1]<=bitmap[i+3] && bitmap[i+2]<=bitmap[i+3]);
@@ -257,9 +420,10 @@ int main(void) {
     }
     assert(opaque>20);
     cards_request unsupported=r;strcpy(unsupported.text[0],"\xf0\x9f\x98\x80");
-    assert(cards_paint(&painter,&unsupported,NULL,bitmap)==1);
-    unsupported.text[0][0]=0;assert(!cards_paint(&painter,&unsupported,NULL,other));
+    assert(cards_paint(&painter,&unsupported,NULL,zero,bitmap)==1);
+    unsupported.text[0][0]=0;assert(!cards_paint(&painter,&unsupported,NULL,zero,other));
     assert(!memcmp(bitmap,other,sizeof(bitmap)));
+    scroll_tests(&painter,r);
     cards_painter_destroy(&painter);
 
     FILE *ready=fopen("/ramdisk/cards-test.ready","wb");assert(ready);assert(!fclose(ready));
@@ -289,8 +453,8 @@ int main(void) {
     write_control(&r);cards_overlay_poll();cards_overlay_draw(0);
     snapshot(&after);assert(!memcmp(&before,&after,sizeof(before)));
     assert(glGetError()==GL_NO_ERROR);bounds(1,1,0,0,1440,455);capture("both-no-art");
-    const unsigned char *body=at(250,90);
-    assert(body[0]>=40 && body[0]<=42 && body[1]>=57 && body[1]<=59 && body[2]>=74 && body[2]<=76);
+    const unsigned char *body=at(CARDS_X+12,CARDS_TOP+44);
+    assert(body[0]>=29 && body[0]<=31 && body[1]>=38 && body[1]<=40 && body[2]>=49 && body[2]<=51);
     unsigned uploaded=uploads;
     for(unsigned i=0;i<20;i++)cards_overlay_draw(0);
     assert(uploads==uploaded);
@@ -308,7 +472,7 @@ int main(void) {
     bounds(1,1,0,0,1440,455);capture("art-failure-text");
     r.art_crc=0;r.progress=-1;write_control(&r);cards_overlay_poll();clear();cards_overlay_draw(0);
     capture("unknown-progress");
-    assert(at(262,332)[0]==at(250,222)[0]);
+    assert(at(CARDS_X+12,CARDS_TOP+182)[0]==at(CARDS_X+12,CARDS_TOP+44)[0]);
 
     glViewport(0,0,400,300);clear();cards_overlay_draw(0);
     bounds(1,1,0,155,400,300);capture("small-viewport-fixed");
@@ -344,7 +508,7 @@ int main(void) {
     assert(!rename(CARDS_ART_PATH,CARDS_ART_PATH ".held"));
     r.connection++;write_control(&r);cards_overlay_poll();clear();cards_overlay_draw(0);
     capture("generation-art-withdrawn");
-    assert(at(263,129)[0]!=229);
+    assert(at(CARDS_X+15,CARDS_TOP+55)[0]!=229);
     assert(!rename(CARDS_ART_PATH ".held",CARDS_ART_PATH));
 
     uploaded=uploads;
@@ -357,6 +521,7 @@ int main(void) {
     c=eglCreateContext(d,config,EGL_NO_CONTEXT,version);assert(eglMakeCurrent(d,surface,surface,c));
     glViewport(0,0,1440,455);clear();uploaded=uploads;cards_overlay_draw(0);
     assert(uploads==uploaded+1);bounds(1,1,0,0,1440,455);
+    runtime_scroll_tests(r,crc);
     cards_overlay_context_lost(c);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));assert(eglDestroyContext(d,c));
     assert(eglDestroySurface(d,surface));assert(eglTerminate(d));

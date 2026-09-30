@@ -48,7 +48,8 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 (cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \
     com.luka.carplay.rgd.VCTextScrollTest ${VC_UNICODE_TEST_DIR:+"$VC_UNICODE_TEST_DIR"})
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" DestinationTimeZoneTest
+"$JDK_DIR/bin/java" -Xverify:none -Dmap.cards.fixture.dir="$PROJECT_DIR/build/mmi-tests" \
+    -cp "$TEST_DIR:$CLASSPATH" DestinationTimeZoneTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteGuidanceDeltaTest
 # This probe loads additional IBM J9 classes reconstructed from the stock JXE.

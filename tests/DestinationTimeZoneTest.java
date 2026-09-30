@@ -34,6 +34,18 @@ public final class DestinationTimeZoneTest {
         m.invoke(rg,CarplayBus.parseText(bytes,bytes.length));
     }
     static RouteGuidance.State state(RouteGuidance rg)throws Exception{return (RouteGuidance.State)field(RouteGuidance.class,"state").get(rg);}
+    static void cardFixture(String name,String[] text)throws Exception {
+        String directory=System.getProperty("map.cards.fixture.dir");
+        if(directory==null)return;
+        MapCards.Snapshot snapshot=new MapCards.Snapshot();
+        snapshot.trip=true;snapshot.connection=7;snapshot.tripText=text;
+        Method encode=Class.forName("com.luka.carplay.settings.MapCardControl").getDeclaredMethod(
+            "encode",MapCards.Snapshot.class,int.class,long.class);
+        encode.setAccessible(true);
+        Files.createDirectories(Paths.get(directory));
+        Files.write(Paths.get(directory,"map-cards-arrival-"+name+".txt"),
+            ((String)encode.invoke(null,snapshot,123,4000L)).getBytes("US-ASCII"));
+    }
     static void render(BAPBridge bridge,Output out,RouteGuidance.State state,int offset,String clock)throws Exception {
         state.markAllDirtyForReplay();
         check(bridge.refreshInfoPresentation(state,1),"clock presentation rejected");
@@ -90,10 +102,12 @@ public final class DestinationTimeZoneTest {
                 check(text[1].equals("10 min"),"map card duration remains UTC based");
                 check(text[2].equals("10 km"),"map card uses native destination distance formatter");
                 check(text[0].contains(" dest")== (offsets[i]!=-480),"map card destination-zone label");
+                if(i==0)cardFixture("24h",text);
             }
             DateMetric.timeFormat=11;
             String[] twelve=(String[])card.invoke(passive,-1,ETA,600L,ETA-600,330);
             check(twelve[0].startsWith("5:15 AM") && twelve[2].equals(""),"map card 12h and unknown distance");
+            cardFixture("12h",twelve);
             DateMetric.timeFormat=0;
             Distance.setSystemUnit(Distance.MILES);
             String[] imperial=(String[])card.invoke(passive,16093,ETA,600L,ETA-600,32767);

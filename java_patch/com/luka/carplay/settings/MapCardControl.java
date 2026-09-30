@@ -7,6 +7,7 @@ import java.io.*;
 /** Atomic bounded snapshots on QNX4 RAM, published only by the settings worker. */
 public final class MapCardControl {
     static final int MAX_SNAPSHOT=2048;
+    static final int PROTOCOL_VERSION=2;
     static final int CONTROL_LEASE_MS=4000;
     static final int TEXT_FIELDS=6;
     static final String CONTROL="/ramdisk/carplay_cards.control";
@@ -20,10 +21,12 @@ public final class MapCardControl {
         return out.toString();
     }
     static String encode(MapCards.Snapshot snapshot,int pid,long expiry) throws IOException {
-        StringBuffer out=new StringBuffer("CARDS1 ");
+        StringBuffer out=new StringBuffer("CARDS");
+        out.append(PROTOCOL_VERSION).append(' ');
         out.append(pid).append(' ').append(expiry).append(' ').append(Math.max(0,snapshot.connection)).append(' ')
             .append(snapshot.media?1:0).append(' ').append(snapshot.trip?1:0).append(' ')
-            .append(snapshot.progress).append(' ').append(snapshot.art).append('\n');
+            .append(snapshot.progress).append(' ').append(snapshot.art).append(' ')
+            .append(snapshot.trackRevision).append('\n');
         String[] lines={snapshot.title,snapshot.artist,snapshot.playback,
             snapshot.tripText[0],snapshot.tripText[1],snapshot.tripText[2]};
         if(lines.length!=TEXT_FIELDS)throw new IOException("Incorrect map card text fields");
