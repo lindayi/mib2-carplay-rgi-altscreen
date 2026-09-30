@@ -1,4 +1,6 @@
 import com.luka.carplay.core.CarPlayApp;
+import com.luka.carplay.cluster.AltScreenCluster;
+import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.pdc.PdcSmallStageGuard;
 import de.audi.app.terminalmode.*;
 import de.audi.app.terminalmode.audio.IAudioManager;
@@ -19,6 +21,21 @@ import java.util.*;
 /** Real ExternalEventsListener, stock debounce/property chain and SCREEN
  * commands. Only clock/job dispatch, key hardware and physical HMI are fake. */
 public final class PdcExternalEventsTest {
+    static java.lang.reflect.Field layoutField(String name) throws Exception {
+        java.lang.reflect.Field f=AltScreenCluster.class.getDeclaredField(name);f.setAccessible(true);return f;
+    }
+    static int layoutPending() throws Exception { return layoutField("pending").getInt(null); }
+    static void layoutStart() throws Exception {
+        CarplayBus bus=CarplayBus.getInstance();
+        for(String name:new String[]{"running","out","connectionGeneration"}) {
+            java.lang.reflect.Field f=CarplayBus.class.getDeclaredField(name);f.setAccessible(true);
+            f.set(bus,name.equals("running")?Boolean.TRUE:name.equals("out")
+                ?new java.io.DataOutputStream(new java.io.ByteArrayOutputStream()):Integer.valueOf(7));
+        }
+        AltScreenCluster.start();AltScreenCluster.setVideoReady(true);
+        AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+        layoutField("pending").setInt(null,0);
+    }
     static void check(boolean value, String message) { PdcResourcePolicyTest.check(value, message); }
     static <T> T edge(Class<T> type, PdcResourcePolicyTest.Call call) {
         return PdcResourcePolicyTest.proxy(type, call);
@@ -129,6 +146,31 @@ public final class PdcExternalEventsTest {
         finally { PdcSmallStageGuard.parkingStopped(); }
     }
     public static void main(String[] args) throws Exception {
+        scenario("MENU and return publishes one layout intent", () -> {
+            layoutStart();
+            Events f=new Events();
+            check(layoutPending()==0,"initial AP scheduled a redundant layout");
+            f.home();f.drain();check(layoutPending()==0,"HOME scheduled layout");
+            f.current=f.carplay;f.ap(1001);f.drain();
+            check(layoutPending()==8,"return AP did not schedule layout");
+            layoutField("pending").setInt(null,0);
+            f.ap(1001);f.drain();check(layoutPending()==0,"duplicate AP repeated layout");
+            AltScreenCluster.stop();
+        });
+        scenario("partial OPS does not masquerade as MMI return", () -> {
+            layoutStart();
+            Events f=new Events();f.ops();f.ap(1002);f.drain();f.closeOps();f.ap(1001);f.drain();
+            check(layoutPending()==0,"parking-only cycle scheduled layout");
+            AltScreenCluster.stop();
+        });
+        scenario("retired AP cannot seed replacement layout lifecycle", () -> {
+            layoutStart();
+            Events f=new Events();f.home();
+            AltScreenCluster.stop();AltScreenCluster.start();AltScreenCluster.setVideoReady(true);
+            f.drain();f.current=f.carplay;f.ap(1001);f.drain();
+            check((layoutPending()&8)==0,"old AP seeded new lifecycle return");
+            AltScreenCluster.stop();
+        });
         scenario("OPS small stage and first AP", () -> {
             Events f = new Events(); f.ops(); f.ap(1002); f.drain();
             check(f.owned() && !f.keys.active, "opening OPS lost SCREEN/input policy");

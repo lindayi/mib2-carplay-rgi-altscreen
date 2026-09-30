@@ -1,6 +1,7 @@
 package de.audi.app.terminalmode;
 
 import com.luka.carplay.core.CarPlayApp;
+import com.luka.carplay.cluster.AltScreenCluster;
 import com.luka.carplay.pdc.PdcSmallStageGuard;
 import de.audi.app.terminalmode.actionproxy.IActionProxyListener;
 import de.audi.app.terminalmode.audio.AudioConnectionState;
@@ -68,10 +69,12 @@ public class ExternalEventsListener
     private static final class ActionProxyCall {
         final int id;
         final PdcSmallStageGuard.ParkingTransition parking;
+        final AltScreenCluster.MainScreenEvent layoutEvent;
 
         ActionProxyCall(int id) {
             this.id = id;
             this.parking = id == 1002 ? PdcSmallStageGuard.captureHmiDeactivation() : null;
+            this.layoutEvent = AltScreenCluster.captureMainScreenEvent();
         }
 
         public String toString() { return String.valueOf(id); }
@@ -139,6 +142,13 @@ public class ExternalEventsListener
                                         ExternalEventsListener.this.activateScreen();
                                     }
                                     ExternalEventsListener.this.screenActive = true;
+                                    if (CarPlayApp.isActive()
+                                        && !ExternalEventsListener.this.stateHandler.getCurrentState()
+                                            .isAccessRestricted(Resource.SCREEN)
+                                        && (ExternalEventsListener.this.bigStage
+                                            || PdcSmallStageGuard.shouldKeepCarPlayScreen())) {
+                                        AltScreenCluster.onMainScreen(actionProxy.layoutEvent,true);
+                                    }
                                     break;
 
                                 case 1002:
@@ -171,6 +181,7 @@ public class ExternalEventsListener
                                     } else {
                                         ExternalEventsListener.this.hmiDeactivated();
                                         ExternalEventsListener.this.screenActive = false;
+                                        AltScreenCluster.onMainScreen(actionProxy.layoutEvent,false);
                                     }
                                     break;
 

@@ -209,6 +209,16 @@ As reported by the owner on **2026-09-27**:
 
 ### Layout request lifetime correction: vehicle confirmation still required
 
+On 2026-09-29 the owner identified a repeatable Google Maps offset trigger:
+physical MENU to Audi's main-MMI interface, then return to CarPlay. This is
+distinct from the VC View button and RGI `visible_in_app`. The candidate observes
+accepted debounced AP 1002/1001 in `ExternalEventsListener`, excluding the existing
+partial-OPS suppression branch, and coalesces one cached-session layout request
+after a 350 ms return settling delay. Capture receiver/module identity before
+debounce; reject stale events. Initial/duplicate activation is not a return.
+This is not phone-side SCREEN ownership confirmation, and its centering effect
+still needs a parked vehicle retest. Do not change stock resource arbitration.
+
 The earlier implementation sent `CMD_ALT_UICTX`/AirPlay `showUI` only on a
 video-ready edge. `AltScreenCluster` now observes live RGI independently of the
 primary `RouteGuidance` listener, so map-only mode also gets route reapplication.

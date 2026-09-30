@@ -115,6 +115,19 @@ public final class AltScreenLayoutLifecycleTest {
             flush(peer, TOP);
             for(int i=0;i<10;i++){AltScreenCluster.onPresentation(true);AltScreenCluster.flushLayout();}
             quiet(peer, "duplicate presentation or worker polling must not repeat View request");
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            AltScreenCluster.flushLayout();quiet(peer,"initial main-screen activation is only a baseline");
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),false);
+            AltScreenCluster.flushLayout();quiet(peer,"leaving for Audi MMI must not request layout");
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            AltScreenCluster.flushLayout();quiet(peer,"main-screen return must settle");
+            Thread.sleep(360);flush(peer,TOP);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            AltScreenCluster.flushLayout();quiet(peer,"duplicate main-screen activation must not resend");
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),false);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),false);
+            Thread.sleep(360);AltScreenCluster.flushLayout();quiet(peer,"leaving cancels pending return");
 
             // Later route, same video readiness; then a native reset hidden by debounce.
             route(peer, "route_state:n:0\n");
@@ -162,6 +175,8 @@ public final class AltScreenLayoutLifecycleTest {
             // No preference reload until receiver reconnect, even if HMI modules restart.
             String right = BASE + "?maneuverLayout=rightaligned";
             write(preference, right);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            Thread.sleep(360);flush(peer,TOP);
             route(peer, "route_generation:n:106\n"); flush(peer, TOP);
             AltScreenCluster.reapplyLayout(); expect(peer, TOP);
             AltScreenCluster.flushLayout(); quiet(peer, "manual action does not read saved layout");
@@ -181,6 +196,7 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.flushLayout(); quiet(peer, "retired module callback");
 
             int oldConnection = bus.connectionGeneration();
+            AltScreenCluster.MainScreenEvent oldMainScreen=AltScreenCluster.captureMainScreenEvent();
             AltScreenCluster.onPresentation(false);
             AltScreenCluster.onPresentation(true);
             Socket old = peer; peer = connect(); old.close();
@@ -189,6 +205,9 @@ public final class AltScreenLayoutLifecycleTest {
             check(!bus.sendBinary(CarplayBus.CMD_ALT_UICTX, TOP.getBytes("UTF-8"), oldConnection),
                 "stale async send accepted for replacement receiver");
             flush(peer, right);
+            AltScreenCluster.onMainScreen(oldMainScreen,false);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            Thread.sleep(360);AltScreenCluster.flushLayout();quiet(peer,"old main-screen event seeded new session");
             CarplayBus.Observer current = (CarplayBus.Observer)field(AltScreenCluster.class, "routeObserver").get(null);
             current.onFrame(oldConnection, CarplayBus.EVT_RGD_UPDATE, 0, stale, stale.length);
             AltScreenCluster.flushLayout();
@@ -200,7 +219,10 @@ public final class AltScreenLayoutLifecycleTest {
                 route(peer, "route_state:n:1\nroute_generation:n:1\n"); flush(peer, selected);
                 route(peer, "route_generation:n:2\n"); flush(peer, selected);
                 AltScreenCluster.onPresentation(false);AltScreenCluster.onPresentation(true);
+                AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),false);
+                AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
                 Thread.sleep(360);flush(peer,selected);
+                AltScreenCluster.flushLayout();quiet(peer,"View and main-screen return must coalesce");
             }
 
             Constructor<Preferences> constructor = Preferences.class.getDeclaredConstructor(File.class, File.class);
@@ -220,6 +242,7 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.flushLayout(); quiet(peer, "invalid native preferences must not fall back to top");
             Files.write(nativePreference, validPreferences); nativePrefs.refresh();
             route(peer, "route_state:n:1\n");
+            AltScreenCluster.MainScreenEvent retiredMainScreen=AltScreenCluster.captureMainScreenEvent();
             AltScreenCluster.flushLayout(); quiet(peer, "repair still requires reconnect");
             nativePrefs.set(Setting.LAYOUT, 0);
             old = peer; peer = connect(); old.close(); flush(peer, TOP);
@@ -254,6 +277,10 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.onPresentation(true);
             AltScreenCluster.stop();
             AltScreenCluster.flushLayout(); quiet(peer, "Master Off cancels pending layout");
+            AltScreenCluster.start();AltScreenCluster.setVideoReady(true);flush(peer,TOP);
+            AltScreenCluster.onMainScreen(retiredMainScreen,false);
+            AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
+            Thread.sleep(360);AltScreenCluster.flushLayout();quiet(peer,"retired module main-screen event");
             check(primaryCalls >= 75, "layout observer stole route frames from primary listener");
         } finally {
             AltScreenCluster.stop(); bus.stop();

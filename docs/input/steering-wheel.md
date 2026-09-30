@@ -59,6 +59,24 @@ also observes FctID 44 visibility and FctID 54 stage for the KDK layers - see
 
 ## Google Maps alignment: route-lifetime correction, vehicle confirmation pending
 
+**New reproducible owner report, 2026-09-29:** leave CarPlay using the physical
+main-MMI MENU button, then return to CarPlay; Google Maps becomes off-center.
+This is a main-screen transition, not the VC View button. Source now observes
+the accepted, debounced HMI deactivate/activate action-proxy pair and requests
+the connection's cached cluster layout once, after a 350 ms settling delay.
+Initial/duplicate activation and guarded partial-OPS events do not trigger it.
+Events captured for retired module/receiver generations are rejected. Stock
+screen ownership/input arbitration is unchanged; AP activation is not a
+phone-confirmed layout acknowledgement. The effect still needs vehicle testing.
+
+Parked acceptance: start a centered Google Maps route, press MENU to enter Audi
+MMI, then return to CarPlay without changing VC View, restarting navigation or
+reconnecting. Repeat three times in the same connection. Check the VC map and
+normal main-screen controls; repeat once with Apple Maps to catch regressions.
+Export diagnostics if drift remains. Look for one `reason=mmi-return` request
+(possibly coalesced with `video`, `route` or `view`) per accepted return, not a
+periodic request. Record app/iOS and installed build identity when available.
+
 On 2026-09-27 the owner reported working navigation text/distance, but intermittent
 Google Maps centering: the first one or few navigations can be centered and later
 navigation can revert to an off-center vehicle icon. No reliable trigger is known.

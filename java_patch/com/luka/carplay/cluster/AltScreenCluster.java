@@ -36,7 +36,7 @@ public final class AltScreenCluster {
     private static String uiUrlPath = UI_URL_FILE;
 
     private static final Object LOCK = new Object();
-    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4;
+    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4, MMI_RETURN = 8;
     private static boolean enabled, video;
     private static int connection = -1;
     private static int pending;
@@ -44,6 +44,8 @@ public final class AltScreenCluster {
     private static long revision;
     private static int presentation = -1;
     private static long viewChangedAt;
+    private static int mainScreen = -1;
+    private static long mainScreenChangedAt;
     private static int routeState = -1, sourceSupportsRg = -1;
     private static long routeGeneration = -1L;
     private static String sourceName;
@@ -54,6 +56,37 @@ public final class AltScreenCluster {
 
     private AltScreenCluster() {}
 
+    public static final class MainScreenEvent {
+        private final int run, generation;
+        private MainScreenEvent(int run,int generation) { this.run=run;this.generation=generation; }
+    }
+
+    /** Capture before HMI debounce so delayed events cannot affect a replacement session. */
+    public static MainScreenEvent captureMainScreenEvent() {
+        synchronized(LOCK) {
+            return new MainScreenEvent(lifecycle,CarplayBus.getInstance().connectionGeneration());
+        }
+    }
+
+    /** Accepted main-MMI action-proxy state, not RGI visible_in_app or a VC View edge. */
+    public static void onMainScreen(MainScreenEvent event,boolean active) {
+        synchronized(LOCK) {
+            if(!enabled || event==null || event.run!=lifecycle || event.generation<0
+                    || event.generation!=CarplayBus.getInstance().connectionGeneration())return;
+            useConnection(event.generation);
+            int next=active?1:0;
+            if(mainScreen==next)return;
+            int previous=mainScreen;
+            mainScreen=next;
+            if(!active)pending&=~MMI_RETURN;
+            else if(previous==0 && video) {
+                pending|=MMI_RETURN;
+                mainScreenChangedAt=System.currentTimeMillis();
+            }
+            revision++;
+        }
+    }
+
     public static void start() {
         synchronized (LOCK) {
             if (routeObserver != null)
@@ -63,6 +96,7 @@ public final class AltScreenCluster {
             video = false;
             connection = -1;
             presentation = -1;
+            mainScreen = -1;
             pending = 0;
             revision++;
             resetRoute();
@@ -99,6 +133,7 @@ public final class AltScreenCluster {
         if (connection == generation) return;
         connection = generation;
         presentation = -1;
+        mainScreen = -1;
         resetRoute();
         pending = video && generation >= 0 ? VIDEO : 0;
         revision++;
@@ -180,6 +215,8 @@ public final class AltScreenCluster {
             if (!video || generation < 0 || pending == 0) return;
             long now = System.currentTimeMillis();
             if ((pending & VIEW) != 0 && now >= viewChangedAt && now - viewChangedAt < 350L) return;
+            if ((pending & MMI_RETURN) != 0 && now >= mainScreenChangedAt
+                    && now - mainScreenChangedAt < 350L) return;
             request = revision;
             load = urlConnection != generation;
             url = sessionUrl;
@@ -201,6 +238,7 @@ public final class AltScreenCluster {
             String reason = (reasons & VIDEO) != 0 ? "video" : "";
             if ((reasons & ROUTE) != 0) reason += (reason.length() == 0 ? "" : "+") + "route";
             if ((reasons & VIEW) != 0) reason += (reason.length() == 0 ? "" : "+") + "view";
+            if ((reasons & MMI_RETURN) != 0) reason += (reason.length() == 0 ? "" : "+") + "mmi-return";
             boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes, generation);
             if (sent) pending = 0;
             Log.i(TAG, "cluster showUI " + (sent ? "queued" : "not queued")
