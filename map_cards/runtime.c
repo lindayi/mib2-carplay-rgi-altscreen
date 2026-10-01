@@ -103,7 +103,7 @@ void cards_overlay_poll(void) {
          scroll.title!=painted_scroll.title || scroll.artist!=painted_scroll.artist);
     if(repaint) {
         if(!cards_painter_init(&painter)) {
-            error="FONT_ALLOCATION_ERROR";diagnostic(0,error,0);
+            error="PAINTER_ALLOCATION_ERROR";diagnostic(0,error,0);
         } else {
             unsigned omitted=cards_paint(&painter,&request,&artwork,scroll,buffers[back]);
             if(omitted)diagnostic(2,"UNSUPPORTED_TEXT_OMITTED",omitted);
@@ -129,8 +129,8 @@ void cards_overlay_draw(int menu_visible) {
     }
     GLint viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);
     int refresh=texture_serial!=image_serial || memcmp(viewport,texture_viewport,sizeof(viewport));
-    int good=mascot_draw_image_at(&graphics,buffers[front],CARDS_WIDTH,CARDS_IMAGE_HEIGHT,
-                                 CARDS_X,CARDS_TOP,refresh);
+    int good=mascot_draw_image_at(&graphics,buffers[front],CARDS_IMAGE_WIDTH,CARDS_IMAGE_HEIGHT,
+                                 CARDS_X-CARDS_SHADOW_PAD,CARDS_TOP-CARDS_SHADOW_PAD,refresh);
     if(good){texture_serial=image_serial;memcpy(texture_viewport,viewport,sizeof(viewport));}
     graphics_error=!good;
     pthread_mutex_unlock(&mutex);

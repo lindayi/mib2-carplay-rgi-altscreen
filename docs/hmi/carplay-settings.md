@@ -146,8 +146,8 @@ Text is bounded to 128 UTF-8 bytes per field, with grapheme-safe truncation.
 Overflowing title and artist lines scroll independently at 20 video pixels/second:
 pause 1.8 seconds at the start, reveal the end, pause there 1.8 seconds, then repeat.
 Short text stays stationary. Scrolling reveals only the bounded transported text,
-not an unlimited title. Each line is clipped to its own rectangle above the dial
-cutout. An observed title/artist/album/duration change resets both lines; playback,
+not an unlimited title. Each line is clipped to its own rectangle above the black
+lower base. An observed title/artist/album/duration change resets both lines; playback,
 artwork and Trip updates do not. Re-enabling media or recovering a lost native
 worker/video lease starts the lines again. Metadata has no true track identifier:
 indistinguishable repeated tracks cannot reliably be detected.
@@ -163,19 +163,40 @@ can move the bar backward. Unknown distance or a zero initial distance produces
 no bar. Receiver reconnect, a new route generation, changed destination/source
 and route end reset it. Toggling a card, changing View, or visiting Audi main MMI
 does not reset the baseline. The card disappears outside active route states.
+The Trip heading is separate from the smaller, muted **Estimated progress**
+caption directly above the bar. ETA, remaining time, caption and bar share a left
+edge; distance is right-aligned on the normal compact row. Exceptionally long
+values use two smaller rows above the caption. Unknown progress hides both its
+caption and bar.
 
-Cards share one fixed, translucent, curved pocket. At 1440x455 its estimated
-bounds are `(139,70), 210x240`, measured from the top-left, with background alpha
-220/255. Its upper outer shoulder slopes inward; the lower center excludes a
-circle centered at `(244,385)` with radius 124. The horizontal anchor mirrors the
-known right KDK content reference `(1091,110), 210x153`; the full skin/cutout and
-alignment to displayable 3 are photo-based estimates, not measured Audi masks.
+Cards share one fixed RGI-inspired frame. At 1440x455 its bounds are
+`(119,70), 230x256`, measured from the top-left. The extra 20 pixels of width
+extend left, keeping the preceding frame's map-facing edge at x349. Its upper
+outer shoulder slopes inward over 70 pixels to a 44-pixel-high cap. The title's
+actual glyph bounds are centered within that flat cap, including Paused/Stopped
+and the Trip-only heading.
+
+The content body retains alpha 220/255. The shaded cap, bevel and rectangular
+black lower base are opaque; there is **no software-drawn circular cutout**.
+The base extends to y326, while content stays above the lower divider at y270;
+Audi's own dial remains in front. A thin top/left highlight, darker inner and
+right/bottom edges, paired rules and a small soft shadow approximate the RGI
+style. Lighting is not mirrored with the outline. This is procedural artwork,
+not an extracted OEM skin.
+
+The owner's September 30 photo showed the preceding curved version in the car
+and exposed its mismatched cutout. It did not independently read back a build ID
+or validate all behavior. The earlier 210-pixel width came from the known right
+KDK **content crop**, not a measurement of the complete visible Audi frame.
+The wider geometry, height and skin are photo-derived candidates, not calibrated
+vehicle masks; the new result still needs parked confirmation.
+
 Both on gives compact music and Trip sections. Music-only uses larger artwork
 (64 rather than 44 video pixels) and full-width title/artist rows; without artwork
 the text moves higher. Trip-only gives ETA, remaining time and distance separate,
 larger rows. Both Off removes the entire pocket. Missing media/route data uses
 the same single-section layouts; neither leaves an empty disabled section.
-The outer position and silhouette stay unchanged. Both temporarily hide
+The outer position and silhouette stay unchanged between these states. Both temporarily hide
 while the VC settings panel is actually drawn, so the expanded mascot chooser
 cannot cover only part of a card.
 The moving mascot remains underneath the cards and can pass behind them.
@@ -195,7 +216,11 @@ Java and native must be upgraded together; old/mixed versions are rejected.
 Arrival validation accepts the formatter's 24-hour and AM/PM clocks, including
 its ` dest` suffix. The native worker reads/paints and advances scrolling from
 monotonic time; unchanged offsets reuse the existing texture, including endpoint
-pauses and short labels. GL callbacks do no file
+pauses and short labels. The frame and shadow are generated once per painter and
+copied from a cached premultiplied RGBA image while text scrolls. A six-pixel pad
+keeps the shadow inside a 242x268 texture drawn at `(113,64)` without shifting or
+scaling the visible frame. Painter allocation failure withdraws the overlay and
+logs an explicit error; there is no partial-success fallback. GL callbacks do no file
 I/O. The control file contains media metadata: diagnostics summary reports only
 its presence, not its contents. **CONTROL_PUBLISHED is not presentation proof.**
 The native worker's render lease is at most one second; a stalled worker cannot
@@ -206,8 +231,8 @@ mirror log, included only in the private full export.
 For parked acceptance, enable each card separately and then both. Check play,
 pause, track/artwork changes, route start/stop and receiver reconnect. Check long
 title/artist endpoints, a short track afterward, and the HU's 12/24-hour time setting.
-Photograph
-wide and small-map Views without moving the cards; check title/artist readability,
+Photograph wide and small-map Views without moving the cards; check the wider
+frame, rectangular base, centered headers, caption clearance and title/artist readability,
 Audi-dial coverage, right-side guidance and the lower Audi bar. Open the ordinary
 VC menu and mascot chooser, then close them to confirm card restoration. Toggle
 both Off and confirm the original map presentation returns without reconnecting.

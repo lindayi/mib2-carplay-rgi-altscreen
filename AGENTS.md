@@ -437,11 +437,25 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   across View changes: the owner's requested behavior is downstream Audi dial
   occlusion, not responsive movement inward. The owner accepted provisional
   placement pending parked calibration; no exact dial mask is established.
-- The curved candidate shares `(139,70), 210x240`, alpha 220/255, with a lower
-  circular exclusion centered `(244,385)`, radius 124. Only the mirrored KDK
-  content reference `(139,110), 210x153` is source-backed; skin, circle and
-  displayable-3 registration remain photo estimates. Single-section layouts use
-  the same outer pocket; both Off draws nothing. Do not move the right RGI planes.
+- The owner's 2026-09-30 in-car photo shows music/Trip cards and a mismatched
+  artificial dial cutout; it does not independently identify the installed build
+  or establish scrolling/lifecycle behavior. The approved replacement is a
+  230x256 frame at `(119,70)`: expand left while retaining the old right edge
+  at x349, with a straight, opaque-black lower base instead of any dial cutout.
+  Only the old mirrored KDK content reference `(139,110), 210x153` is source-backed;
+  it is not a measurement of the complete Audi frame. New placement/skin remain
+  photo-derived and need parked confirmation. Never move the right RGI planes.
+- Cache the procedural RGI-inspired frame on painter initialization: top/left
+  highlights, dark inner/right/bottom bevel, shaded cap, separators and a bounded
+  soft shadow. Mirror the outline, not the lighting direction. The six-pixel
+  transparent pad is texture space, not a position shift: draw its 242x268 image
+  at `(113,64)` so the frame remains at `(119,70)`. No per-scroll-frame blur or
+  extra EGL swaps. Both Off removes the frame and shadow; single-section layouts
+  retain the same frame. Center header ink in the flat cap, not its baseline.
+- Keep Trip's heading separate from its smaller Estimated progress caption,
+  directly above the bar and aligned with the ETA/time left edge. Unknown
+  progress hides both caption and bar. Fit long-value fallback rows above the
+  caption; never use the black lower base as extra text space behind Audi's dial.
 - Overflow title/artist scroll independently at 20 pixels/second with 1.8-second
   endpoint pauses, clipped per line. Advance on the existing worker's monotonic
   clock; repaint only changed content/offsets, without extra EGL swaps. `CARDS2`

@@ -55,9 +55,10 @@ static void wait_cards(int media,int trip) {
     do {
         frame();
         int matches=1;
-        for(int y=0;y<CARDS_IMAGE_HEIGHT && matches;y++)for(int x=0;x<CARDS_WIDTH;x++) {
-            const unsigned char *src=expected+((size_t)y*CARDS_WIDTH+x)*4;
-            const unsigned char *actual=pixels+((454-CARDS_TOP-y)*1440+CARDS_X+x)*4;
+        for(int y=0;y<CARDS_IMAGE_HEIGHT && matches;y++)for(int x=0;x<CARDS_IMAGE_WIDTH;x++) {
+            const unsigned char *src=expected+((size_t)y*CARDS_IMAGE_WIDTH+x)*4;
+            const unsigned char *actual=pixels+((454-CARDS_TOP+CARDS_SHADOW_PAD-y)*1440+
+                CARDS_X-CARDS_SHADOW_PAD+x)*4;
             const unsigned background[]={102,153,204};
             for(unsigned c=0;c<3;c++) {
                 int composed=src[c]+(background[c]*(255-src[3])+127)/255;

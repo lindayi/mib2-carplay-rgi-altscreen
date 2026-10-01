@@ -60,9 +60,11 @@ The root contains Enabled, Display mode, Map layout, Map mascot and More setting
 More provides Guidance, Appearance, Information bar, Controls, Reapply map
 layout and Map cards. Map cards independently toggles the passive Now Playing
 and estimated Trip cards, both default Off; it does not change input ownership.
-They share a fixed curved left pocket: one section expands inside it when the
+They share a fixed, RGI-inspired left frame with a rectangular black lower base
+and no artificial dial cutout: one section expands inside it when the
 other is unavailable or Off, and both Off removes it. Long media title/artist
-lines scroll independently. The pocket's intended Audi-dial masking still needs
+lines scroll independently. The progress caption sits directly above its bar,
+aligned with the ETA/time text. The frame's intended Audi-dial masking still needs
 parked calibration; switching View never moves it inward.
 These use the same `Setting` definitions, `Preferences` snapshots and
 asynchronous `SettingsRuntime` save/action path as main MMI, not a second settings

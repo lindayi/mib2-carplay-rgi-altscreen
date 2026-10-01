@@ -13,6 +13,18 @@
 static uint64_t mono=10000,wall=100000;
 static unsigned uploads,queries;
 static int fail_texture;
+static int allocations,fail_after=-1;
+static cards_painter geometry;
+void *__real_malloc(size_t size);
+void *__wrap_malloc(size_t size) {
+    allocations++;
+    if(fail_after==0)return NULL;
+    if(fail_after>0)fail_after--;
+    return __real_malloc(size);
+}
+static size_t pixel_index(int x,int y) {
+    return ((size_t)(y+CARDS_SHADOW_PAD)*CARDS_IMAGE_WIDTH+x+CARDS_SHADOW_PAD)*4;
+}
 static pthread_mutex_t stall_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t stall_cond=PTHREAD_COND_INITIALIZER;
 static int stall,entered,released;
@@ -252,12 +264,13 @@ static void bounds(int media,int trip,int viewport_x,int viewport_top,int width,
         assert(at(x,y)[3]==94);
         int local_x=x-viewport_x,local_y=y-viewport_top;
         int card_x=local_x-CARDS_X,card_y=local_y-CARDS_TOP;
-        float dx=card_x-104.5f,dy=card_y-314.5f;
-        int expected=(media || trip) && card_x>=0 && card_x<210 && card_y>=0 && card_y<240 &&
-            (card_x>=99 || card_y*99>=(99-card_x)*40) && dx*dx+dy*dy>=124*124 &&
-            local_x<width && local_y>=0 && local_y<height &&
-            local_x>=0;
+        int in_image=card_x>=-CARDS_SHADOW_PAD && card_x<CARDS_WIDTH+CARDS_SHADOW_PAD &&
+            card_y>=-CARDS_SHADOW_PAD && card_y<CARDS_HEIGHT+CARDS_SHADOW_PAD;
+        int expected=(media || trip) && in_image && local_x>=0 && local_x<width &&
+            local_y>=0 && local_y<height && geometry.frame[pixel_index(card_x,card_y)+3]!=0;
         assert(changed(x,y)==expected);
+        if((media || trip) && card_x>=4 && card_x<226 && card_y>=48 && card_y<252 &&
+                local_x>=0 && local_x<width && local_y>=0 && local_y<height)assert(changed(x,y));
         changed_count+=changed(x,y);
     }
     assert(changed_count || (!media && !trip));
@@ -268,6 +281,78 @@ static void no_gl(int menu) {
     assert(queries==before && uploads==uploaded);
 }
 static void *blocked_worker(void *unused) {(void)unused;cards_overlay_poll();return NULL;}
+static void frame_tests(void) {
+    assert(CARDS_X==119 && CARDS_WIDTH==230 && CARDS_X+CARDS_WIDTH==349);
+    assert(CARDS_HEIGHT==256 && CARDS_TOP==70);
+    for(int failure=0;failure<2;failure++) {
+        cards_painter failed={0};fail_after=failure;
+        assert(!cards_painter_init(&failed) && !failed.font && !failed.frame);
+        fail_after=-1;cards_painter_destroy(&failed);
+    }
+    assert(cards_painter_init(&geometry));
+    unsigned char *frame=geometry.frame,*font=geometry.font;
+    int before=allocations;
+    assert(cards_painter_init(&geometry) && allocations==before);
+    assert(geometry.frame==frame && geometry.font==font);
+    uint32_t crc=cards_crc32(frame,CARDS_IMAGE_BYTES);
+    for(int y=205;y<252;y++)for(int x=4;x<226;x++) {
+        const unsigned char *p=frame+pixel_index(x,y);
+        assert(!p[0] && !p[1] && !p[2] && p[3]==255);
+    }
+    assert(!cards_inside(0,0) && cards_inside(0,44) && cards_inside(115,255));
+    assert(!frame[pixel_index(-6,-6)+3]);
+    assert(frame[pixel_index(20,31)+3]>0 && frame[pixel_index(20,31)+3]<255);
+    unsigned prior=255;
+    for(int x=230;x<=233;x++) {
+        const unsigned char *p=frame+pixel_index(x,100);
+        assert(!p[0] && !p[1] && !p[2] && p[3]>0 && p[3]<prior);
+        prior=p[3];
+    }
+    assert(!frame[pixel_index(235,100)+3]);
+    assert(frame[pixel_index(1,100)]>frame[pixel_index(228,100)]);
+    assert(frame[pixel_index(100,1)]>frame[pixel_index(100,254)]);
+    cards_request r={.media=1,.trip=1,.progress=630};
+    strcpy(r.text[3],"6:57 PM");strcpy(r.text[4],"7 min");strcpy(r.text[5],"1.9 km");
+    cards_scroll zero={0};
+    unsigned char with[CARDS_IMAGE_BYTES],without[CARDS_IMAGE_BYTES];
+    assert(!cards_paint(&geometry,&r,NULL,zero,with));
+    r.progress=-1;assert(!cards_paint(&geometry,&r,NULL,zero,without));
+    int minx=230,maxx=0,miny=256,maxy=0;
+    for(int y=-CARDS_SHADOW_PAD;y<CARDS_HEIGHT+CARDS_SHADOW_PAD;y++)
+        for(int x=-CARDS_SHADOW_PAD;x<CARDS_WIDTH+CARDS_SHADOW_PAD;x++) {
+            size_t i=pixel_index(x,y);
+            if(!memcmp(with+i,without+i,4))continue;
+            assert(x>=12 && x<218 && ((y>=176 && y<192) || (y>=194 && y<197)));
+            if(y<192) {
+                if(x<minx)minx=x;
+                if(x>maxx)maxx=x;
+                if(y<miny)miny=y;
+                if(y>maxy)maxy=y;
+            }
+        }
+    assert(minx>=12 && minx<=14 && maxx-minx>95 && maxy-miny>=8 && maxy<=191);
+    for(int y=194;y<197;y++)for(int x=12;x<218;x++) {
+        const unsigned char *p=with+pixel_index(x,y);
+        assert(p[0]==(x<12+206*630/1000?217:104) && p[3]==255);
+    }
+    const char *headings[]={"Playing","Paused","Stopped",""};
+    for(unsigned i=0;i<5;i++) {
+        r.media=i<4;strcpy(r.text[2],headings[i%4]);
+        assert(!cards_paint(&geometry,&r,NULL,zero,with));
+        minx=230;maxx=0;miny=44;maxy=0;
+        for(int y=0;y<44;y++)for(int x=70;x<230;x++) {
+            const unsigned char *p=with+pixel_index(x,y);
+            if(p[0]<210 || p[1]<210 || p[2]<210)continue;
+            if(x<minx)minx=x;
+            if(x>maxx)maxx=x;
+            if(y<miny)miny=y;
+            if(y>maxy)maxy=y;
+        }
+        assert(maxx>minx && maxy>miny);
+        assert(abs(minx+maxx-299)<=2 && abs(miny+maxy-43)<=2);
+    }
+    assert(allocations==before && cards_crc32(frame,CARDS_IMAGE_BYTES)==crc);
+}
 static void scroll_tests(cards_painter *painter,cards_request r) {
     assert(cards_scroll_offset(0,UINT64_MAX)==0 && cards_scroll_offset(-12,3000)==0);
     assert(cards_scroll_offset(100,0)==0 && cards_scroll_offset(100,1800)==0);
@@ -282,10 +367,11 @@ static void scroll_tests(cards_painter *painter,cards_request r) {
     assert(step.title>0 && step.artist>0);
     assert(!cards_paint(painter,&r,NULL,step,moving));
     unsigned title_changed=0,artist_changed=0;
-    for(int y=0;y<CARDS_IMAGE_HEIGHT;y++)for(int x=0;x<CARDS_WIDTH;x++) {
-        size_t i=((size_t)y*CARDS_WIDTH+x)*4;
+    for(int y=-CARDS_SHADOW_PAD;y<CARDS_HEIGHT+CARDS_SHADOW_PAD;y++)
+        for(int x=-CARDS_SHADOW_PAD;x<CARDS_WIDTH+CARDS_SHADOW_PAD;x++) {
+        size_t i=pixel_index(x,y);
         if(memcmp(start+i,moving+i,4)) {
-            assert(x>=12 && x<198 && y>=53 && y<108);
+            assert(x>=12 && x<218 && y>=53 && y<108);
             if(y<81)title_changed++;else artist_changed++;
         }
     }
@@ -297,9 +383,9 @@ static void scroll_tests(cards_painter *painter,cards_request r) {
     }
     r.text[0][0]=0;assert(!cards_paint(painter,&r,NULL,zero,empty));
     strcpy(r.text[0],"W");assert(!cards_paint(painter,&r,NULL,zero,start));
-    int x0=198,x1=0,y0=81,y1=53;
-    for(int y=53;y<81;y++)for(int x=12;x<198;x++) {
-        size_t i=((size_t)y*CARDS_WIDTH+x)*4;
+    int x0=218,x1=0,y0=81,y1=53;
+    for(int y=53;y<81;y++)for(int x=12;x<218;x++) {
+        size_t i=pixel_index(x,y);
         if(memcmp(start+i,empty+i,4)) {
             if(x<x0)x0=x;
             if(x>x1)x1=x;
@@ -315,11 +401,10 @@ static void scroll_tests(cards_painter *painter,cards_request r) {
     }
     assert(end.title>100);assert(!cards_paint(painter,&r,NULL,end,moving));
     int found=0;
-    for(int x=160;x+(x1-x0)<198;x++) {
+    for(int x=180;x+(x1-x0)<218;x++) {
         int matches=1;
         for(int y=y0;y<=y1 && matches;y++)for(int dx=0;dx<=x1-x0;dx++)
-            if(memcmp(start+((size_t)y*CARDS_WIDTH+x0+dx)*4,
-                      moving+((size_t)y*CARDS_WIDTH+x+dx)*4,4)){matches=0;break;}
+            if(memcmp(start+pixel_index(x0+dx,y),moving+pixel_index(x+dx,y),4)){matches=0;break;}
         if(matches)found=1;
     }
     assert(found); /* The complete last glyph, including its ink bearing, is visible at the endpoint. */
@@ -329,8 +414,9 @@ static void assert_frame(cards_painter *painter,const cards_request *r,const car
     assert(!cards_paint(painter,r,art,cards_scroll_at(r,art,elapsed),expected));
     clear();cards_overlay_draw(0);capture(NULL);
     const unsigned background[]={102,153,204};
-    for(int y=0;y<CARDS_IMAGE_HEIGHT;y++)for(int x=0;x<CARDS_WIDTH;x++) {
-        const unsigned char *src=expected+((size_t)y*CARDS_WIDTH+x)*4,*actual=at(CARDS_X+x,CARDS_TOP+y);
+    for(int y=0;y<CARDS_IMAGE_HEIGHT;y++)for(int x=0;x<CARDS_IMAGE_WIDTH;x++) {
+        const unsigned char *src=expected+((size_t)y*CARDS_IMAGE_WIDTH+x)*4;
+        const unsigned char *actual=at(CARDS_X-CARDS_SHADOW_PAD+x,CARDS_TOP-CARDS_SHADOW_PAD+y);
         for(unsigned c=0;c<3;c++) {
             int composed=src[c]+(background[c]*(255-src[3])+127)/255;
             assert(abs((int)actual[c]-composed)<=1);
@@ -392,12 +478,13 @@ static void runtime_scroll_tests(cards_request r,uint32_t crc) {
     }
     strcpy(r.text[3],"5:15 AM dest");strcpy(r.text[4],"1193046 h 28 min");strcpy(r.text[5],"999999 mi");
     write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,&art,0);capture("long-trip-values");
-    assert(at(CARDS_X+12,CARDS_TOP+181)[0]==at(CARDS_X+12,CARDS_TOP+44)[0]);
+    assert(at(CARDS_X+12,CARDS_TOP+193)[0]==at(CARDS_X+12,CARDS_TOP+50)[0]);
     r.trip=0;r.art_crc=0;write_control(&r);cards_overlay_poll();assert_frame(&painter,&r,NULL,0);
     capture("music-only-no-art");
     cards_art_free(&art);cards_painter_destroy(&painter);
 }
 int main(void) {
+    frame_tests();
     parse_tests();
     shared_fixture_tests();
     uint32_t crc=file_crc(CARDS_ART_PATH);artwork_tests(crc);
@@ -409,10 +496,10 @@ int main(void) {
     unsigned char bitmap[CARDS_IMAGE_BYTES],other[CARDS_IMAGE_BYTES];
     cards_scroll zero={0};
     assert(!cards_paint(&painter,&r,NULL,zero,bitmap));
-    const unsigned char *fill=bitmap+(44*CARDS_WIDTH+12)*4;
-    assert(fill[3]==220 && fill[0]==16 && fill[1]==18 && fill[2]==22);
-    assert(!bitmap[3] && !bitmap[(191*CARDS_WIDTH+105)*4+3]);
-    assert(bitmap[(190*CARDS_WIDTH+105)*4+3] && bitmap[(239*CARDS_WIDTH)*4+3]);
+    const unsigned char *fill=bitmap+pixel_index(12,50);
+    assert(fill[3]==220 && fill[0]==18 && fill[1]==21 && fill[2]==22);
+    assert(!bitmap[3] && bitmap[pixel_index(105,191)+3]);
+    assert(bitmap[pixel_index(115,250)+3]==255);
     int opaque=0;
     for(size_t i=0;i<sizeof(bitmap);i+=4) {
         assert(bitmap[i]<=bitmap[i+3] && bitmap[i+1]<=bitmap[i+3] && bitmap[i+2]<=bitmap[i+3]);
@@ -453,8 +540,8 @@ int main(void) {
     write_control(&r);cards_overlay_poll();cards_overlay_draw(0);
     snapshot(&after);assert(!memcmp(&before,&after,sizeof(before)));
     assert(glGetError()==GL_NO_ERROR);bounds(1,1,0,0,1440,455);capture("both-no-art");
-    const unsigned char *body=at(CARDS_X+12,CARDS_TOP+44);
-    assert(body[0]>=29 && body[0]<=31 && body[1]>=38 && body[1]<=40 && body[2]>=49 && body[2]<=51);
+    const unsigned char *body=at(CARDS_X+12,CARDS_TOP+50);
+    assert(body[0]>=31 && body[0]<=33 && body[1]>=41 && body[1]<=43 && body[2]>=49 && body[2]<=51);
     unsigned uploaded=uploads;
     for(unsigned i=0;i<20;i++)cards_overlay_draw(0);
     assert(uploads==uploaded);
@@ -472,7 +559,7 @@ int main(void) {
     bounds(1,1,0,0,1440,455);capture("art-failure-text");
     r.art_crc=0;r.progress=-1;write_control(&r);cards_overlay_poll();clear();cards_overlay_draw(0);
     capture("unknown-progress");
-    assert(at(CARDS_X+12,CARDS_TOP+182)[0]==at(CARDS_X+12,CARDS_TOP+44)[0]);
+    assert(at(CARDS_X+12,CARDS_TOP+194)[0]==at(CARDS_X+12,CARDS_TOP+50)[0]);
 
     glViewport(0,0,400,300);clear();cards_overlay_draw(0);
     bounds(1,1,0,155,400,300);capture("small-viewport-fixed");
@@ -526,6 +613,7 @@ int main(void) {
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));assert(eglDestroyContext(d,c));
     assert(eglDestroySurface(d,surface));assert(eglTerminate(d));
     unlink(CARDS_CONTROL_PATH);unlink("/ramdisk/cards-test.ready");
+    cards_painter_destroy(&geometry);
     puts("Map cards: strict protocol/artwork, real GLES alpha/state/fixed placement/cache, toggles, stale/stalled leases, context reuse PASS");
     return 0;
 }

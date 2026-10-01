@@ -19,7 +19,7 @@ cc -D_GNU_SOURCE -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,unde
     map_cards/test.c map_cards/protocol.c map_cards/paint.c map_cards/artwork.c map_cards/runtime.c \
     mascot/draw.c mascot/assets.c \
     -Wl,--wrap=glTexImage2D -Wl,--wrap=glGetIntegerv -Wl,--wrap=clock_gettime \
-    -Wl,--wrap=gettimeofday -Wl,--wrap=read \
+    -Wl,--wrap=gettimeofday -Wl,--wrap=read -Wl,--wrap=malloc \
     -lEGL -lGLESv2 -lm -pthread -o build/map-card-tests/test
 ASAN_OPTIONS=detect_leaks=0 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
     build/map-card-tests/test

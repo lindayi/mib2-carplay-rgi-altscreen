@@ -9,11 +9,14 @@
 #define CARDS_TEXT_FIELDS 6
 #define CARDS_CONTROL_LEASE_MS 4000
 #define CARDS_WORKER_LEASE_MS 1000
-#define CARDS_X 139
+#define CARDS_X 119
 #define CARDS_TOP 70
-#define CARDS_WIDTH 210
-#define CARDS_IMAGE_HEIGHT 240
-#define CARDS_IMAGE_BYTES (CARDS_WIDTH*CARDS_IMAGE_HEIGHT*4)
+#define CARDS_WIDTH 230
+#define CARDS_HEIGHT 256
+#define CARDS_SHADOW_PAD 6
+#define CARDS_IMAGE_WIDTH (CARDS_WIDTH+2*CARDS_SHADOW_PAD)
+#define CARDS_IMAGE_HEIGHT (CARDS_HEIGHT+2*CARDS_SHADOW_PAD)
+#define CARDS_IMAGE_BYTES (CARDS_IMAGE_WIDTH*CARDS_IMAGE_HEIGHT*4)
 #define CARDS_BODY_ALPHA 220
 #define CARDS_SCROLL_PAUSE_MS 1800
 #define CARDS_SCROLL_PIXELS_PER_SECOND 20
@@ -31,7 +34,7 @@ typedef struct {
     unsigned char *pixels;
     unsigned width,height;
 } cards_art;
-typedef struct { unsigned char *font; } cards_painter;
+typedef struct { unsigned char *font,*frame; } cards_painter;
 typedef struct { int title,artist; } cards_scroll;
 
 int cards_decode(const char *data,size_t size,uint64_t now,unsigned pid,cards_request *out);
