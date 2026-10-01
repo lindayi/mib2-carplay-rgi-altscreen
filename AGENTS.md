@@ -485,6 +485,34 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   otherwise valid complete card snapshots. Keep Java-formatter-to-native
   fixtures; host rendering/fixture success is not vehicle confirmation.
 
+### Speed-badge data-source investigation
+
+- Exact MU1316 has numeric speed in `DSICarVehicleStates` attribute 14:
+  `DynamicVehicleInfoHighFrequent.vehicleSpeed` and `realVehicleSpeed` are
+  `CarBCSpeed` values with independent value-state and units. Valid value-state
+  is 1; speed units are 0=km/h, 1=mph, unlike `metrics.Speed`'s 1/2 enums.
+  Do not assume either field matches the cockpit number until compared on-car.
+  Stock `AbstractMenuStateComponent` changes `setCarMenuState` with Car-menu
+  visibility; whether the numeric feed continues in CarPlay must be measured,
+  not worked around by overriding that stock state.
+- `DSITrafficRegulation` attribute 3 provides current signs and
+  `highestPrioritySpeedLimit` with value/type/unit. Advisory speeds, country
+  defaults and upcoming-route signs are not necessarily the current legal limit.
+  `DSICarDriverAssistance` TSD signs also carry effective/source/unit flags and
+  conditional-sign data; their presence in the JAR does not establish fitted
+  recognition hardware, feature enablement or live sign delivery.
+- Prefer an independent passive DSI listener. Stock `requestCurrentSpeedLimit`
+  can enable traffic-regulation info when disabled; it is not a read-only poll.
+  `registerCurrentTrafficSignObserver` replaces one OEM observer, not a multicast
+  list. Cached limit getters do not establish freshness or clear on invalid
+  callbacks. Do not change Audi settings/coding or start native route guidance
+  merely to populate this badge.
+- The September 28 export confirms registration of all three DSI services, not
+  valid numeric/sign payloads. Known decoded CarPlay RGI has neither value;
+  native limits would be Audi-derived, not Google's. Private exact-stock evidence
+  is in `carplay-build-inputs\speed-source-study-20260930`. No speed-data listener
+  or badge is implemented by this investigation; live availability remains open.
+
 ### Optional map mascots
 
 - Optional map mascots belong inside displayable 3's existing video canvas, not
