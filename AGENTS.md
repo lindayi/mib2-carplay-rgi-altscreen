@@ -501,6 +501,16 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   `DSICarDriverAssistance` TSD signs also carry effective/source/unit flags and
   conditional-sign data; their presence in the JAR does not establish fitted
   recognition hardware, feature enablement or live sign delivery.
+- Keep subscription dependencies separate from DSI service registration. The
+  North American 2020 Q5 manual distinguishes camera/navigation-based sign
+  recognition (pp.114-115) from traffic-light information, which can be unavailable
+  after subscription expiry (p.116), and online traffic requiring Audi connect
+  Infotainment (pp.208,234). The sign-recognition section does not list a connect
+  subscription prerequisite; that is not proof of this unit's fitted/enabled
+  feature or usable offline limits. `NAVDBRAWDATA`/`VZO_OFFLINE`/`VZO_ONLINE`
+  source enums and TSD camera/database/fusion flags are not entitlement checks.
+  Observe effective source/validity under the actual configuration; never
+  promise subscription-free limits or toggle/enable paid services to obtain them.
 - Prefer an independent passive DSI listener. Stock `requestCurrentSpeedLimit`
   can enable traffic-regulation info when disabled; it is not a read-only poll.
   `registerCurrentTrafficSignObserver` replaces one OEM observer, not a multicast
