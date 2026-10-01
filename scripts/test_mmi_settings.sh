@@ -25,7 +25,8 @@ javac -cp "$CP:$ASM" -d /tmp /src/tests/PreferencesTest.java /src/tests/NativeMe
     /src/tests/JavaStockLinkageAudit.java /src/tests/TouchpadControllerTest.java /src/tests/SettingsRuntimeTest.java \
     /src/tests/MascotControlTest.java /src/tests/NativeMenuThreadTest.java /src/tests/JavaLogRotationTest.java \
     /src/tests/SteeringWheelTraceTest.java /src/tests/NativeMenuPresentationTest.java /src/tests/VcPanelTest.java \
-    /src/tests/VcPanelWorkerTest.java /src/tests/MapCardsTest.java /src/tests/MapCardControlTest.java
+    /src/tests/VcPanelWorkerTest.java /src/tests/MapCardsTest.java /src/tests/MapCardControlTest.java \
+    /src/tests/SpeedSourceDiagnosticsTest.java
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP JavaLogRotationTest
 java -cp /tmp:$CP com.luka.carplay.settings.PreferencesTest /src/build/mmi-tests/preferences /src/tests/fixtures/carplay-preferences.txt
 java -cp /tmp:$ASM PatchNavigationSettingsTest /tools/out/$STOCK_JAR_NAME
@@ -36,6 +37,7 @@ java -Xmx1g -cp /tmp:$ASM JavaStockLinkageAudit /src/build/carplay_hook.jar /too
     /tools/libs/org.osgi.framework-1.10.0.jar /tools/libs/org.osgi.util.tracker-1.5.4.jar
 java -cp /tmp:$CP TouchpadControllerTest
 java -cp /tmp:$CP SteeringWheelTraceTest
+java -Xverify:all -cp /tmp:$CP com.luka.carplay.core.SpeedSourceDiagnosticsTest
 java -cp /tmp:$CP com.luka.carplay.settings.VcPanelTest /src/build/mmi-tests/vc-panel-control.txt
 cc -std=gnu99 -Wall -Wextra -Werror /src/tests/vc_panel_protocol_test.c /src/vc_menu/protocol.c -o /tmp/vc-panel-protocol
 /tmp/vc-panel-protocol /src/build/mmi-tests/vc-panel-control.txt

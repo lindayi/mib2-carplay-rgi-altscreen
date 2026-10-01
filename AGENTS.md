@@ -520,8 +520,15 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - The September 28 export confirms registration of all three DSI services, not
   valid numeric/sign payloads. Known decoded CarPlay RGI has neither value;
   native limits would be Audi-derived, not Google's. Private exact-stock evidence
-  is in `carplay-build-inputs\speed-source-study-20260930`. No speed-data listener
-  or badge is implemented by this investigation; live availability remains open.
+  is in `carplay-build-inputs\speed-source-study-20260930`. The opt-in passive
+  `SpeedSourceDiagnostics` now follows verified receiver-session Verbose logging.
+  Normal/unknown session/Master Off/disconnect withdraw its independent instance-0
+  listeners. Source generations reject late callbacks; invalid updates clear
+  the prior sample. Callbacks never access files or serialize arbitrary DTO text.
+  Worker samples and bounded sign-transition events use the existing private
+  Java log/full-export path; counts/ages are observations, not freshness proof.
+  No speed badge or warning is implemented; live availability remains open.
+  See `docs\input\speed-source-test.md` for the parked/normal-drive/export plan.
 
 ### Optional map mascots
 

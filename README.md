@@ -177,6 +177,9 @@ features below follow it automatically.
 - **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
   health summary and bounded private log tails to the SD card without stopping,
   restarting, restoring or uninstalling anything.
+- **Opt-in speed/sign source diagnostic.** Verbose next-session logging samples
+  existing Audi notifications without changing Audi settings or drawing a speed
+  badge. See the [car test and private-export plan](docs/input/speed-source-test.md).
 - **Conservative mirror startup/recovery.** The mirror waits asynchronously for the
   Java cluster controller before initializing. After observing regular presentation
   telemetry, it can recover a stalled mirror while input video keeps advancing.

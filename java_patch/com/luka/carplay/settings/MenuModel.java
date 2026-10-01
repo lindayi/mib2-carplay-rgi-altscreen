@@ -63,7 +63,7 @@ public final class MenuModel {
         if(id==Setting.TOUCHPAD)return "Enable touchpad navigation in CarPlay; Audi's normal controls are unchanged.";
         if(id==Setting.TOUCH_SENSITIVITY)return "Adjust how strongly touchpad movement affects CarPlay navigation.";
         if(id==Setting.RECOVERY)return "Allow bounded recovery of cockpit video only; normal startup remains enabled.";
-        if(id==Setting.VERBOSE)return "Record extra diagnostic detail on the next CarPlay session. Reconnect to apply.";
+        if(id==Setting.VERBOSE)return "Record extra detail and passive speed/sign samples next session. Reconnect to apply.";
         if(id==Setting.INFO_DEFAULT)return "Choose the VC lower information bar's initial page for each route or session.";
         if(id==Setting.INFO_ROAD)return "Choose next-road or current-road text in the VC lower bar, not the small overlay.";
         if(id==Setting.INFO_RETURN)return "Return the VC lower bar to its default page, or keep your choice until the route ends.";

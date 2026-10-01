@@ -463,6 +463,22 @@ memory files. Failed menu actions retain an 8-KiB output tail at error severity
 and in `/tmp/carplay_menu_action.failure.log`. Confirmed full exports include
 that private failure detail and rotated Java/hook logs; summary exports do not.
 
+### Passive speed-source diagnostic
+
+**Diagnostic logging -> Verbose next session** now also subscribes to the
+existing vehicle-speed, TrafficRegulation and TSD notifications while CarPlay
+integration is active. It uses the verified receiver-session verbosity, not
+merely a newly requested preference. Manually reconnect to apply either Verbose
+or Normal. **System status -> Speed source probe** reports how many of the three
+services are subscribed, explicitly not whether they supply usable data.
+
+The probe never enables traffic-sign services, changes Audi settings/subscriptions
+or takes over an OEM observer. Numeric/enum samples and source validity go only
+to the existing bounded private Java logs. No GPS position or conditional-sign
+text is recorded. Full diagnostic export includes these logs; summary export
+does not. No speed badge or overspeed warning is implemented yet.
+Follow the [parked and lawful-driving test plan](../input/speed-source-test.md).
+
 ## Tests and limitations
 
 `TOOLS_DIR=... STOCK_JAR=MU1316-P5145-stock.jar ./scripts/test_mmi_settings.sh`
@@ -476,6 +492,12 @@ reconnect generations, queue rejection, and prohibit tree updates inside paint.
 A filesystem fault fixture rejects `/tmp` rename while allowing ordinary
 read/write. Java logger rotation and production shell snapshot paths are tested
 against that contract; nonzero/timeout action output must remain diagnosable.
+`SpeedSourceDiagnosticsTest` uses the exact stock interfaces/DTOs with strict
+verification, asserting notification-only calls, synchronous replay, rejected
+payloads, bounded transitions, no free-form text, independent instance-0
+subscriptions, service rebind/partial failure cleanup, stale callback rejection,
+Normal/Verbose session gates and nonblocking stop during a blocked DSI call.
+This does not establish J9/DSI delivery, fitted hardware or on-car accuracy.
 
 `NativeMenuPresentationTest` checks action-only rows, native radio selection
 semantics, initial/restored focus, separate text/control bounds, all pages of

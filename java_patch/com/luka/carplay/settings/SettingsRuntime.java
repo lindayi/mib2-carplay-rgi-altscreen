@@ -40,6 +40,7 @@ public final class SettingsRuntime {
     private static volatile String mirrorHealth="UNKNOWN",clusterContext="UNKNOWN";
     private static volatile String mascotHealth="OFF";
     private static volatile String cardHealth="OFF";
+    private static String lastSpeedProbe="";
     private static int lastEffective=-1;
     private static long lastRevision=-1;
     public interface Listener { void changed(); }
@@ -101,6 +102,9 @@ public final class SettingsRuntime {
         return !sessionKnown || s.on(Setting.ENABLED)!=sessionEnabled
             || (s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2)!=sessionVideo
             || s.on(Setting.VERBOSE)!=sessionVerbose || layoutPending;
+    }
+    public static boolean verboseDiagnosticSession(){
+        return sessionKnown && sessionEnabled && sessionVerbose;
     }
     private static void changed(){
         Object[] copy;
@@ -226,6 +230,8 @@ public final class SettingsRuntime {
         if(!notice.equals(lastNotice)){lastNotice=notice;changed();}
         String panel=VcPanel.status();
         if(!panel.equals(lastPanelStatus)){lastPanelStatus=panel;changed();}
+        String speedProbe=com.luka.carplay.core.SpeedSourceDiagnostics.status();
+        if(!speedProbe.equals(lastSpeedProbe)){lastSpeedProbe=speedProbe;changed();}
     }
     private static void loop(int run){
         while(current(run)) {
@@ -365,6 +371,7 @@ public final class SettingsRuntime {
             "Map mascot renderer: "+mascotHealth,
             "Map cards control (not presentation): "+cardHealth,
             "VC quick settings: "+VcPanel.status(),
+            "Speed source probe: "+com.luka.carplay.core.SpeedSourceDiagnostics.status(),
             "Last cluster context: "+clusterContext,
             "Video marker: "+(readyMarker?"Present (not pixel proof)":"Absent"),
             error.length()==0?"Preferences: valid":"Preferences error: "+error,
