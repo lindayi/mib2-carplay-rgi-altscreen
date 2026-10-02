@@ -168,6 +168,13 @@ features below follow it automatically.
   Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
   recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
   reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
+- **Experimental speed/limit badge:** default Off under **Map cards**. Uses
+  camera-marked speed limits first, then Audi's prioritized conventional map
+  limit. The displayed speed turns red above either selected limit; unknown
+  values show `--`. A small CAM/MAP label identifies the source. The top-right
+  badge moves inward for large-dial View, unlike the fixed left cards.
+  Source accuracy and physical dial clearance still need vehicle confirmation.
+  See [selection rules and limits](docs/hmi/carplay-settings.md#experimental-speedlimit-badge).
 - **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / locally configured choices**.
   Default Off; animates along the bottom of the cluster navigation canvas, above
   the separate text bar. No main-MMI overlay or extra maneuver-box content.

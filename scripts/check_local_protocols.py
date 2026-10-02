@@ -69,6 +69,11 @@ compare("vc_menu/panel.h", "java_patch/com/luka/carplay/settings/VcPanel.java", 
 compare("map_cards/cards.h", "java_patch/com/luka/carplay/rgd/MapCards.java", {
     "CARDS_TEXT_BYTES": "TEXT_BYTES",
 })
+compare("map_cards/cards.h", "java_patch/com/luka/carplay/core/SpeedBadge.java", {
+    "SPEED_MAX_VALUE": "MAX_VALUE",
+    "SPEED_MOVING_LEASE_MS": "MOVING_LEASE_MS",
+    "SPEED_STOPPED_LEASE_MS": "STOPPED_LEASE_MS",
+})
 compare("map_cards/cards.h", "java_patch/com/luka/carplay/settings/MapCardControl.java", {
     "CARDS_PROTOCOL_VERSION": "PROTOCOL_VERSION",
     "CARDS_MAX_SNAPSHOT": "MAX_SNAPSHOT", "CARDS_CONTROL_LEASE_MS": "CONTROL_LEASE_MS",

@@ -52,6 +52,8 @@ public final class VcPanelTest {
             if(m.getName().equals("updateMapScale"))replies[0]++;
             if(m.getName().equals("updateMapPresentation")) {
                 check(get("largeMap").equals(a[0]),"presentation was not captured before stock Status");
+                check(field(com.luka.carplay.core.SpeedBadge.class,"wideMap").get(null).equals(a[0]),
+                    "badge position missed accepted stock presentation/replay");
                 replies[1]++;
             }
             return null;

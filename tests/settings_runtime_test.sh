@@ -9,10 +9,19 @@ cp "$PROJECT/tests/fixtures/carplay-preferences.txt" "$T/preferences"
 export CP_SETTINGS_FILE="$T/preferences"
 source "$T/hooks/carplay_settings.sh"
 test "$(cp_setting enabled 1)" = 0
-for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot now_playing_card trip_card; do
+for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot now_playing_card trip_card speed_badge; do
     cp_setting "$key" 0 >/dev/null
 done
 cp "$T/preferences" "$T/good"
+cp "$PROJECT/tests/fixtures/carplay-preferences-v4.txt" "$T/preferences"
+test "$(cp_setting speed_badge 1)" = 0
+cmp "$T/preferences" "$PROJECT/tests/fixtures/carplay-preferences-v4.txt"
+echo 'speed_badge=0' >> "$T/preferences"
+if cp_setting speed_badge 0; then echo "FAIL: mixed v4/v5 accepted"; exit 1; fi
+sed 's/speed_badge=0/speed_badge=1/' "$T/good" > "$T/preferences"
+test "$(cp_setting speed_badge 0)" = 1
+sed '/speed_badge=/d' "$T/good" > "$T/preferences"
+if cp_setting enabled 1; then echo "FAIL: incomplete v5 accepted"; exit 1; fi
 cp "$PROJECT/tests/fixtures/carplay-preferences-v3.txt" "$T/preferences"
 for key in now_playing_card trip_card; do test "$(cp_setting "$key" 1)" = 0; done
 cmp "$T/preferences" "$PROJECT/tests/fixtures/carplay-preferences-v3.txt"

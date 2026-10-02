@@ -127,6 +127,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public void updateMapPresentation(boolean large, boolean left, boolean right) {
         // Stock updateAll() replays this state without calling setMapPresentation().
         com.luka.carplay.settings.VcPanel.presentation(large,left,right);
+        com.luka.carplay.core.SpeedBadge.presentation(large);
         real.updateMapPresentation(large,left,right);
     }
     public void updateEtcStatus(EtcStatus a) { real.updateEtcStatus(a); }

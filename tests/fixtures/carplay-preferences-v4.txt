@@ -1,4 +1,4 @@
-format=5
+format=4
 enabled=0
 mode=0
 layout=0
@@ -22,4 +22,3 @@ preset=0
 mascot=0
 now_playing_card=0
 trip_card=0
-speed_badge=0

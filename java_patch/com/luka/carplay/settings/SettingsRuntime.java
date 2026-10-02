@@ -106,6 +106,12 @@ public final class SettingsRuntime {
     public static boolean verboseDiagnosticSession(){
         return sessionKnown && sessionEnabled && sessionVerbose;
     }
+    public static boolean speedBadgeSession(){
+        Preferences p=Preferences.get();
+        Preferences.Snapshot s=p.snapshot();
+        return sessionKnown && sessionEnabled && sessionVideo && p.error().length()==0 &&
+            s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2 && s.on(Setting.SPEED_BADGE);
+    }
     private static void changed(){
         Object[] copy;
         synchronized(LOCK){copy=listeners.toArray();}
@@ -199,15 +205,6 @@ public final class SettingsRuntime {
             if(!mascotState.equals(mascotHealth))Log.e("Settings","Map mascot unavailable",e);
         }
         if(!mascotState.equals(mascotHealth)){mascotHealth=mascotState;changed();}
-        String cards;
-        boolean cardsAllowed=effective && ready && sessionVideo && s.get(Setting.MODE)!=2;
-        try {
-            cards=MapCardControl.publish(cardsAllowed && s.on(Setting.NOW_PLAYING_CARD),cardsAllowed && s.on(Setting.TRIP_CARD));
-        } catch(IOException e) {
-            cards="CONTROL_ERROR";
-            if(!cards.equals(cardHealth))Log.e("Settings","Map cards unavailable",e);
-        }
-        if(!cards.equals(cardHealth)){cardHealth=cards;changed();}
         CarPlayApp.setGuidanceEnabled(s.get(Setting.MODE)!=1);
         ScreenModule.setVideoAllowed(s.get(Setting.MODE)!=2 && sessionVideo);
         CarPlayApp.setFeaturesEnabled(effective);
@@ -233,7 +230,23 @@ public final class SettingsRuntime {
         String speedProbe=com.luka.carplay.core.SpeedSourceDiagnostics.status();
         if(!speedProbe.equals(lastSpeedProbe)){lastSpeedProbe=speedProbe;changed();}
     }
+    private static void publishCards() {
+        Preferences p=Preferences.get();
+        Preferences.Snapshot s=p.snapshot();
+        boolean allowed=CarPlayApp.isActive() && sessionKnown && sessionEnabled && readyMarker &&
+            sessionVideo && p.error().length()==0 && s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2;
+        String cards;
+        try {
+            cards=MapCardControl.publish(allowed && s.on(Setting.NOW_PLAYING_CARD),
+                allowed && s.on(Setting.TRIP_CARD),allowed && s.on(Setting.SPEED_BADGE));
+        } catch(IOException e) {
+            cards="CONTROL_ERROR";
+            if(!cards.equals(cardHealth))Log.e("Settings","Map cards unavailable",e);
+        }
+        if(!cards.equals(cardHealth)){cardHealth=cards;changed();}
+    }
     private static void loop(int run){
+        long nextTick=0;
         while(current(run)) {
             Job job=null;
             synchronized(LOCK){if(!jobs.isEmpty()){job=(Job)jobs.remove(0);busy=true;}}
@@ -263,11 +276,17 @@ public final class SettingsRuntime {
                 catch(SecurityException e){result="Not saved: access denied";Log.e("Settings",result,e);}
                 finally {busy=false;changed();}
             }
-            try {tick(run);}
+            try {
+                long now=System.currentTimeMillis();
+                if(job!=null || now>=nextTick || nextTick-now>1000L) {
+                    tick(run);nextTick=now+1000L;
+                }
+                if(current(run))publishCards();
+            }
             catch(RuntimeException e){CarPlayApp.setFeaturesEnabled(false);result="Settings update failed: "+e.getMessage();Log.e("Settings",result,e);changed();}
             if(current(run))startActionWorker();
             synchronized(LOCK) {
-                if(jobs.isEmpty())try{LOCK.wait(1000);}catch(InterruptedException e){Log.w("Settings","worker interrupted");}
+                if(jobs.isEmpty())try{LOCK.wait(speedBadgeSession()?200:1000);}catch(InterruptedException e){Log.w("Settings","worker interrupted");}
             }
         }
     }

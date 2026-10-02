@@ -36,6 +36,12 @@ static int hex(unsigned char c) {
     if(c>='A' && c<='F')return c-'A'+10;
     return -1;
 }
+static int optional_number(const char **p,const char *end,unsigned max,int *value) {
+    if(end-*p>=3 && !memcmp(*p,"-1 ",3)){*value=-1;*p+=3;return 1;}
+    uint64_t n;
+    if(!number(p,end,max,' ',&n))return 0;
+    *value=(int)n;return 1;
+}
 static int arrival_valid(const char *text) {
     if(!*text)return 1;
     const char *p=text;
@@ -89,7 +95,26 @@ int cards_decode(const char *data,size_t size,uint64_t now,unsigned pid,cards_re
             if(!cards_utf8_next(&s,&cp) || cp<32 || (cp>=127 && cp<160))return 0;
         }
     }
-    if(p!=end)return 0;
+    if(end-p<6 || memcmp(p,"SPEED ",6))return 0;
+    p+=6;
+    if(!number(&p,end,1,' ',&n))return 0;
+    r.speed.enabled=(unsigned)n;
+    if(!optional_number(&p,end,SPEED_MAX_VALUE,&r.speed.speed) ||
+        !optional_number(&p,end,SPEED_MAX_VALUE,&r.speed.limit) ||
+        !optional_number(&p,end,1,&r.speed.unit))return 0;
+    if(!number(&p,end,2,' ',&n))return 0;
+    r.speed.source=(unsigned)n;
+    if(!number(&p,end,1,' ',&n))return 0;
+    r.speed.wide=(unsigned)n;
+    if(!number(&p,end,INT64_MAX,'\n',&r.speed.expires) || p!=end)return 0;
+    if(r.speed.limit==0 || ((r.speed.limit>0)!=(r.speed.source!=0)) ||
+        (r.speed.unit<0 && (r.speed.speed>=0 || r.speed.limit>0)) ||
+        ((r.speed.speed>=0)!=(r.speed.expires!=0)))return 0;
+    if(!r.speed.enabled && (r.speed.speed!=-1 || r.speed.limit!=-1 || r.speed.unit!=-1 ||
+        r.speed.source || r.speed.wide || r.speed.expires))return 0;
+    if(r.speed.expires>now && r.speed.expires-now>
+        (r.speed.speed==0?SPEED_STOPPED_LEASE_MS:SPEED_MOVING_LEASE_MS))return 0;
+    if(r.speed.speed>=0 && r.speed.expires<=now){r.speed.speed=-1;r.speed.expires=0;}
     if(r.text[2][0] && strcmp(r.text[2],"Playing") && strcmp(r.text[2],"Paused") &&
             strcmp(r.text[2],"Stopped"))return 0;
     if(!arrival_valid(r.text[3]))return 0;

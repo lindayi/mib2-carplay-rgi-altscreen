@@ -395,8 +395,9 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.
-- New saves use format 4 (23 settings); accept complete formats 1 (16 settings),
-  2 (20 settings) and 3 (21 settings) with explicit new defaults, including cards Off
+- New saves use format 5 (24 settings); accept complete formats 1 (16 settings),
+  2 (20 settings), 3 (21 settings) and 4 (23 settings) with explicit new defaults,
+  including speed badge Off for formats 1-4, cards Off for formats 1-3
   and mascot Off when absent, but never
   mixed/incomplete schemas. Reads do not migrate
   files on disk. Presets compute effective values without overwriting Custom;
@@ -458,7 +459,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   caption; never use the black lower base as extra text space behind Audi's dial.
 - Overflow title/artist scroll independently at 20 pixels/second with 1.8-second
   endpoint pauses, clipped per line. Advance on the existing worker's monotonic
-  clock; repaint only changed content/offsets, without extra EGL swaps. `CARDS2`
+  clock; repaint only changed content/offsets, without extra EGL swaps. `CARDS3`
   carries an observed-track revision so album-only or transport-clipped label
   changes can reset both lines, unlike artwork/playback/Trip updates. It is not a
   phone track ID. Re-enabling media and lease/readiness recovery reset scrolling.
@@ -475,7 +476,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   The original `crc` is over the source JPEG/PNG, not the converted output.
   Cards validate the additive `png_crc` over the published PNG bytes; never
   substitute the original CRC or let Java/GL callbacks decode artwork.
-- Only the settings worker publishes bounded `CARDS2` snapshots on `/ramdisk`,
+- Only the settings worker publishes bounded `CARDS3` snapshots on `/ramdisk`,
   tied to mirror PID, receiver generation and expiry. Native workers read/paint;
   render callbacks must remain I/O-free. Passive cards never own inputs.
   CONTROL_PUBLISHED is not proof of visible pixels. Their control file contains
@@ -522,12 +523,12 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   native limits would be Audi-derived, not Google's. Private exact-stock evidence
   is in `carplay-build-inputs\speed-source-study-20260930`. The opt-in passive
   `SpeedSourceDiagnostics` now follows verified receiver-session Verbose logging.
-  Normal/unknown session/Master Off/disconnect withdraw its independent instance-0
+  Normal with badge Off/unknown session/Master Off/disconnect withdraw its independent instance-0
   listeners. Source generations reject late callbacks; invalid updates clear
   the prior sample. Callbacks never access files or serialize arbitrary DTO text.
   Worker samples and bounded sign-transition events use the existing private
   Java log/full-export path; counts/ages are observations, not freshness proof.
-  No speed badge or warning is implemented; the later capture below establishes
+  That diagnostic-only build had no badge; the later capture below establishes
   delivery, not a complete source-selection or warning policy.
   See `docs\input\speed-source-test.md` for the parked/normal-drive/export plan.
 - The October 1 return matches installed/card JAR pins `3475735160 360325`
@@ -568,6 +569,27 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   Java transport behavior, not native producer semantics or cluster-ECU policy.
   Do not require true solely from the parameter's name, or declare false safe
   to ignore. Exact bytecode/probe evidence remains private under the speed study.
+- The owner approved an experimental camera-first badge and red speed text against
+  either camera or map selection. Do not gate on `signEffective`, whose native
+  semantics remain unresolved. `SpeedSourceDiagnostics` shares its passive
+  listeners with the default-Off badge in Normal logging, without numeric logs.
+  Camera-only NAR speed signs need accepted validity, positive values and no
+  unresolved conditions. Conflicting camera slots are ambiguous; fallback uses
+  TrafficRegulation's prioritized conventional limit, never advisory speed.
+  No-sign/invalid/source/session transitions clear state; explicit TSD Off/blind
+  clears camera candidates. Do not impose the speed sample timeout on quiet signs.
+- Use `vehicleSpeed` and its own unit/value-state, not `realVehicleSpeed` or
+  metrics.Speed's different enums. Moving samples expire after 2 seconds; exact
+  zero has a bounded 15-second lease for the observed parked cadence. Convert
+  limits to the displayed speed unit, round both, and compare the visible integers:
+  equality/unknown never red. `CARDS3` carries speed expiry so stale publication
+  cannot refresh it. Rendering remains worker-painted, mirror-only and swap-free.
+- The badge is 138x72 at (920,115) in large-map View and (805,115) in large-dial
+  View, independently of fixed left cards. Observe accepted Fct54 Status in the
+  existing GatedCombiService seam, including initial replay; unknown uses inset.
+  This is approved photo-mock geometry, not measured vehicle clearance. Host
+  regressions cover actual EGL pixels/leases and exact-stock DSI delivery; the
+  badge and any later OBD recognition activation need separately labelled car trials.
 
 ### Optional map mascots
 

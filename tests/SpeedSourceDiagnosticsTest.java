@@ -2,6 +2,9 @@ package com.luka.carplay.core;
 
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.settings.SettingsRuntime;
+import com.luka.carplay.settings.Preferences;
+import com.luka.carplay.settings.Setting;
+import com.luka.carplay.bus.CarplayBus;
 import de.audi.app.terminalmode.IContext;
 import de.audi.app.terminalmode.osgi.IServiceManager;
 import de.audi.atip.base.IFrameworkAccess;
@@ -18,6 +21,9 @@ public final class SpeedSourceDiagnosticsTest {
     static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
     static void set(Class<?> c,String name,Object value) throws Exception {
         Field f=c.getDeclaredField(name);f.setAccessible(true);f.set(null,value);
+    }
+    static void setInstance(Object object,String name,Object value) throws Exception {
+        Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);f.set(object,value);
     }
     static Object proxy(Class<?> type,InvocationHandler handler) {
         return Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},handler);
@@ -260,10 +266,65 @@ public final class SpeedSourceDiagnosticsTest {
         check(!((Thread)worker.get(module)).isAlive(),"blocked worker did not finish cleanup");
         check(v.gets==v.releases && t.gets==t.releases && a.gets==a.releases,"blocked shutdown leaked handles");
     }
+    static void badgeGates() throws Exception {
+        java.nio.file.Path directory=java.nio.file.Files.createTempDirectory("speed-badge-");
+        Constructor<Preferences> ctor=Preferences.class.getDeclaredConstructor(java.io.File.class,java.io.File.class);
+        ctor.setAccessible(true);
+        Preferences prefs=ctor.newInstance(directory.resolve("prefs").toFile(),directory.resolve("legacy").toFile());
+        prefs.set(Setting.SPEED_BADGE,1);set(Preferences.class,"instance",prefs);
+        set(SettingsRuntime.class,"sessionKnown",true);set(SettingsRuntime.class,"sessionEnabled",true);
+        set(SettingsRuntime.class,"sessionVideo",true);set(SettingsRuntime.class,"sessionVerbose",false);
+        set(CarPlayApp.class,"phoneContext",proxy(IContext.class,SpeedSourceDiagnosticsTest::identity));
+        CarplayBus bus=CarplayBus.getInstance();
+        setInstance(bus,"running",true);setInstance(bus,"out",new java.io.ByteArrayOutputStream());
+        setInstance(bus,"connectionGeneration",5);
+        Registry registry=new Registry();
+        Item v=registry.add(0,0),t=registry.add(1,0),a=registry.add(2,0);
+        SpeedSourceDiagnostics module=new SpeedSourceDiagnostics();
+        module.start(registry.framework());
+        await(()->a.sets.size()==8,"badge in Normal logging did not subscribe");
+        DSICarVehicleStatesListener vehicle=(DSICarVehicleStatesListener)v.listener;
+        DSICarDriverAssistanceListener camera=(DSICarDriverAssistanceListener)a.listener;
+        vehicle.updateDynamicVehicleInfoHighFrequent(speed(52,0,1),1);
+        camera.updateTSDSign1(SpeedBadgeTest.camera(50,false),1);
+        SpeedBadge.Snapshot s=SpeedSourceDiagnostics.badgeSnapshot();
+        check(s.enabled && s.source==2 && s.speed==52 && s.limit==50 && s.over,"real callback -> camera-first badge");
+        Field field=SpeedSourceDiagnostics.class.getDeclaredField("run");field.setAccessible(true);
+        SpeedSourceDiagnostics.Run run=(SpeedSourceDiagnostics.Run)field.get(module);
+        check(latest(run,0).endsWith("NO_CALLBACK") && run.drain().length==0,"Normal badge leaked diagnostic samples");
+        camera.asyncException(2,"private",3);
+        check(SpeedSourceDiagnostics.badgeSnapshot().limit==-1,"async error retained camera");
+        setInstance(bus,"connectionGeneration",6);
+        check(!SpeedSourceDiagnostics.badgeSnapshot().enabled,"new receiver consumed old generation");
+        await(()->a.registrations==2,"new receiver failed to rebind");
+        vehicle.updateDynamicVehicleInfoHighFrequent(speed(99,0,1),1);
+        camera.updateTSDSign1(SpeedBadgeTest.camera(90,false),1);
+        check(SpeedSourceDiagnostics.badgeSnapshot().speed==-1 &&
+            SpeedSourceDiagnostics.badgeSnapshot().limit==-1,"late old listener repopulated new receiver");
+        ((DSICarVehicleStatesListener)v.listener).updateDynamicVehicleInfoHighFrequent(speed(40,0,1),1);
+        ((DSITrafficRegulationListener)t.listener).updateCurrentTrafficSign(SpeedBadgeTest.map(50,0,1),1);
+        check(SpeedSourceDiagnostics.badgeSnapshot().source==1,"live map fallback callback");
+        prefs.set(Setting.ENABLED,0);
+        check(!SpeedSourceDiagnostics.badgeSnapshot().enabled,"Master Off did not immediately gate badge");
+        await(()->a.unregisters==2,"Master Off kept Normal-mode subscriptions");
+        prefs.set(Setting.ENABLED,1);
+        await(()->a.registrations==3,"live reenable failed to bind");
+        check(SpeedSourceDiagnostics.badgeSnapshot().limit==-1,"re-enable resurrected old map");
+        setInstance(bus,"out",null);
+        check(!SpeedSourceDiagnostics.badgeSnapshot().enabled,"missing receiver accepted generation -1");
+        await(()->a.unregisters==3,"receiver disconnect did not withdraw");
+        module.stop();
+        field=SpeedSourceDiagnostics.class.getDeclaredField("worker");field.setAccessible(true);
+        ((Thread)field.get(module)).join(2000);
+        check(!((Thread)field.get(module)).isAlive(),"badge worker leaked");
+        setInstance(bus,"running",false);set(CarPlayApp.class,"phoneContext",null);
+        set(Preferences.class,"instance",null);
+        java.nio.file.Files.delete(directory.resolve("prefs"));java.nio.file.Files.delete(directory);
+    }
     public static void main(String[] args) throws Exception {
         Log.setLevel(Log.E);
         set(CarPlayApp.class,"active",true);
-        samplesAndLifecycle();failureCleanup();workerGates();
+        samplesAndLifecycle();failureCleanup();workerGates();badgeGates();
         set(CarPlayApp.class,"active",false);
         System.out.println("SpeedSourceDiagnosticsTest PASS: exact-stock passive subscriptions, replay, validity, privacy, bounded transitions, service generations, opt-in and nonblocking teardown");
     }

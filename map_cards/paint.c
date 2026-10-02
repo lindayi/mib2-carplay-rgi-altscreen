@@ -58,9 +58,10 @@ static void blend(unsigned char *p,unsigned rgb,unsigned alpha) {
         p[i]=(unsigned char)((((rgb>>(16-8*i))&255)*alpha+p[i]*(255-alpha)+127)/255);
     p[3]=(unsigned char)(alpha+(p[3]*(255-alpha)+127)/255);
 }
-static void pixel(unsigned char *rgba,int x,int y,unsigned rgb,unsigned alpha) {
-    if(!cards_inside(x,y))return;
-    blend(rgba+((size_t)(y+CARDS_SHADOW_PAD)*CARDS_IMAGE_WIDTH+x+CARDS_SHADOW_PAD)*4,rgb,alpha);
+typedef struct { unsigned char *pixels; int width,height,pad,card; } canvas;
+static void pixel(canvas *image,int x,int y,unsigned rgb,unsigned alpha) {
+    if(image->card?!cards_inside(x,y):x<0 || y<0 || x>=image->width || y>=image->height)return;
+    blend(image->pixels+((size_t)(y+image->pad)*image->width+x+image->pad)*4,rgb,alpha);
 }
 static void frame_paint(unsigned char *rgba) {
     static const unsigned kernel[]={1,6,15,20,15,6,1};
@@ -102,7 +103,7 @@ static void frame_paint(unsigned char *rgba) {
         blend(p,rgb,(alpha*edge+127)/255);
     }
 }
-static void rect(unsigned char *rgba,int x,int y,int w,int h,unsigned rgb,unsigned alpha) {
+static void rect(canvas *rgba,int x,int y,int w,int h,unsigned rgb,unsigned alpha) {
     for(int yy=y;yy<y+h;yy++)for(int xx=x;xx<x+w;xx++)pixel(rgba,xx,yy,rgb,alpha);
 }
 typedef struct { int x,y,w,h; } text_area;
@@ -159,7 +160,7 @@ cards_scroll cards_scroll_at(const cards_request *request,const cards_art *art,u
         out.artist=cards_scroll_offset(text_width(request->text[1],layout.artist_scale)-layout.artist.w,elapsed);
     return out;
 }
-static void text(const cards_painter *painter,unsigned char *rgba,const char *s,
+static void text(const cards_painter *painter,canvas *rgba,const char *s,
                  text_area area,float scale,unsigned color,int offset,int shorten) {
     int truncated=shorten && text_width(s,scale)>area.w;
     float left=text_left(s,scale),advance=-left;
@@ -193,7 +194,7 @@ static void text(const cards_painter *painter,unsigned char *rgba,const char *s,
         text(painter,rgba,"...",tail,scale,color,0,0);
     }
 }
-static void header(const cards_painter *painter,unsigned char *rgba,const char *label) {
+static void header(const cards_painter *painter,canvas *rgba,const char *label) {
     int left=CARDS_WIDTH,right=0,top=HEADER_HEIGHT,bottom=0;
     float advance=-text_left(label,1.f);
     const char *s=label;
@@ -215,9 +216,9 @@ static void header(const cards_painter *painter,unsigned char *rgba,const char *
         (HEADER_HEIGHT-(bottom-top))/2-top,text_width(label,1.f),HEADER_HEIGHT};
     text(painter,rgba,label,area,1.f,0xffffff,0,0);
 }
-unsigned cards_paint(const cards_painter *painter,const cards_request *request,
-                     const cards_art *art,cards_scroll scroll,unsigned char rgba[CARDS_IMAGE_BYTES]) {
-    memset(rgba,0,CARDS_IMAGE_BYTES);
+static unsigned paint_cards(const cards_painter *painter,const cards_request *request,
+                            const cards_art *art,cards_scroll scroll,canvas *rgba) {
+    memset(rgba->pixels,0,CARDS_IMAGE_BYTES);
     unsigned omitted=0;
     const char *labels[CARDS_TEXT_FIELDS];
     for(unsigned i=0;i<CARDS_TEXT_FIELDS;i++) {
@@ -226,7 +227,7 @@ unsigned cards_paint(const cards_painter *painter,const cards_request *request,
         if(visible && request->text[i][0] && !labels[i][0])omitted|=1u<<i;
     }
     if(!request->media && !request->trip)return 0;
-    memcpy(rgba,painter->frame,CARDS_IMAGE_BYTES);
+    memcpy(rgba->pixels,painter->frame,CARDS_IMAGE_BYTES);
     const char *heading=request->media?
         (!strcmp(labels[2],"Paused")?"Paused":!strcmp(labels[2],"Stopped")?"Stopped":
          !strcmp(labels[2],"Playing")?"Now playing":"Media"):"Trip";
@@ -284,4 +285,59 @@ unsigned cards_paint(const cards_painter *painter,const cards_request *request,
         }
     }
     return omitted;
+}
+unsigned cards_paint(const cards_painter *painter,const cards_request *request,
+                     const cards_art *art,cards_scroll scroll,unsigned char rgba[CARDS_IMAGE_BYTES]) {
+    canvas image={rgba,CARDS_IMAGE_WIDTH,CARDS_IMAGE_HEIGHT,CARDS_SHADOW_PAD,1};
+    return paint_cards(painter,request,art,scroll,&image);
+}
+static void rounded(canvas *image,int x,int y,int w,int h,int radius,unsigned color) {
+    for(int yy=0;yy<h;yy++)for(int xx=0;xx<w;xx++) {
+        unsigned covered=0;
+        for(int sy=1;sy<=3;sy+=2)for(int sx=1;sx<=3;sx+=2) {
+            float px=xx+sx*.25f,py=yy+sy*.25f;
+            float dx=fmaxf(fmaxf(radius-px,px-(w-radius)),0);
+            float dy=fmaxf(fmaxf(radius-py,py-(h-radius)),0);
+            if(dx*dx+dy*dy<=radius*radius)covered++;
+        }
+        pixel(image,x+xx,y+yy,color,(covered*255+2)/4);
+    }
+}
+static void centered(const cards_painter *painter,canvas *image,const char *label,
+                     text_area box,float scale,unsigned color) {
+    int width=text_width(label,scale);
+    if(width>box.w){scale*=box.w/(float)width;width=text_width(label,scale);}
+    float top=1000,bottom=0;
+    const char *p=label;
+    while(*p) {
+        uint32_t cp;
+        if(!cards_utf8_next(&p,&cp))return;
+        const route_glyph_t *g=glyph(cp);
+        if(g && g->h){top=fminf(top,g->top*scale);bottom=fmaxf(bottom,(g->top+g->h)*scale);}
+    }
+    if(top>bottom)return;
+    text_area area={box.x+(box.w-width)/2,box.y+(int)((box.h-bottom+top)/2-top),width,box.h+(int)top};
+    text(painter,image,label,area,scale,color,0,0);
+}
+void cards_speed_paint(const cards_painter *painter,const cards_speed *speed,
+                       unsigned char rgba[SPEED_IMAGE_BYTES]) {
+    memset(rgba,0,SPEED_IMAGE_BYTES);
+    if(!speed->enabled)return;
+    canvas image={rgba,SPEED_WIDTH,SPEED_HEIGHT,0,0};
+    rounded(&image,0,0,138,72,9,0x65696c);
+    rounded(&image,1,1,136,70,8,0x24292d);
+    rounded(&image,79,4,55,64,5,0xf2f1e9);
+    rounded(&image,81,6,51,60,3,0x25282b);
+    rounded(&image,82,7,49,58,2,0xf2f1e9);
+    char number[12],limit[12];
+    if(speed->speed>=0)snprintf(number,sizeof(number),"%d",speed->speed);else strcpy(number,"--");
+    if(speed->limit>0)snprintf(limit,sizeof(limit),"%d",speed->limit);else strcpy(limit,"--");
+    unsigned color=speed->speed>=0 && speed->limit>0 && speed->speed>speed->limit?0xff6262:0xffffff;
+    centered(painter,&image,number,(text_area){5,8,68,40},1.9f,color);
+    centered(painter,&image,speed->unit==0?"km/h":speed->unit==1?"mph":"",
+             (text_area){5,51,68,16},.75f,0xc7cdd1);
+    centered(painter,&image,"LIMIT",(text_area){85,10,43,12},.6f,0x25282b);
+    centered(painter,&image,limit,(text_area){85,24,43,29},1.6f,0x181b1d);
+    centered(painter,&image,speed->source==2?"CAM":speed->source==1?"MAP":"",
+             (text_area){85,55,43,9},.45f,0x25282b);
 }

@@ -60,6 +60,9 @@ static size_t encode(char *out,const cards_request *r) {
             n+=(size_t)sprintf(out+n,"%02x",*s);
         out[n++]='\n';
     }
+    if(r->speed.enabled)n+=(size_t)sprintf(out+n,"SPEED 1 %d %d %d %u %u %llu\n",r->speed.speed,
+        r->speed.limit,r->speed.unit,r->speed.source,r->speed.wide,(unsigned long long)r->speed.expires);
+    else n+=(size_t)sprintf(out+n,"SPEED 0 -1 -1 -1 0 0 0\n");
     return n;
 }
 static void write_control(const cards_request *r) {
@@ -69,7 +72,7 @@ static void write_control(const cards_request *r) {
     assert(!rename(CARDS_CONTROL_PATH ".new",CARDS_CONTROL_PATH));
 }
 static void parse_tests(void) {
-    const char *valid="CARDS2 42 104000 0 1 1 -1 4294967295 9223372036854775807\n\n\n\n\n\n\n";
+    const char *valid="CARDS3 42 104000 0 1 1 -1 4294967295 9223372036854775807\n\n\n\n\n\n\nSPEED 0 -1 -1 -1 0 0 0\n";
     cards_request r;
     assert(cards_decode(valid,strlen(valid),100000,42,&r));
     assert(r.art_crc==UINT32_MAX && r.progress==-1 && r.track==INT64_MAX);
@@ -110,8 +113,13 @@ static void parse_tests(void) {
         "CARDS2 42 104000 0 1 1 0 0 0\n\n\n\n32343a3030\n\n\n",
         "CARDS2 42 104000 0 1 1 0 0 0\n\n\n\n31323a3630\n\n\n"
     };
-    for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++)
-        assert(!cards_decode(bad[i],strlen(bad[i]),100000,42,&r));
+    for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++) {
+        char malformed[512];
+        snprintf(malformed,sizeof(malformed),"%sSPEED 0 -1 -1 -1 0 0 0\n",bad[i]);
+        if(malformed[5]=='2')malformed[5]='3';
+        assert(!cards_decode(malformed,strlen(malformed),100000,42,&r));
+    }
+    assert(!cards_decode(bad[1],strlen(bad[1]),100000,42,&r));
     for(size_t i=0;i<strlen(valid);i++)assert(!cards_decode(valid,i,100000,42,&r));
     char bytes[4096];strcpy(bytes,valid);strcat(bytes,"\n");
     assert(!cards_decode(bytes,strlen(bytes),100000,42,&r));
@@ -157,12 +165,12 @@ static void shared_fixture_tests(void) {
     for(unsigned i=0;i<6;i++)strcpy(source.text[i],text[i]);
     char bytes[CARDS_MAX_SNAPSHOT+1];
     check_shared_fixture(bytes,encode(bytes,&source));
-    puts("CARDS2 native-generated shared fixture: PASS");
+    puts("CARDS3 native-generated shared fixture: PASS");
     const char *path="build/mmi-tests/map-cards-control.txt";
     FILE *f=fopen(path,"rb");
     if(!f) {
         if(errno==ENOENT) {
-            puts("CARDS2 Java fixture absent: standalone native fixture checked");
+            puts("CARDS3 Java fixture absent: standalone native fixture checked");
             return;
         }
         perror(path);abort();
@@ -171,7 +179,7 @@ static void shared_fixture_tests(void) {
     assert(!ferror(f) && feof(f) && size<=CARDS_MAX_SNAPSHOT);
     assert(!fclose(f));
     check_shared_fixture(bytes,size);
-    puts("CARDS2 Java-generated build/mmi-tests/map-cards-control.txt: PASS");
+    puts("CARDS3 Java-generated build/mmi-tests/map-cards-control.txt: PASS");
     const char *names[]={"24h","12h"},*expected[]={"05:15 dest","5:15 AM dest"};
     for(unsigned i=0;i<2;i++) {
         char path[128];snprintf(path,sizeof(path),"build/mmi-tests/map-cards-arrival-%s.txt",names[i]);
@@ -182,8 +190,48 @@ static void shared_fixture_tests(void) {
         assert(!ferror(arrival) && feof(arrival) && !fclose(arrival));
         cards_request request;assert(cards_decode(bytes,size,0,123,&request));
         assert(request.trip && !strcmp(request.text[3],expected[i]));
-        printf("Java formatter -> CARDS2 -> native %s destination-clock fixture: PASS\n",names[i]);
+        printf("Java formatter -> CARDS3 -> native %s destination-clock fixture: PASS\n",names[i]);
     }
+}
+static void speed_protocol_tests(void) {
+    cards_request r={.pid=42,.expires=104000,.progress=-1,
+        .speed={.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.wide=1,.expires=102000}};
+    cards_request decoded;
+    char bytes[CARDS_MAX_SNAPSHOT+1];
+    size_t n=encode(bytes,&r);
+    assert(cards_decode(bytes,n,100000,42,&decoded) && decoded.speed.speed==52 && decoded.speed.source==2);
+    assert(cards_decode(bytes,n,102000,42,&decoded) && decoded.speed.speed==-1 && decoded.speed.limit==50);
+    const cards_speed invalid[]={
+        {.enabled=1,.speed=400,.limit=50,.unit=0,.source=2,.expires=102000},
+        {.enabled=1,.speed=-2,.limit=50,.unit=0,.source=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=0,.unit=0,.source=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=50,.unit=2,.source=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=50,.unit=-1,.source=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=50,.unit=0,.source=0,.expires=102000},
+        {.enabled=1,.speed=52,.limit=-1,.unit=0,.source=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.wide=2,.expires=102000},
+        {.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.expires=102001},
+        {.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.expires=0},
+        {.enabled=1,.speed=-1,.limit=50,.unit=0,.source=2,.expires=102000}
+    };
+    for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++) {
+        r.speed=invalid[i];n=encode(bytes,&r);
+        assert(!cards_decode(bytes,n,100000,42,&decoded));
+    }
+    r.speed=(cards_speed){.enabled=1,.speed=0,.limit=50,.unit=0,.source=1,.expires=115000};
+    n=encode(bytes,&r);assert(cards_decode(bytes,n,100000,42,&decoded));
+    r.speed=(cards_speed){.enabled=1,.speed=-1,.limit=-1,.unit=-1};
+    n=encode(bytes,&r);assert(cards_decode(bytes,n,100000,42,&decoded));
+    const char *path="build/mmi-tests/speed-badge-control.txt";
+    FILE *f=fopen(path,"rb");
+    if(f) {
+        n=fread(bytes,1,sizeof(bytes),f);assert(!ferror(f) && feof(f) && !fclose(f));
+        assert(cards_decode(bytes,n,0,123,&decoded));
+        assert(decoded.connection==7 && decoded.speed.enabled && decoded.speed.source==2 &&
+            decoded.speed.speed==52 && decoded.speed.limit==50 && decoded.speed.unit==0 &&
+            decoded.speed.wide && decoded.speed.expires==2000);
+        puts("Java speed badge -> CARDS3 -> native: PASS");
+    } else {assert(errno==ENOENT);puts("Java speed badge fixture absent; native parser cases checked");}
 }
 static uint32_t file_crc(const char *path) {
     FILE *f=fopen(path,"rb");assert(f);
@@ -483,9 +531,90 @@ static void runtime_scroll_tests(cards_request r,uint32_t crc) {
     capture("music-only-no-art");
     cards_art_free(&art);cards_painter_destroy(&painter);
 }
+static void speed_frame(const cards_speed *speed,const char *name) {
+    unsigned char expected[SPEED_IMAGE_BYTES];
+    cards_speed_paint(&geometry,speed,expected);
+    clear();
+    state before,after;snapshot(&before);cards_overlay_draw(0);snapshot(&after);
+    assert(!memcmp(&before,&after,sizeof(before)));
+    capture(name);
+    int xpos=speed->wide?SPEED_X_WIDE:SPEED_X_INSET;
+    unsigned red=0,ink=0;
+    for(int y=0;y<SPEED_HEIGHT;y++)for(int x=0;x<SPEED_WIDTH;x++) {
+        const unsigned char *src=expected+(y*SPEED_WIDTH+x)*4,*actual=at(xpos+x,SPEED_Y+y);
+        const unsigned background[]={102,153,204};
+        for(unsigned c=0;c<3;c++) {
+            assert(src[c]<=src[3]);
+            int expected_value=src[c]+(background[c]*(255-src[3])+127)/255;
+            if(abs((int)actual[c]-expected_value)>1) {
+                fprintf(stderr,"speed frame=%s xy=%d,%d channel=%u actual=%u expected=%d mono=%llu wall=%llu\n",
+                    name?name:"unnamed",x,y,c,actual[c],expected_value,
+                    (unsigned long long)mono,(unsigned long long)wall);
+                assert(0);
+            }
+        }
+        assert(actual[3]==94);
+        if(x<75 && y<50) {
+            if(actual[0]>180 && actual[0]>actual[1]+50)red++;
+            if(actual[0]>180)ink++;
+        }
+    }
+    assert(ink>(speed->speed<0?10u:15u));
+    assert((red>15)==(speed->speed>=0 && speed->limit>0 && speed->speed>speed->limit));
+    assert(!changed(xpos-1,SPEED_Y+30) && !changed(xpos+SPEED_WIDTH,SPEED_Y+30));
+    assert(!changed(CARDS_X+12,CARDS_TOP+50));
+}
+static void speed_runtime_tests(EGLContext context) {
+    cards_request r={.pid=(unsigned)getpid(),.expires=wall+4000,.connection=9,.progress=-1,
+        .speed={.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.wide=1}};
+    const int speeds[]={52,50,48,123,-1,52,-1};
+    const int limits[]={50,50,50,100,50,-1,-1};
+    const char *names[]={"speed-above","speed-equal","speed-below","speed-three-digits",
+        "speed-stale","speed-unknown-limit","speed-unknown-both"};
+    for(unsigned i=0;i<7;i++) {
+        r.speed.speed=speeds[i];r.speed.limit=limits[i];
+        r.speed.expires=r.speed.speed<0?0:wall+2000;
+        r.speed.source=r.speed.limit<0?0:i&1?1:2;
+        r.speed.unit=i==6?-1:(int)(i&1);
+        char packet[CARDS_MAX_SNAPSHOT+1];cards_request decoded;
+        size_t size=encode(packet,&r);
+        if(!cards_decode(packet,size,wall,(unsigned)getpid(),&decoded)) {
+            fprintf(stderr,"speed fixture rejected: %.*s",(int)size,packet);assert(0);
+        }
+        write_control(&r);cards_overlay_poll();speed_frame(&r.speed,names[i]);
+    }
+    r.speed=(cards_speed){.enabled=1,.speed=52,.limit=50,.unit=0,.source=2,.wide=1,.expires=wall+2000};
+    write_control(&r);cards_overlay_poll();speed_frame(&r.speed,NULL);
+    unsigned uploaded=uploads;
+    r.speed.wide=0;write_control(&r);cards_overlay_poll();speed_frame(&r.speed,"speed-large-dials-inset");
+    assert(uploads==uploaded);
+    for(int i=0;i<4;i++) {
+        mono+=100;wall+=100;r.expires=wall+4000;r.speed.expires=wall+2000;
+        write_control(&r);cards_overlay_poll();cards_overlay_draw(0);
+    }
+    assert(uploads==uploaded);
+    no_gl(1);
+    r.speed.speed=53;r.speed.expires=wall+2000;write_control(&r);cards_overlay_poll();
+    fail_texture=1;clear();cards_overlay_draw(0);capture(NULL);
+    assert(!changed(SPEED_X_INSET+30,SPEED_Y+30));
+    fail_texture=0;speed_frame(&r.speed,NULL);
+    uploaded=uploads;cards_overlay_context_lost(context);speed_frame(&r.speed,NULL);
+    assert(uploads==uploaded+1);
+    assert(!unlink("/ramdisk/cards-test.ready"));cards_overlay_poll();no_gl(0);
+    FILE *ready=fopen("/ramdisk/cards-test.ready","wb");assert(ready);assert(!fclose(ready));
+    cards_overlay_poll();speed_frame(&r.speed,NULL);
+    mono+=1001;wall+=1001;no_gl(0);
+    cards_overlay_poll();speed_frame(&r.speed,NULL);
+    mono+=1000;wall+=1000;cards_overlay_poll();
+    r.speed.speed=-1;r.speed.expires=0;speed_frame(&r.speed,"speed-sample-expired");
+    r.speed.enabled=0;write_control(&r);cards_overlay_poll();no_gl(0);
+    r.speed.enabled=1;write_control(&r);cards_overlay_poll();speed_frame(&r.speed,NULL);
+    mono+=4001;wall+=4001;cards_overlay_poll();no_gl(0);
+}
 int main(void) {
     frame_tests();
     parse_tests();
+    speed_protocol_tests();
     shared_fixture_tests();
     uint32_t crc=file_crc(CARDS_ART_PATH);artwork_tests(crc);
     cards_request r={.pid=(unsigned)getpid(),.expires=wall+4000,.connection=7,.media=1,.trip=1,.progress=630};
@@ -609,6 +738,7 @@ int main(void) {
     glViewport(0,0,1440,455);clear();uploaded=uploads;cards_overlay_draw(0);
     assert(uploads==uploaded+1);bounds(1,1,0,0,1440,455);
     runtime_scroll_tests(r,crc);
+    speed_runtime_tests(c);
     cards_overlay_context_lost(c);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));assert(eglDestroyContext(d,c));
     assert(eglDestroySurface(d,surface));assert(eglTerminate(d));

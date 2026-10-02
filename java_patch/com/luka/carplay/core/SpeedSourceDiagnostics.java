@@ -2,6 +2,7 @@ package com.luka.carplay.core;
 
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.settings.SettingsRuntime;
+import com.luka.carplay.bus.CarplayBus;
 import de.audi.app.terminalmode.osgi.IServiceManager;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -16,13 +17,14 @@ import org.dsi.ifc.trafficregulation.*;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 
-/** Opt-in measurement only; never selects a road limit or changes an Audi setting. */
+/** Independent passive subscriptions shared by the opt-in badge and verbose diagnostics. */
 public final class SpeedSourceDiagnostics implements Module {
     private static final String TAG="SpeedProbe";
     private static volatile String state="OFF";
     private Thread worker;
     private Run run;
     private int generation;
+    private static volatile Run badgeRun;
 
     public String name(){return "speed-source-diagnostics";}
     public static String status(){return CarPlayApp.isActive()?state:"OFF";}
@@ -32,6 +34,7 @@ public final class SpeedSourceDiagnostics implements Module {
         if(worker!=null && worker.isAlive())return false;
         final Run next=new Run(++generation);
         run=next;
+        badgeRun=next;
         worker=new Thread(new Runnable(){public void run(){loop(next,fw);}},"carplay-speed-probe");
         worker.setDaemon(true);
         try {worker.start();}
@@ -45,26 +48,42 @@ public final class SpeedSourceDiagnostics implements Module {
         if(worker!=null)worker.interrupt();
     }
 
+    public static SpeedBadge.Snapshot badgeSnapshot() {
+        Run r=badgeRun;
+        if(r!=null)synchronized(r) {
+            if(r.active && r.badgeEnabled && CarPlayApp.isActive() && SettingsRuntime.speedBadgeSession() &&
+                    CarPlayApp.isSessionConnected() && r.connection>=0 &&
+                    r.connection==CarplayBus.getInstance().connectionGeneration())
+                return r.badge.copy(System.currentTimeMillis(),r.connection);
+        }
+        return new SpeedBadge.Snapshot();
+    }
+
     private static void loop(Run r,FrameworkRef fw) {
         Binding[] bindings=new Binding[]{new Binding(r,0),new Binding(r,1),new Binding(r,2)};
-        long nextPoll=0,nextSample=0,nextHeartbeat=0;
+        long nextPoll=0,nextSample=0,nextHeartbeat=0,nextEvents=0;
         boolean enabled=false;
         try {
             while(r.active) {
-                boolean wanted=CarPlayApp.isActive() && SettingsRuntime.verboseDiagnosticSession();
+                boolean diagnostic=CarPlayApp.isActive() && SettingsRuntime.verboseDiagnosticSession();
+                int connection=CarplayBus.getInstance().connectionGeneration();
+                boolean badge=connection>=0 && CarPlayApp.isActive() && CarPlayApp.isSessionConnected() && SettingsRuntime.speedBadgeSession();
+                boolean wanted=diagnostic || badge;
                 long now=System.currentTimeMillis();
-                if(wanted!=enabled) {
+                if(wanted!=enabled || connection!=r.connection || badge!=r.badgeEnabled) {
+                    for(int i=0;i<bindings.length;i++)bindings[i].close();
+                    r.clear();
+                    synchronized(r){r.connection=connection;r.badgeEnabled=badge;}
                     enabled=wanted;
                     if(!enabled) {
-                        for(int i=0;i<bindings.length;i++)bindings[i].close();
-                        r.clear();
                         state="OFF";
                     } else {
-                        Log.i(TAG,"START run="+r.id+" build="+CarPlayApp.BUILD_ID
-                            +" passive=1 units=0_kmh_1_mph no_positions=1");
-                        nextPoll=nextSample=nextHeartbeat=0;
+                        if(diagnostic)Log.i(TAG,"START run="+r.id+" build="+CarPlayApp.BUILD_ID
+                            +" passive=1 units=0_kmh_1_mph no_positions=1 badge="+badge);
+                        nextPoll=nextSample=nextHeartbeat=nextEvents=0;
                     }
                 }
+                synchronized(r){r.diagnostic=diagnostic;}
                 if(enabled) {
                     if(now>=nextPoll || nextPoll-now>5000L) {
                         int bound=0;
@@ -76,18 +95,26 @@ public final class SpeedSourceDiagnostics implements Module {
                         if(r.active)state="Subscribed "+bound+"/3 (not data proof)";
                         nextPoll=now+5000L;
                     }
-                    String[] events=r.drain();
-                    for(int i=0;i<events.length;i++)Log.i(TAG,events[i]);
-                    if(now>=nextSample || nextSample-now>2000L) {
+                    if(now>=nextEvents || nextEvents-now>1000L) {
+                        String[] events=r.drain();
+                        if(diagnostic)for(int i=0;i<events.length;i++)Log.i(TAG,events[i]);
+                        nextEvents=now+1000L;
+                    }
+                    if(diagnostic && (now>=nextSample || nextSample-now>2000L)) {
                         Log.i(TAG,r.sample(0,now));
+                        if(badge) {
+                            SpeedBadge.Snapshot selected=badgeSnapshot();
+                            Log.i(TAG,"BADGE source="+selected.source+" speed="+selected.speed+" limit="+selected.limit
+                                +" unit="+selected.unit+" over="+selected.over+" conflict="+selected.conflict);
+                        }
                         nextSample=now+2000L;
                     }
-                    if(now>=nextHeartbeat || nextHeartbeat-now>10000L) {
+                    if(diagnostic && (now>=nextHeartbeat || nextHeartbeat-now>10000L)) {
                         for(int i=1;i<TOPICS.length;i++)Log.i(TAG,r.sample(i,now));
                         nextHeartbeat=now+10000L;
                     }
                 }
-                try {Thread.sleep(1000L);}
+                try {Thread.sleep(200L);}
                 catch(InterruptedException e){if(!r.active)break;}
             }
         } catch(RuntimeException e){state="PROBE_ERROR";Log.e(TAG,state,e);}
@@ -123,6 +150,9 @@ public final class SpeedSourceDiagnostics implements Module {
     static final class Run {
         final int id;
         volatile boolean active=true;
+        final SpeedBadge badge=new SpeedBadge();
+        boolean badgeEnabled,diagnostic=true;
+        int connection=-1;
         private final String[] latest=new String[TOPICS.length];
         private final long[] counts=new long[TOPICS.length],invalid=new long[TOPICS.length],
             times=new long[TOPICS.length];
@@ -131,17 +161,26 @@ public final class SpeedSourceDiagnostics implements Module {
         private int head,size;
         private long dropped;
         Run(int id){this.id=id;}
-        synchronized void close(){active=false;}
+        synchronized void close(){active=false;badgeEnabled=false;}
         synchronized void clear() {
+            for(int i=0;i<3;i++)badge.reset(i);
             for(int i=0;i<latest.length;i++){latest[i]=null;counts[i]=invalid[i]=times[i]=0;}
             for(int i=0;i<queue.length;i++)queue[i]=null;
             head=size=0;dropped=0;
         }
         synchronized void reset(int source,int epoch) {
+            badge.reset(source);
             int[] topics=TOPIC_IDS[source];
             for(int i=0;i<topics.length;i++) {
                 int t=topics[i];latest[t]=null;counts[t]=invalid[t]=times[t]=0;epochs[t]=epoch;
             }
+        }
+        synchronized void accept(Capture c,int topic,Object value,int status,long now) {
+            if(!active || !c.active || c.failed || !CarPlayApp.isActive())return;
+            if(badgeEnabled && connection>=0 && connection==CarplayBus.getInstance().connectionGeneration())
+                badge.update(topic,value,status,now);
+            if(diagnostic)record(c,topic,status!=1?"status="+status+" INVALID":
+                "status=1 "+describe(topic,value),status==1 && value!=null,now);
         }
         synchronized void record(Capture c,int topic,String value,boolean valid,long now) {
             if(!active || !c.active || !CarPlayApp.isActive())return;
@@ -263,6 +302,8 @@ public final class SpeedSourceDiagnostics implements Module {
             long now=System.currentTimeMillis();
             if(name.equals("asyncException")) {
                 synchronized(run) {
+                    if(!active || failed || !run.active || !CarPlayApp.isActive())return null;
+                    run.badge.reset(source);
                     for(int i=0;i<TOPIC_IDS[source].length;i++)run.record(this,TOPIC_IDS[source][i],
                         "ASYNC_ERROR code="+args[0]+" request="+args[2],false,now);
                     failed=true;
@@ -271,9 +312,7 @@ public final class SpeedSourceDiagnostics implements Module {
             }
             for(int i=0;i<METHODS[source].length;i++)if(name.equals(METHODS[source][i])) {
                 int topic=TOPIC_IDS[source][i],status=((Integer)args[1]).intValue();
-                String value=status!=1?"status="+status+" INVALID":
-                    "status=1 "+describe(topic,args[0]);
-                run.record(this,topic,value,status==1 && args[0]!=null,now);
+                run.accept(this,topic,args[0],status,now);
                 break;
             }
             return null;

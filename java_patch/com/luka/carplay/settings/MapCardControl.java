@@ -2,12 +2,14 @@ package com.luka.carplay.settings;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.rgd.MapCards;
+import com.luka.carplay.core.SpeedBadge;
+import com.luka.carplay.core.SpeedSourceDiagnostics;
 import java.io.*;
 
 /** Atomic bounded snapshots on QNX4 RAM, published only by the settings worker. */
 public final class MapCardControl {
     static final int MAX_SNAPSHOT=2048;
-    static final int PROTOCOL_VERSION=2;
+    static final int PROTOCOL_VERSION=3;
     static final int CONTROL_LEASE_MS=4000;
     static final int TEXT_FIELDS=6;
     static final String CONTROL="/ramdisk/carplay_cards.control";
@@ -21,9 +23,12 @@ public final class MapCardControl {
         return out.toString();
     }
     static String encode(MapCards.Snapshot snapshot,int pid,long expiry) throws IOException {
+        return encode(snapshot,new SpeedBadge.Snapshot(),pid,expiry);
+    }
+    static String encode(MapCards.Snapshot snapshot,SpeedBadge.Snapshot badge,int pid,long expiry) throws IOException {
         StringBuffer out=new StringBuffer("CARDS");
         out.append(PROTOCOL_VERSION).append(' ');
-        out.append(pid).append(' ').append(expiry).append(' ').append(Math.max(0,snapshot.connection)).append(' ')
+        out.append(pid).append(' ').append(expiry).append(' ').append(Math.max(0,badge.enabled?badge.connection:snapshot.connection)).append(' ')
             .append(snapshot.media?1:0).append(' ').append(snapshot.trip?1:0).append(' ')
             .append(snapshot.progress).append(' ').append(snapshot.art).append(' ')
             .append(snapshot.trackRevision).append('\n');
@@ -31,9 +36,15 @@ public final class MapCardControl {
             snapshot.tripText[0],snapshot.tripText[1],snapshot.tripText[2]};
         if(lines.length!=TEXT_FIELDS)throw new IOException("Incorrect map card text fields");
         for(int i=0;i<lines.length;i++)out.append(hex(lines[i])).append('\n');
+        out.append("SPEED ").append(badge.enabled?1:0).append(' ').append(badge.speed).append(' ')
+            .append(badge.limit).append(' ').append(badge.unit).append(' ').append(badge.source).append(' ')
+            .append(badge.wide?1:0).append(' ').append(badge.expires).append('\n');
         return out.toString();
     }
     public static String publish(boolean media,boolean trip) throws IOException {
+        return publish(media,trip,false);
+    }
+    public static String publish(boolean media,boolean trip,boolean speed) throws IOException {
         File owner=new File("/tmp/MMI-Cockpit-Carplay.mirror.pid");
         int pid=0;
         if(owner.isFile()) {
@@ -46,16 +57,19 @@ public final class MapCardControl {
             return "NOT_RUNNING";
         }
         MapCards.Snapshot snapshot=MapCards.snapshot(media,trip);
-        byte[] bytes=encode(snapshot,pid,System.currentTimeMillis()+CONTROL_LEASE_MS).getBytes("US-ASCII");
+        SpeedBadge.Snapshot badge=speed?SpeedSourceDiagnostics.badgeSnapshot():new SpeedBadge.Snapshot();
+        byte[] bytes=encode(snapshot,badge,pid,System.currentTimeMillis()+CONTROL_LEASE_MS).getBytes("US-ASCII");
         if(bytes.length>MAX_SNAPSHOT)throw new IOException("Map cards snapshot exceeds protocol bound");
         File temporary=new File(CONTROL+".new");
         FileOutputStream output=new FileOutputStream(temporary);
         try {output.write(bytes);output.flush();}finally{output.close();}
-        if(snapshot.connection>=0 && snapshot.connection!=CarplayBus.getInstance().connectionGeneration()) {
+        int generation=CarplayBus.getInstance().connectionGeneration();
+        if(snapshot.connection>=0 && snapshot.connection!=generation ||
+                badge.enabled && badge.connection!=generation) {
             if(!temporary.delete())throw new IOException("Cannot discard stale map-card snapshot");
             return "SESSION_CHANGED";
         }
         if(!temporary.renameTo(file))throw new IOException("Cannot publish map cards on /ramdisk");
-        return snapshot.media || snapshot.trip?"CONTROL_PUBLISHED":media || trip?"WAITING_DATA":"OFF";
+        return snapshot.media || snapshot.trip || badge.enabled?"CONTROL_PUBLISHED":media || trip || speed?"WAITING_DATA":"OFF";
     }
 }

@@ -13,15 +13,18 @@ static EGLDisplay display;
 static EGLSurface surface;
 static unsigned char pixels[1440*455*4];
 static int (*swap_count)(void);
+static unsigned badge;
 static unsigned long long now(void) {
     struct timeval t;gettimeofday(&t,NULL);
     return (unsigned long long)t.tv_sec*1000+t.tv_usec/1000;
 }
 static void publish(unsigned media,unsigned trip) {
     FILE *f=fopen(CARDS_CONTROL_PATH ".new","w");assert(f);
-    assert(fprintf(f,"CARDS2 %u %llu 9 %u %u 500 0 1\n"
+    assert(fprintf(f,"CARDS3 %u %llu 9 %u %u 500 0 1\n"
         "436166c3a9206d75736963\n417274697374\n506175736564\n31343a3332\n312068\n3530206d69\n",
         (unsigned)getpid(),now()+4000,media,trip)>0);
+    if(badge)assert(fprintf(f,"SPEED 1 52 50 0 2 1 %llu\n",now()+2000)>0);
+    else assert(fprintf(f,"SPEED 0 -1 -1 -1 0 0 0\n")>0);
     assert(!fclose(f));assert(!rename(CARDS_CONTROL_PATH ".new",CARDS_CONTROL_PATH));
 }
 static void menu(unsigned preview) {
@@ -78,6 +81,15 @@ static void preview(const char *name) {
         assert(fwrite(pixels+(y*1440+x)*4,1,3,f)==3);
     assert(!fclose(f));
 }
+static void wait_badge(void) {
+    unsigned long long until=now()+2000;
+    do {
+        frame();
+        if(changed(SPEED_X_WIDE+30,SPEED_Y+30))return;
+        usleep(20000);
+    } while(now()<until);
+    assert(0 && "Speed badge missing from real swap hook");
+}
 int main(void) {
     assert(access("/.dockerenv",F_OK)==0);
     unsetenv("CARPLAY_MASCOT_CONFIG");unsetenv("CARPLAY_MASCOT_STATUS");
@@ -95,6 +107,7 @@ int main(void) {
     assert(eglMakeCurrent(display,surface,surface,context));
     glViewport(0,0,1440,455);glClearColor(.4f,.6f,.8f,.37f);
     for(unsigned flags=0;flags<4;flags++) {publish(flags&1,flags>>1);wait_cards(flags&1,flags>>1);}
+    badge=1;publish(1,1);wait_cards(1,1);wait_badge();
     preview("hook-both");
     int before=swap_count();usleep(300000);assert(swap_count()==before);
     for(unsigned preview_page=0;preview_page<=1;preview_page++) {
@@ -105,15 +118,17 @@ int main(void) {
             usleep(20000);
         } while(now()<until);
         assert(!changed(CARDS_X+12,CARDS_TOP+44) && changed(720,100));
+        assert(!changed(SPEED_X_WIDE+SPEED_WIDTH-12,SPEED_Y+30));
         preview(preview_page?"hook-chooser-suppression":"hook-menu-suppression");
-        assert(!unlink("/ramdisk/carplay_vc_panel.control"));publish(1,1);wait_cards(1,1);
+        assert(!unlink("/ramdisk/carplay_vc_panel.control"));publish(1,1);wait_cards(1,1);wait_badge();
     }
     assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(display,context));
     context=eglCreateContext(display,config,EGL_NO_CONTEXT,version);
     assert(eglMakeCurrent(display,surface,surface,context));
-    glViewport(0,0,1440,455);glClearColor(.4f,.6f,.8f,.37f);publish(1,1);wait_cards(1,1);
+    glViewport(0,0,1440,455);glClearColor(.4f,.6f,.8f,.37f);publish(1,1);wait_cards(1,1);wait_badge();
     assert(!unlink("/ramdisk/cards-interpose.ready"));wait_cards(0,0);
+    assert(!changed(SPEED_X_WIDE+30,SPEED_Y+30));
     f=fopen("/ramdisk/cards-interpose.ready","wb");assert(f);assert(!fclose(f));
     publish(1,1);wait_cards(1,1);
     assert(!mkfifo("/ramdisk/cards-stall.fifo",0600));
@@ -122,6 +137,7 @@ int main(void) {
     unsigned long long until=now()+1400;
     do {frame();usleep(20000);} while(now()<until);
     assert(!changed(CARDS_X+12,CARDS_TOP+44));
+    assert(!changed(SPEED_X_WIDE+30,SPEED_Y+30));
     unlink("/ramdisk/carplay_mascot.control");unlink(CARDS_CONTROL_PATH);
     unlink("/ramdisk/cards-interpose.ready");
     assert(eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));

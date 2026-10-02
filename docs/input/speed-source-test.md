@@ -1,9 +1,51 @@
 # Speed/road-limit source test: MU1316 Q5
 
-This is a **passive diagnostic**, not the speed badge. Nothing new is drawn over
-the map and no overspeed warning is enabled. It measures the existing Audi data
-before choosing a display source. Subscription-independent limits, camera
-equipment, callback cadence and agreement with the cockpit are still unverified.
+The original source-only trial used `60eb66c` with no badge. Current source also
+has a default-Off **experimental camera-first badge**, whose source accuracy and
+physical clearance are not vehicle-confirmed. The returned source evidence and
+its limits are retained below; do not confuse it with badge acceptance.
+
+## Camera-first badge trial
+
+Install the new matched package using the existing Toolbox sequence below; the
+old diagnostic card does not contain the badge. Read back **System status ->
+Build**. While parked, enable **Carplay Altscreen -> Map cards -> Speed / limit
+badge (experimental)**. It applies live, without reconnect or reboot. Confirm:
+
+1. Parked speed agrees with the cockpit and uses the expected unit. A missing
+   speed/limit is `--`, not zero. CAM/MAP identifies the chosen source; absence of
+   an unknown limit is not evidence that the road is unrestricted.
+2. Switch both Views while parked. Check top-strip, dial and right-RGI clearance,
+   and readability of all three digits. Only the speed badge moves inward;
+   music/Trip stay fixed. Open/close the VC panel and mascot chooser. Toggle the
+   badge Off/On without changing the other cards.
+3. For a recorded trial, select **Verbose next session** and reconnect manually.
+   Compare the badge with the cockpit speed and actual posted signs during an
+   ordinary lawful drive. Have a passenger note observations; do not interact
+   with menus or deliberately exceed a limit to exercise the red color.
+4. Note any CAM/MAP switch, sign disagreement, stale reading or wrong unit,
+   together with the approximate time. Especially check entering/exiting a
+   changed limit and a road where the map feed becomes unknown. Google/Audi
+   displayed limits are comparison sources, not ground truth.
+5. Park and promptly export full diagnostics as below. Record the installed
+   build and whether this was **before or after** any OBD coding change.
+   Keep the first baseline separate from a later recognition-enabled trial.
+   This project does not perform or prescribe that coding; if changing it,
+   retain the original coding/adaptations and follow the tool/manufacturer's
+   parked procedure. Enabling a feature is not proof of compatible equipment
+   or of this badge's data validity.
+
+Red is tested synthetically at below/equal/above thresholds for both selected
+sources. The car trial should check accuracy, not provoke a warning. Stop using
+the experimental badge if it is misleading; posted signs and the normal cockpit
+remain authoritative. No subscription purchase or native Audi route is needed
+by the implementation.
+
+## Original source-only procedure
+
+Keep the new badge **Off** when repeating this procedure. In Normal logging,
+subscriptions are Off only when the badge is also Off; enabling it supplies live
+data without recording the private numeric/sign diagnostic samples.
 
 ## Before testing
 
@@ -117,7 +159,11 @@ Rebinding resets the affected snapshots and advances the source `epoch`. Late
 callbacks from old listeners, stop or disconnect are ignored. Invalid callbacks
 replace the previous payload instead of silently retaining it. Source removal,
 partial subscription failure, async errors and missing sources are reported.
-Normal mode/unknown receiver state/Master Off/disconnect withdraw subscriptions.
+Normal mode with badge Off, unknown receiver state, Master Off and disconnect
+withdraw subscriptions. The optional badge shares the same passive listeners;
+it does not require Verbose logging. In a Verbose badge session, two-second
+`BADGE` records add the selected source (0 unknown, 1 map, 2 camera), displayed
+speed/limit/unit, comparison result and camera/map disagreement flag.
 Registration success and a worker heartbeat are never reported as valid data.
 
 For interpretation: speed unit 0=km/h, 1=mph and value-state 1=valid. The limit

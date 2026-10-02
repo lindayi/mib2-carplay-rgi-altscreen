@@ -6,10 +6,11 @@ public final class Setting {
         PROGRESS=6, TEXT_SIZE=7, ROAD_SCROLL=8, BACKGROUND=9, ZOOM=10, ZOOM_SPEED=11,
         TOUCHPAD=12, TOUCH_SENSITIVITY=13, RECOVERY=14, VERBOSE=15,
         INFO_DEFAULT=16, INFO_ROAD=17, INFO_RETURN=18, PRESET=19, MASCOT=20,
-        NOW_PLAYING_CARD=21, TRIP_CARD=22;
+        NOW_PLAYING_CARD=21, TRIP_CARD=22, SPEED_BADGE=23;
     public static final int VERSION_1_COUNT=16;
     public static final int VERSION_2_COUNT=20;
     public static final int VERSION_3_COUNT=21;
+    public static final int VERSION_4_COUNT=23;
     private static final String[] SWITCH={"Off","On"};
     public static final Setting[] ALL={
         new Setting("enabled","Enabled",SWITCH,1,true),
@@ -34,7 +35,8 @@ public final class Setting {
         new Setting("preset","Overlay appearance preset",new String[]{"Custom","Minimal","Standard","Large text"},0,false),
         new Setting("mascot","Map mascot",MascotCatalog.CHOICES,0,false),
         new Setting("now_playing_card","Now Playing map card",SWITCH,0,false),
-        new Setting("trip_card","Trip progress map card",SWITCH,0,false)
+        new Setting("trip_card","Trip progress map card",SWITCH,0,false),
+        new Setting("speed_badge","Speed / limit badge (experimental)",SWITCH,0,false)
     };
     public final String key, label;
     public final String[] choices;

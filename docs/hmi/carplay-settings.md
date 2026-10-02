@@ -81,7 +81,7 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Main | CarPlay map + guidance / CarPlay map only / Audi map + guidance | Direct access beside Enabled. Display and RGI changes apply live when possible. The launcher excludes the AltScreen preload for a new Audi-map session; switching back then needs reconnect. |
 | Main | Reapply cluster layout | Queues the current connection's selected URL again; no restart, reconnect or crop change. Requires active cluster video and a live receiver with a latched URL. Success means queued, not phone-confirmed or guaranteed recentering. |
 | Phone map | Top / right / no ETA / original AltScreen | Reconnect; requests the iPhone layout, not direct marker positioning. |
-| Map cards | Now Playing map card; Trip progress map card | Independent, default Off, live on CarPlay map video. Fixed provisional left-side placement; Audi dial occlusion needs a parked check. |
+| Map cards | Now Playing; Trip progress; experimental speed/limit badge | Independent, default Off, live on CarPlay video. Music/Trip stay fixed left; the speed badge uses a View-dependent top-right inset. |
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
@@ -210,7 +210,7 @@ withdraw the cards. They never own steering-wheel input.
 The component's existing media-cache listener and an independent RGI observer
 capture bounded data even in map-only mode and while the toggles are Off. Only
 the settings worker formats text and atomically publishes a four-second
-`CARDS2` snapshot at `/ramdisk/carplay_cards.control`, bound to mirror PID and
+`CARDS3` snapshot at `/ramdisk/carplay_cards.control`, bound to mirror PID and
 receiver generation, with a monotonically assigned observed-track revision.
 Java and native must be upgraded together; old/mixed versions are rejected.
 Arrival validation accepts the formatter's 24-hour and AM/PM clocks, including
@@ -236,6 +236,65 @@ frame, rectangular base, centered headers, caption clearance and title/artist re
 Audi-dial coverage, right-side guidance and the lower Audi bar. Open the ordinary
 VC menu and mascot chooser, then close them to confirm card restoration. Toggle
 both Off and confirm the original map presentation returns without reconnecting.
+
+### Experimental speed/limit badge
+
+**Map cards -> Speed / limit badge (experimental)** defaults Off and applies live.
+It is separate from the small maneuver box and the fixed left music/Trip frame.
+It uses the mirror-only canvas and the same worker/control path; it never changes
+Audi coding, subscriptions, sign-recognition settings or OEM observers.
+
+The provisional selection is **camera first, map fallback**. Camera candidates
+must have accepted callback validity, an explicit camera-only source and a
+positive North American conventional/variable speed-limit value. No-sign,
+cancellation, invalid values, conditional additional signs/text and ambiguous
+camera/database/fusion flags withdraw that slot. Different simultaneous camera
+limits are ambiguous, not a reason to guess slot priority. Explicit TSD Off or
+camera-blind messages clear camera candidates. Otherwise the fallback is
+TrafficRegulation's highest-priority **conventional**, not advisory, limit.
+The fallback does not reinterpret an unavailable additional-sign enum as proof
+that the road is unconditional. These are experimental source choices, not a
+guarantee of the legally applicable limit.
+
+`signEffective=false` is deliberately **not** a veto: the exact Java trace found
+no such rule, and the owner approved trying camera-first despite its unresolved
+native meaning. A small **CAM/MAP** label identifies the selected source. A
+camera/map disagreement keeps the camera choice and is recorded in Verbose logs.
+Missing limits show `--`; they do not become zero or retain a cleared value.
+
+Current speed uses `vehicleSpeed`, not `realVehicleSpeed`. It must have valid
+outer and inner status, known units and a finite nonnegative value. The shared
+unit label follows the current vehicle-speed unit; a differing limit unit is
+converted before integer rounding. With no current speed, the selected limit's
+unit is used. Red `#ff6262` means the displayed integer speed is strictly greater
+than the displayed integer limit, for **either** source. Equality, unknown speed
+or unknown limit never produces red. This is a visual comparison, not an audible
+warning, enforcement tolerance or substitute for posted signs.
+
+Moving samples expire after two seconds; exact zero may remain for at most
+15 seconds because the retained parked feed paused over ten seconds. Invalid
+callbacks clear immediately. Speed expiry travels with the control snapshot, so
+a still-readable old file cannot renew it. Signs are change-driven: an arbitrary
+two-second timeout would erase valid unchanged limits. They remain until a
+replacement/clearing/invalid event, service loss or session reset. That does not
+prove freshness if an upstream sign source silently stalls.
+
+The settings worker publishes at approximately 5 Hz while the badge is enabled,
+without increasing the one-second preference/session file refresh cadence.
+`CARDS3` includes a strict, bounded `SPEED` record. The native worker paints only
+changed pixels; GL performs no file I/O or CPU painting and adds no swaps.
+Master Off, Audi-map mode, receiver loss, unavailable video, invalid controls
+and expired worker leases withdraw the badge. The VC settings panel temporarily
+suppresses it. Normal logging still supplies badge data, but does not record
+numeric/sign samples; badge Off plus Normal withdraws the passive subscriptions.
+
+At 1440x455 the badge is **138x72** at **(920,115)** for large-map/small-dial View,
+or **(805,115)** for small-map/large-dial View. Placement follows accepted Fct54
+Status, including stock startup replay; unknown presentation uses the inward
+position. No right RGI plane is moved. These positions come from the approved
+photo mock, **not** a measured Audi occlusion mask. Real host EGL pixels establish
+composition, not vehicle clearance or speed-limit accuracy. Follow the
+[camera-first car trial](../input/speed-source-test.md#camera-first-badge-trial).
 
 ### Optional map mascots
 
@@ -426,11 +485,12 @@ be performed on the car with a fresh connection.
 
 `/mnt/persist/var/app/carplay_altscreen/preferences` is a strict, versioned
 key/index file. Java and shell validate the same complete schema. New saves use
-`format=4` (23 settings). Complete `format=1` files (16 settings) are accepted with
+`format=5` (24 settings). Complete `format=1` files (16 settings) are accepted with
 Road/exit, next-road text, 20-second return, Custom and mascot Off defaults.
 Complete `format=2` files (20 settings) retain their choices and default mascot Off.
 Complete `format=3` files (21 settings) retain their mascot selection.
-All historical versions default both map cards Off. Reads do not
+Formats 1-3 default both map cards Off. Complete `format=4` files (23 settings)
+retain both card choices. All older formats default the speed badge Off. Reads do not
 rewrite old files; the next save migrates them. Incomplete or mixed-version files
 are rejected rather than filled with silent defaults. Save uses a
 flushed/synced temporary file and rename. Invalid settings select the safe disabled
@@ -438,7 +498,7 @@ path and report an error; preference reset can repair them without enabling the
 master switch. The old `cluster_ui.url` is imported only when no new preference
 file exists. The GEM layout picker updates the new setting once it exists.
 
-Older builds cannot read format 4, even when both cards are Off. An intentional
+Older builds cannot read format 5, even when the badge is Off. An intentional
 downgrade needs a complete preference file supported by that build or its Reset
 preferences action; unsupported data takes the disabled path, never a partially
 interpreted configuration.
@@ -470,19 +530,21 @@ existing vehicle-speed, TrafficRegulation and TSD notifications while CarPlay
 integration is active. It uses the verified receiver-session verbosity, not
 merely a newly requested preference. Manually reconnect to apply either Verbose
 or Normal. **System status -> Speed source probe** reports how many of the three
-services are subscribed, explicitly not whether they supply usable data.
+services are subscribed, explicitly not whether they supply usable data. These
+same independent listeners also serve the badge when it is enabled in Normal
+logging; turning off the badge does not stop an active Verbose diagnostic.
 
 The probe never enables traffic-sign services, changes Audi settings/subscriptions
 or takes over an OEM observer. Numeric/enum samples and source validity go only
 to the existing bounded private Java logs. No GPS position or conditional-sign
 text is recorded. Full diagnostic export includes these logs; summary export
-does not. No speed badge or overspeed warning is implemented yet.
+does not. Enabling diagnostics alone does not enable the optional badge.
 Follow the [parked and lawful-driving test plan](../input/speed-source-test.md).
 
 ## Tests and limitations
 
 `TOOLS_DIR=... STOCK_JAR=MU1316-P5145-stock.jar ./scripts/test_mmi_settings.sh`
-checks every preference choice, v1/v2 migration/v3 strictness, preset preservation,
+checks every preference choice, v1-v4 migration/v5 strictness, preset preservation,
 malformed files, atomic-save failure, reset,
 guarded factory patch equivalence, strict class verification, real native widget
 constructors, OEM-row retention, nonblocking action handling/timeouts, live
