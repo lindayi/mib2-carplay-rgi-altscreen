@@ -553,6 +553,12 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   are not repeated failed callbacks. Initial/Normal-mode teardown is absent from
   the exported tail. Source availability is not proof of posted-sign accuracy,
   complete offline entitlement, or displayed badge behavior.
+- Public `TSDSignInfo` decompilations have a six-argument constructor that defaults
+  `signEffective` false, but their serializers also explicitly receive/transmit
+  the flag. Neither constructor defaults nor absence of indexed UI consumers
+  proves the flag is unused on MU1316. Public research found no authoritative
+  semantic/version contract; do not treat its name alone as an applicability
+  specification. Source links and qualifications are in the speed test document.
 
 ### Optional map mascots
 

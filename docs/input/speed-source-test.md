@@ -164,3 +164,24 @@ seconds and unchanged map-limit intervals exceeded six minutes. Measure data
 semantics separately from worker liveness; neither one shared short timeout nor
 indefinite retention is justified. The export begins mid-log, so initial parked
 steps and post-export disable behavior are not established by this capture.
+
+### Public `signEffective` research
+
+Public decompilations provide a structural clue, not an applicability contract.
+In [the published TSDSignInfo class](https://github.com/grajen3/mib2-lsd-patching/blob/d57796ff243dfdfdf32dacad468b1eaf76b638e3/lsd_java/org/dsi/ifc/cardriverassistance/TSDSignInfo.java),
+the default and six-argument constructors leave `signEffective=false`, whereas
+the twelve-argument constructor accepts it explicitly. However,
+[its serializer](https://github.com/grajen3/mib2-lsd-patching/blob/d57796ff243dfdfdf32dacad468b1eaf76b638e3/lsd_java/de/esolutions/fw/comm/dsi/cardriverassistance/impl/TSDSignInfoSerializer.java)
+actually reads and writes the field; it is not merely an unused Java member.
+The separately published
+[MU1326-labelled serializer](https://github.com/outrowender/sporthmi/blob/84d088c355ed5af583af4ddbea63cf983be6c545/MU1326_lsd_java/de/esolutions/fw/comm/dsi/cardriverassistance/impl/TSDSignInfoSerializer.java)
+does the same.
+
+No authoritative definition of false, producer capability/version rule, or
+functional use of this flag was established by the public search. Indexed
+references in those two repositories were confined to the DTO, serialization
+and, in one tree, tracing; search coverage is not an exhaustive audit.
+These are third-party decompilations, not an OEM specification or verification
+of this car's exact MU1316 receive path. Neither "false always forbids use" nor
+"false is harmless and can be ignored" follows from these sources. Check the
+exact producer/receive chain before using the camera-first policy for warnings.
