@@ -559,6 +559,15 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   proves the flag is unused on MU1316. Public research found no authoritative
   semantic/version contract; do not treat its name alone as an applicability
   specification. Source links and qualifications are in the speed test document.
+- Exact MU1316 follow-up scans all 30,543 stock classes: direct flag references
+  occur only in the DTO and serializer. Reply method 185 -> nested serializers ->
+  dispatcher attribute 38 passes the explicitly decoded flag unchanged; the
+  six-argument defaulting constructor is not the receive path. A strict host
+  probe delivers both values with status 1/129 (confirmation bit stripped).
+  Stock Audi sign callbacks are logging stubs, not a false-flag veto. This proves
+  Java transport behavior, not native producer semantics or cluster-ECU policy.
+  Do not require true solely from the parameter's name, or declare false safe
+  to ignore. Exact bytecode/probe evidence remains private under the speed study.
 
 ### Optional map mascots
 

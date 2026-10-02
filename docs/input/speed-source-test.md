@@ -185,3 +185,32 @@ These are third-party decompilations, not an OEM specification or verification
 of this car's exact MU1316 receive path. Neither "false always forbids use" nor
 "false is harmless and can be ignored" follows from these sources. Check the
 exact producer/receive chain before using the camera-first policy for warnings.
+
+### Exact MU1316 Java follow-up
+
+The retained base stock JAR was fingerprint-verified and all 30,543 classes
+scanned for direct field/method references. The receive chain is:
+
+`DSICarDriverAssistanceReplyService` (method 185 for slot 1) ->
+`TSDSignFctSerializer` -> `TSDSignInfoSerializer` ->
+`DSICarDriverAssistanceDispatcher` -> attribute-38 listener.
+
+The nested serializer explicitly reads all twelve flags, including
+`signEffective`. It does not use the six-argument constructor. The dispatcher
+passes the sign object unchanged; callback status is separate, with bit 128
+removed for initial subscription confirmation.
+
+A strict-verification host probe using the actual stock reply service,
+serializers and dispatcher delivers both true and false unchanged, with normal
+and confirmation callback status. Its primitive decoder input is synthetic,
+not a captured native message. In this JAR, direct uses of `signEffective` are
+confined to the DTO and serializer. The stock Audi sign callbacks are logging
+stubs, not an applicability filter.
+
+Thus the observed false value is received data on this Java path, not a logger
+mistake or an untouched Java default. There is also no discovered Java rule
+that rejects a sign because the flag is false. This does **not** define what the
+native producer intended: its vehicle/camera-side logic is outside the retained
+Java image and targeted native backups. Reflection/JNI and instrument-cluster
+logic are outside the direct-bytecode scan's proof. Do not invent either a
+mandatory true gate or an always-safe-ignore rule from the field name alone.
