@@ -527,8 +527,32 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   the prior sample. Callbacks never access files or serialize arbitrary DTO text.
   Worker samples and bounded sign-transition events use the existing private
   Java log/full-export path; counts/ages are observations, not freshness proof.
-  No speed badge or warning is implemented; live availability remains open.
+  No speed badge or warning is implemented; the later capture below establishes
+  delivery, not a complete source-selection or warning policy.
   See `docs\input\speed-source-test.md` for the parked/normal-drive/export plan.
+- The October 1 return matches installed/card JAR pins `3475735160 360325`
+  (`60eb66c`). Owner reports CarPlay foreground with Car menus closed and no issues.
+  Private capture `carplay-build-inputs\vehicle-speed-test-20261001-2206` contains
+  166 hash-verified files; compare with the pre-test manifest to exclude older
+  exports and reused 1970 boot names. The retained probe tail confirms numeric
+  metric speed and map-/camera-marked sign delivery, not just DSI registration.
+  Moving speed callbacks are about 20 Hz; stationary gaps exceed ten seconds.
+  `vehicleSpeed` is integer-valued and `realVehicleSpeed` fractional; neither has
+  been independently compared with the physical cockpit number.
+- TrafficRegulation's positive conventional limits report `NAVDBRAWDATA`; later
+  an accepted callback carries `limit=-1`, no sign and an imperial unit enum.
+  Treat that as unknown/clear, not a real unit change or a reason to keep the
+  previous limit. Additional-sign enum 256 means NA/initial/error, not explicit
+  empty 257. Long unchanged limit intervals are observed; do not reuse numeric
+  speed freshness rules for signs or infer indefinite validity from a heartbeat.
+- TSD slot 1 reports camera/database signs but `signEffective=false` throughout,
+  and the owner saw no native speed-limit signs. TSD later reacquires a camera
+  value while TrafficRegulation remains unknown. Do not bypass this unresolved
+  applicability flag or use an automatic camera fallback for a red warning.
+  Slots 4/5 and system messages returned invalid status; repeated snapshot lines
+  are not repeated failed callbacks. Initial/Normal-mode teardown is absent from
+  the exported tail. Source availability is not proof of posted-sign accuracy,
+  complete offline entitlement, or displayed badge behavior.
 
 ### Optional map mascots
 

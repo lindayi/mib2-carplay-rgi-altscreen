@@ -141,3 +141,26 @@ If only speed works, the design must not invent a limit. If limits are available
 only from a connected source, report that dependency rather than claiming they
 are subscription-free. Badge rendering, overspeed comparison and View-dependent
 positioning follow only after the source-selection behavior is justified.
+
+## October 1 returned capture
+
+The installed/card checksum pair confirms `60eb66c`. The owner reports CarPlay
+foreground with Car menus closed, metric units and no issues. The retained
+diagnostic tail establishes live delivery from all three candidate services:
+numeric speed, conventional map-derived limits and camera/database-marked TSD
+signs. It does not independently establish agreement with the physical cockpit
+number or posted signs.
+
+Two source-policy cautions are now vehicle-observed. An accepted TrafficRegulation
+callback can contain `limit=-1` and no sign; this must clear the prior limit even
+though callback validity is accepted. TSD can later supply a camera-marked value
+while TrafficRegulation remains unknown, but `signEffective` was false throughout
+and the owner saw no native limit signs. Do not silently use TSD as an applicable
+limit or bypass its unresolved flag. Additional-sign enum 256 is NA/initial/error,
+not explicit empty 257.
+
+Moving speed updates were frequent, but stationary speed gaps exceeded ten
+seconds and unchanged map-limit intervals exceeded six minutes. Measure data
+semantics separately from worker liveness; neither one shared short timeout nor
+indefinite retention is justified. The export begins mid-log, so initial parked
+steps and post-export disable behavior are not established by this capture.
