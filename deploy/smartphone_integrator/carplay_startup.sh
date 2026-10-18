@@ -84,15 +84,16 @@ LD_PRELOAD= "$H/carplay_monitor.sh" "$DIO_PID" </dev/null >>"$WLOG" 2>&1 &
 MONITOR_PID=$!
 
 # Only dio_manager receives the hook. The monitor and the renderer explicitly
-# clear LD_PRELOAD. Other preloads for dio_manager (the AltScreen universal hook)
-# come first: CARPLAY_PRELOAD_EXTRA from the child env, then whatever LD_PRELOAD
-# still holds here - a preload loaded into this shell may already have removed
-# itself from it. Ours goes last; each entry once.
+# clear LD_PRELOAD. Ours goes first, so its AirPlayReceiverSessionScreen_CopyDisplaysInfo and
+# ...SessionPlatformCopyProperty wrap AltScreen's (cluster view area); the others are disjoint. Then the
+# other preloads for dio_manager (the AltScreen universal hook): CARPLAY_PRELOAD_EXTRA
+# from the child env, then whatever LD_PRELOAD still holds here - a preload loaded into
+# this shell may already have removed itself from it. Each entry once.
 INHERITED_PRELOAD=${LD_PRELOAD:-}
 PRELOAD_LIST=
 OLD_IFS=$IFS
 IFS=:
-for lib in ${CARPLAY_PRELOAD_EXTRA:-} $INHERITED_PRELOAD $H/libcarplay_hook.so; do
+for lib in $H/libcarplay_hook.so ${CARPLAY_PRELOAD_EXTRA:-} $INHERITED_PRELOAD; do
     [ -n "$lib" ] || continue
     if [ "$MENU_VIDEO" = 0 ]; then
         case "$lib" in */libcarplay_altscreen.so) continue ;; esac

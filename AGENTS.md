@@ -259,6 +259,13 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 
 ## Architecture and invariants
 
+- Allemon's placement/view-area changes are integrated while retaining the
+  normal-MMI touchpad option and exact MU1316 native-menu build guard. Do not
+  reintroduce upstream's unconditional touchpad removal or MU1003 source rewriting.
+  Displayable 3 placement must withdraw when video is inactive. Read the bounded
+  shift configuration on the worker: equal size and coarse QNX timestamps do not
+  prove equal contents. The RGI hook precedes the AltScreen hook in receiver
+  preloads so view-area interception can wrap the returned display dictionaries.
 - Java HMI is long-lived; `CarplayBus` is the server on loopback **19810** and the
   native hook is its client. `RendererServer` is the Java server on **19800**;
   `maneuver_render` is a restartable native client.

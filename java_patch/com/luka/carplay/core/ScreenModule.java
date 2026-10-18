@@ -137,6 +137,9 @@ public final class ScreenModule implements Module {
         }
         if (changed)
             Log.i(TAG, "AltScreen video " + (ready ? "ready -> ctx " + CTX_CLUSTER_VIDEO : "gone"));
+        if (changed && ready) com.luka.carplay.cluster.AltScreenPlacement.onVideoReady();
+        com.luka.carplay.cluster.AltScreenPlacement.setActive(ready);
+        if (ready) com.luka.carplay.cluster.AltScreenPlacement.poll();
         com.luka.carplay.cluster.AltScreenCluster.flushLayout();
     }
 

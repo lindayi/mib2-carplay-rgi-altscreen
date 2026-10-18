@@ -95,7 +95,7 @@ rm -f "$TEST_MONITOR"
 sed 's/enabled=0/enabled=1/;s/verbose=0/verbose=1/' "$T/good" > "$T/preferences"
 bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" delta
 grep -q '^video=1$' "$MENU_SESSION_FILE"
-grep -q 'libcarplay_altscreen.so:' "$TEST_DIO"
+grep -q ':.*libcarplay_altscreen.so' "$TEST_DIO"
 test -f "$MENU_VERBOSE_FILE"
 for i in $(seq 1 100); do [ ! -f "$TEST_MONITOR" ] || break; sleep .01; done
 test -f "$TEST_MONITOR"

@@ -124,7 +124,7 @@ grep -Fq '"CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_
 sed -n '/^INHERITED_PRELOAD=/,/^echo "\[startup\] preload/p' "$H/carplay_startup.sh" > "$CASE_DIR/pre.sh"
 got=$(env -u LD_PRELOAD MENU_VIDEO=1 CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so \
     H=/mnt/app/root/hooks WLOG=/dev/null /bin/sh -c ". \"$CASE_DIR/pre.sh\"; echo \$LD_PRELOAD")
-test "$got" = /mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so:/mnt/app/root/hooks/libcarplay_hook.so
+test "$got" = /mnt/app/root/hooks/libcarplay_hook.so:/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so
 
 expect_failure 1 premature-remove "$RUNTIME/bin/rgi_companion.sh" remove
 need premature-remove 'SI still references the RGI runtime'
