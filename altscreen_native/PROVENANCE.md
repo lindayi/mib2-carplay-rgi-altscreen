@@ -134,7 +134,16 @@ mirror-only preload, not part of either source-built artifact.
    Audio-only and Type111-only teardown preserve the live command-channel epoch.
    Captured operation epochs fence late completions, including reused addresses;
    older receivers cannot republish after a newer receiver is selected. A new
-   channel lifetime after Main110 teardown gets a new epoch. Counter exhaustion
+   channel lifetime after Main110 teardown gets a new epoch. After an admitted
+   per-stream stock teardown returns, retire the old UI slot even if `out_done`
+   is zero: the receiver need not be destroyed. A full teardown with `out_done=0`,
+   refused admission or cleanup failure retains its closing fence. Never reopen
+   a closing slot in `alt_ui_session_begin`; fresh successful SETUP/START and
+   the event client must establish readiness again. The host
+   `main110_lifecycle_test.py` compiles the production wrappers and session guards
+   with explicit stock/CF/private111 fixtures, including a per-stream `out_done=0`.
+   It reproduces the integration defect and checks stale/reentrant callbacks,
+   failed cleanup, full teardown, and audio/Type111 isolation. Counter exhaustion
    or a full tracker fails closed instead of recycling epochs.
    Java requests the connection's cached layout URL once after **both** this
    readiness and OEM-map readiness, **before video-ready**, as well as handling existing

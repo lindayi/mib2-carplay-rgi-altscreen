@@ -36,6 +36,7 @@ cc -D_GNU_SOURCE -O2 -Wall -Wextra "$ROOT/tests/installed_paths_test.c" -o insta
 cc -D_GNU_SOURCE -O2 -Wall -Wextra "$ROOT/tests/ui_session_test.c" \
     "$ROOT/hook/ui_session.c" -o ui_session_test
 ./ui_session_test
+python3 "$ROOT/tests/main110_lifecycle_test.py" "$OUT"
 g++ -O2 -Wall -Wextra "$ROOT/tests/frame_source_test.cpp" -I"$ROOT/hook" -o frame_source_test
 ./frame_source_test
 g++ -O2 -Wall -Wextra "$ROOT/tests/snapshot_test.cpp" -o snapshot_test

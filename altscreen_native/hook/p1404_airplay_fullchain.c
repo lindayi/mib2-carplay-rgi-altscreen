@@ -249,7 +249,9 @@ static int fullchain_teardown_admitted(void *session, const void *params,
     real_session_teardown(session, params, reason, &stock_done);
     if (scope & TEARDOWN_MAIN) {
         bootstrap_forget(session);
-        if (stock_done) alt_ui_session_forget(session);
+        /* A returned per-stream stop ends Main110, not the receiver. Keep the
+         * closing fence only while a full-session teardown is unfinished. */
+        if (!full || stock_done) alt_ui_session_forget(session);
     }
     if (audio_owned) alt_airplay_release_object(audio_owned);
     /* The worker no longer references stock clocks. Stop stock audio before

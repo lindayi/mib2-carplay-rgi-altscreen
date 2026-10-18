@@ -69,6 +69,14 @@ Do not turn this into a raw conversation log or store credentials/private captur
   Replay native identity to late observers without blocking registration on the
   bus dispatch lock; clear replay on receiver replacement. Send the cached URL
   before first video, coalesce that video edge, and never timer-resend success.
+- Main110 per-stream teardown must retire its UI epoch after the admitted stock
+  call returns, even when `stock_done=0` (the receiver is still alive). The
+  `490dce9` integration wrongly required full receiver completion and left the
+  slot permanently closing. Retain closing fences on unfinished full teardown,
+  refused admission or cleanup failure; never reopen a slot merely in `begin`.
+  A fresh SETUP/START must earn readiness again, and old epoch callbacks stay
+  rejected. The production-wrapper host fixture reproduces the old failure
+  and covers restart, stream scope, reentrancy and failed teardown; not a car trial.
 - A single owner is not proof of feature parity. AirPlay `updateViewArea` selects
   an advertised FULL/SMALL safe area; `showUI` selects phone content, and Java
   `DisplayManager.setPosition` moves the output plane. They are not substitutes.
