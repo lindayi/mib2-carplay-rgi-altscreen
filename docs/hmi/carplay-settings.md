@@ -161,8 +161,9 @@ lower base. An observed title/artist/album/duration change resets both lines; pl
 artwork and Trip updates do not. Re-enabling media or recovering a lost native
 worker/video lease starts the lines again. Metadata has no true track identifier:
 indistinguishable repeated tracks cannot reliably be detected.
-The embedded font covers Latin/Greek/Cyrillic and punctuation;
-unsupported fields are omitted with a diagnostic, not transliterated.
+The embedded fonts cover Latin/Greek/Cyrillic, punctuation and common Chinese.
+An unsupported character becomes a visible square with a diagnostic; the rest
+of the field remains visible. Text is not translated or transliterated.
 
 Trip shows ETA, remaining time and distance, using the existing HU unit/time and
 destination-zone formatting. Unknown values are omitted. **Estimated progress**
@@ -642,7 +643,7 @@ It checks bounded parsing, real rendered pixels, viewport clipping, destination
 alpha, exact doubled dimensions/raised bounds using opaque fixtures, caller
 graphics state, frame/wrap timing, injected graphics failures,
 actual EGL interposition, missing assets, stale PID/expiry/readiness controls,
-context recreation, swap-failure forwarding and the absence of extra swaps.
+context recreation, swap-failure forwarding and the absence of overlay-owned swaps.
 It also tests the production `/ramdisk` paths with `/tmp` rename unavailable,
 precise/rate-limited status-write failures, and a blocked control reader whose
 render lease must expire. `run_tests.sh` checks native bounded log rotation when

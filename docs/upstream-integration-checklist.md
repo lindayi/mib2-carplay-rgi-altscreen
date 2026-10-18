@@ -147,7 +147,10 @@ has not been replaced or approved. No SD was written and no vehicle was tested.
   photo/native right-card reference, without moving its body or the RGI planes.
 - [x] Exercise native/Java cross-layer replay, concurrent route publication,
   actual GLES pixels, CJK text, corner geometry, idle leases and QNX builds.
-- [ ] Stage and verify a clean-source review-fix package, then record and push it.
+- [x] Stage and verify a clean-source review-fix package and retain private build
+  records. Source `bab78ab` is staged at `build/review-fixes-sd`, with 76 verified
+  manifest entries and JAR pins `1382479218 430207`. Exact-stock Java and all
+  staged install/rollback/rescue/export/recovery fixtures passed. No SD write.
 - [ ] Vehicle acceptance: the new font, slope, idle overlays and replay fixes
   still need parked checks. Do not reproduce a reboot while driving.
 

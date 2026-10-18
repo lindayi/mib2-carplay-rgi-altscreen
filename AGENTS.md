@@ -759,7 +759,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   sidecar; preserve its explicit isolation from receiver preloads.
 - Mascot control is a worker-written `MASCOT2 <selection> <pid> <expiry-ms>` RAM
   lease, bound to the current mirror and video-ready marker. Asset/control/status
-  file I/O stays on workers, not HMI or GL callbacks; no extra swaps/telemetry or stall masking.
+  file I/O stays on workers, not HMI or GL callbacks; no overlay-owned swaps or stall masking.
   Keep Off a no-GL path, restore caller state/alpha, and clear cached GL names on
   context destruction (EGL handles can be reused).
 - Build local 0..16-entry packs with `tools/prepare_mascot_pack.py`; keep third-party
