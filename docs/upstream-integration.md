@@ -4,6 +4,9 @@ This candidate targets only `MHI2Q_US_AUG22_P5145 / MU1316`.
 It replaces the old AltScreen hook and mirror binaries with local source builds.
 It is **host-verified, not vehicle-verified**. No SD card was written during this
 integration. Earlier vehicle reports do not validate this candidate.
+**The follow-up audit found missing upstream fixes and features. This is not a
+feature-complete V3.8 integration. Hold this candidate for correction, not SD
+deployment.** The audit changes documentation only.
 
 ## Source pins and merge decisions
 
@@ -93,11 +96,13 @@ the first video edge. Later route/View/main-MMI requests keep their existing
 generation gates. A successful request is not resent on a timer.
 Queue acceptance still does not prove that the phone displayed the requested UI.
 
-Upstream's lower-bar-only install mode and independent `LowerBarKomo` publisher
-are not imported. They would add another owner for fields managed by local
-information pages. Its approach-only arrow defaults and automatic road/ETA
-concatenation also do not replace the owner's chosen local presentation.
-This integration does not claim to reproduce every upstream default unchanged.
+The first integration excluded upstream's lower-bar-only mode, `LowerBarKomo`,
+approach-only arrow policy and road/ETA suffix to preserve local presentation.
+That was too broad an interpretation of the request. The suffix and renderer-free
+lower-bar mode are compatible additions. `LowerBarKomo` also updates OEM models
+and KOMO, not just the fields sent by our direct BAP publisher. It needs an
+ownership/formatting adapter, not rejection as an inherently redundant component.
+Arrow timing is a real policy choice; it need not require deleting either option.
 
 ## Functionality audit: 2026-10-18
 
@@ -166,32 +171,181 @@ local bridge paths are below `java_patch/com/luka/carplay/rgd/`.
 
 ### Overlap and control inventory
 
-| Area | Assessment and recommendation |
-| --- | --- |
-| Road text in lower bar and small overlay | Real visual overlap when both show the next road. Keep independent switches: the lower bar can show current road while the overlay retains next road, and their font/occlusion limits differ. |
-| ETA in phone video, Audi fields and Trip card | Potential repeated information, not competing writers. Local `No ETA` changes only the phone URL, not Fct19/Fct22 or the Trip card. It is currently mutually exclusive with top/right placement; separate phone-card placement from phone-ETA visibility when adding the new card mode. |
-| Phone maneuver card versus custom arrow/lanes | Potential repeated maneuver information if the phone supplies a card. Upstream explicitly offers WITH RGI CARD as well as CARD-only. Do not remove the custom path that also supplies HUD/native BAP guidance. |
-| Arrow progress versus Trip progress | Not duplicates. One describes approach to the next maneuver; the other estimates progress from this connection's first route-distance sample. |
-| Native phone-map speed-limit sign versus custom badge | Different sources and functions. The badge adds vehicle speed, CAM/MAP selection and a red comparison. Phone and Audi-derived limits can disagree; do not silently treat one as the other. |
-| Now Playing card versus Audi media tab | Intentional repeated metadata on a different surface. The optional map card avoids changing tabs; it shares existing media/artwork input. |
-| Normal MMI and VC settings | Shared `Setting` and `SettingsRuntime`, not independent preference sets. Their page lists are duplicated and have drifted: normal MMI offers the speed badge but VC Map cards lists only media and Trip (`MenuModel.java:138`, `VcPanel.java:148`). Keep the two interfaces but align their shared feature list. |
-| GEM layout and normal-MMI layout | Genuine duplicate controls for the same preference. GEM's script uses the preferences file when present, so these are not two independent active layouts. Prefer normal MMI for everyday changes; keep legacy compatibility separate from visible menu entries. |
-| GEM START and START alias | Exact duplicate action. The alias execs the normal START script. Its visible menu row can be removed without inventing another start mode. |
-| GEM map-area overrides versus source safe areas | They overlap on the same declaration. `cluster_area.sh:31` writes safe height 542 from y=0, replacing the source's y=72/height=378 inset; `alt_viewarea.c:198-212` edits only area 0. Do not treat these legacy width presets as harmless additions to the new two-area model. |
-| GEM Sport test versus automatic Sport placement | The test adds `small_dx=-476` to the stock small-stage offset. On Sport, that can produce -952, not an alternative -476. It is a Classic-only diagnostic by design, but the writer does not enforce the layout. |
-| Reset versus GEM geometry | `Preferences.reset()` resets the versioned settings only. It does not clear `cluster_shift.cfg` or `cluster_viewarea.cfg`. Thus not all project display adjustments return to default. Clarify or consolidate this before presenting reset as comprehensive. |
-| Presets versus individual appearance switches | Intentional convenience. An individual edit materializes the active preset into Custom; it is not a second rendering policy. |
-| Automatic layout reapply versus manual reapply | Same cached session URL, different trigger. Manual reapply remains a useful recovery action; neither applies newly saved reconnect-dependent preferences. |
-| Native, mirror and maneuver recovery | Different layers. The source native monitor services decoding/keyframes; the local supervisors manage separate sidecars. The upstream competing supervisor mode is not deployed. Mirror recovery Off is not a global decoder-recovery switch. |
-| Multiple RGI observers and snapshot requests | Separate consumers, not multiple native RGI producers. `addObserver` does not replay a cache, so late registration still needs catch-up; do not remove sync requests merely because more than one module requests a snapshot. |
-| Verbose diagnostics and speed badge | Already share passive DSI listeners. Normal badge operation does not require enabling verbose numeric logs. |
-| Wheel zoom and panel navigation | One BAP detent path. An acknowledged panel consumes the detent before stock and CarPlay zoom; otherwise the normal stock plus CarPlay zoom behavior remains. Native zoom is blocked. |
-| Theme handling | PR14's workaround is absent, so it is not a second active theme writer. Its reported problem remains unresolved by that exclusion. |
+Origin labels describe the two features being compared, not their authorship.
+An inherited upstream feature can also have local modifications.
 
-The largest correction is not deleting a footer switch. First wire equivalent
-phone view-area behavior under one owner. Then port the desired road/arrival and
-phone-card behavior into that owner, preserving local options. Consolidate actual
-duplicate menu definitions and legacy geometry controls afterward.
+| Area | Origin | Assessment and recommendation |
+| --- | --- | --- |
+| Road text in lower bar and small overlay | Local / upstream | Visual overlap when both show next road. Keep independent switches: current-road choice, fonts and occlusion differ. |
+| ETA in phone video, Audi fields and Trip card | Local / upstream | Repeated information, not competing writers. `No ETA` affects the phone only and shares an exclusive selector with placement. Separate these dimensions. |
+| Phone maneuver card versus custom arrow/lanes | Upstream / upstream, with local renderer additions | Upstream itself offers WITH RGI CARD. Keep the custom footer/HUD/lanes; do not treat all maneuver output as a local duplicate. |
+| Arrow progress versus Trip progress | Local / upstream; not equivalent | Approach to a turn versus estimated journey progress. |
+| Phone-map speed-limit sign versus custom badge | Local / upstream; not equivalent | The local badge adds vehicle speed, Audi-derived limits and warning color. Sources can disagree. |
+| Now Playing card versus Audi media tab | Local / stock | Optional repeated metadata on another surface; shared media/artwork input. |
+| Normal MMI versus VC settings | Local / local | Shared settings/runtime, duplicated page membership. VC omits the speed badge. Align lists without removing either interface. |
+| GEM layout versus normal-MMI layout | Local / upstream | Same preference. Keep compatibility, but route writes through one coherent persistence path. GEM directly edits the file; simultaneous-write loss is a risk to test, not a reproduced failure. |
+| GEM START versus its alias | Inherited upstream / inherited upstream | Exact same action: alias execs START. No second start mode. Consolidating visible rows does not require deleting compatibility scripts. |
+| Legacy GEM map-area overrides versus V3.8 safe areas | Older upstream / newer upstream, retained locally | Old preset writes y=0/height=542 over the new y=72/height=378 inset and changes only area 0. Migrate or isolate these controls; do not apply them blindly. |
+| GEM Sport test versus automatic Sport placement | Upstream diagnostic / locally integrated upstream placement | Unguarded extra -476 can add to automatic -476 and yield -952 on Sport. A diagnostic offset is not an alternative stage transform. |
+| Reset versus separate GEM geometry files | Local / upstream | Reset does not clear `cluster_shift.cfg` or `cluster_viewarea.cfg`. Define reset scope and migrate legacy state. |
+| Presets versus individual switches | Local / local | Intentional convenience. Edits materialize the active preset into Custom, not a second active policy. |
+| Automatic versus manual layout reapply | Local / local | Same cached URL, different trigger. Manual recovery is not a way to apply pending reconnect-dependent settings. |
+| Native recovery versus sidecar supervisors | Local / upstream; different layers | Local native monitor retains startup/consumer keyframes, but bypasses upstream no-frame recovery. Sidecar restart is not an equivalent replacement. Keep one supervisor per process. |
+| RGI observers and sticky-sync requests | Local / upstream; separate consumers | Only one native RGI producer. Registration does not replay the bus cache, so late subscribers still need catch-up. |
+| Speed diagnostics versus badge | Local / local | Already share passive DSI listeners; Normal logging can run the badge. |
+| Wheel zoom versus panel navigation | Local / upstream | One BAP input path. Owned panel consumes before stock/phone zoom. Do not enable a second native wheel writer. |
+| Theme handling | Local / upstream proposal | PR14 is not active, so no duplicate writer. The reported theme issue remains open. |
+
+The correction is not deleting a footer switch. Restore upstream functionality
+under coherent owners, then layer local display and menu choices on it.
+
+## Deeper RGI and maintenance audit
+
+### What was actually retained
+
+The deployed RGI is this fork's **Luka/Allemon-derived implementation**, not a
+wholesale adoption of yuedizhibo's current RGI. The source migration selectively
+ported fixes into `hook/`, `java_patch/com/luka/carplay/rgd/` and
+`maneuver_render/`. It did not deploy a second `libcarplay_rgi_meta.so`.
+
+Allemon `1289981` is a Git ancestor of this branch. Yuedizhibo `141e7ed` is not:
+its source was imported and adapted, not merged with matching component paths.
+Its Java RGI uses `com.luka.carplay.routeguidance`; ours still uses
+`com.luka.carplay.rgd`. Pinning provenance does not make future merges automatic.
+
+Normal Allemon merges remain possible, but shared files can conflict with local
+changes. Top-upstream updates are currently harder: moved paths, package names,
+selective ports and disabled control paths require semantic comparison. A clean
+text merge would not establish feature parity.
+
+**Repository direction:** prefer upstream implementation, with local additions
+and narrow adapters. Do not exclude a fix merely because a local implementation
+exists. Discuss true behavior/ownership conflicts before choosing a policy.
+Keep one deployed RGI producer and one owner per output, not two parallel stacks.
+
+For the next implementation, use a pinned top-upstream component baseline with
+stable source paths/packages and a small, documented local patch layer. Retain
+MU1316 source adapters for unavailable upstream baseline classes and exact-stock
+weaves; do not import the incomplete baseline JAR. Maintain an explicit mapping
+and fix-coverage matrix for upstream changes. Further Luka fixes belong in that
+same stack, not in another runtime or a blind whole-repository merge.
+
+### Fix-by-fix findings
+
+These classifications concern source behavior at `490dce9`, not vehicle results.
+`Missing` means the upstream mechanism is absent or bypassed. It does not mean
+the corresponding symptom has been observed in this car.
+
+| Fix or feature | Upstream evidence | Current status and reason |
+| --- | --- | --- |
+| Valid maneuver list while optional count stays zero | `0c33fe6`, `BAPBridge` | **Missing; integration mistake.** Local `hasAnyManeuver` uses count alone; renderer rejects count zero. Custom labels have the same assumption. No local feature requires this rejection. |
+| Absent junction type falls back to maneuver type | `0c33fe6`, `ManeuverMapper` | **Missing; integration mistake.** Local mapper returns NO_INFO for an ordinary turn with absent junction geometry. |
+| Lane IDs independent of maneuver IDs; preserve future cached events | `5f17bd5`, native `rgd_hook` | **Ported.** Do not confuse this V3.8 fix with the newer Luka lane simplification below. |
+| RGI start acknowledged after actual iAP2 send; session fencing | `ebe0f5c`, framework and `rgd_hook` | **Ported**, with local post-send generation revalidation and shared tick dispatcher. Queued is not sent. |
+| Artwork write/worker ordering and session isolation | `5ea24e9`, `f9e737b`, native cover art | **Adapted/retained.** Bulk work stays outside callback locks; keep local PNG CRC and metadata clearing. |
+| Accepted Fct44/Fct54 forwarding and initial replay | `fe15cc8`, gates | **Ported/adapted.** Includes local VC-panel and speed-badge notifications. |
+| Genuine native navigation state tracked during takeover | `5ea24e9`, `f9e737b`, native-state overlay | **Ported/adapted** through exact-stock setter weaving, not a saved Boolean alone. |
+| Replaced BAP service cleanup/replay and retry | `f9e737b`, `ebe0f5c`, gates | **Ported/adapted.** Existing lifecycle maintenance retries service bindings and deferred cleanup. |
+| RGI presentation-worker revival | `ebe0f5c`, `RouteGuidance` | **Ported**, with retry spacing. This is not all Java worker recovery. |
+| Data-bus bind retry and dead-worker revival | `ebe0f5c`, `CarplayBus` | **Missing; integration mistake.** Bind failure disables the bus; `start()` returns when `running` is true even if the worker died. Local maintenance does not perform upstream's bus restart. |
+| Renderer accept/write worker failure cleanup and revival | `ebe0f5c`, `RendererServer` | **Missing; integration mistake.** An open listening socket makes `connect()` return true without live workers. Socket reconnect tests did not cover worker death. |
+| Renderer cold-start/process retry | Fix4 runtime supervision | **Different local mechanism.** Native watchdog exit plus local supervisor retry (five-second restart delay) remain. This does not repair dead Java server workers. |
+| Map-preserving RGI refresh context, then verified fallback | `121200d`, `351e7ec`, `ClusterStateController` | **Not ported; real context-role conflict.** Upstream 81 is a refresh context; local 81 is the active CarPlay composition. Local 72 bounce is not the new map-preserving path. Map roles before adapting one controller. |
+| Renderer multi-second frame timing uses 64-bit arithmetic | `fc9a8d3`, renderer `main.c` | **Missing; integration mistake.** Local elapsed nanoseconds still use 32-bit `long` on QNX and can overflow during multi-second delays. |
+| Backward-clock-safe Java elapsed timers | `fc9a8d3`, `ElapsedClock` | **Partial/not ported as a shared mechanism.** Local retry code has some backward-jump guards but still uses wall time. Upstream's clock accumulates positive wall deltas; it is not a true monotonic clock and still follows forward jumps. Do not use it blindly for cross-process lease timestamps. |
+| Bounded renderer output | `fc9a8d3`, `bound_private_output` | **Partial.** Java/hook logs and imported pair have bounded paths. Local maneuver log cap runs every 150 two-second monitor ticks; the renderer can outlive that monitor. This is not upstream's per-second self-cap. |
+| Atomic QNX volatile snapshots and complete-record validation | Fix1/Fix2 and later session fixes | **Existing local mechanisms plus imported native helpers.** `/ramdisk` publication is retained; this does not prove the disabled native HMI-state consumer is wired. |
+| JAR pins and staged checksums | Fix1; Allemon PR7 | **Retained/ported.** Build regenerates pins/manifests. |
+| OEM map gate, native session lifetime and first-video startup | `f0bf661`, V3.8 | **Adapted, not identical upstream policy.** OEM/native-channel gates exist, but Java replaces upstream UI submission; missing view/card paths prevent a full first-connection parity claim. |
+| `stopUI` before teardown | Fix4, native cockpit/AirPlay | **Disabled; integration mistake.** Broad Java-owner flag returns before stop and rejects the event. No Java replacement sends it. Session fencing should adapt this operation, not remove it. |
+| Bounded no-frame keyframe recovery and startup probe | Fix3/Fix4, `native_check_stream_recovery` | **Bypassed.** Local transport monitor never calls it. Initial/consumer-requested keyframes remain, but are not equivalent. Restore its completion/session gates; do not treat idle maps as proven hangs. |
+| FULL/SMALL phone safe-area updates | Native AirPlay/view monitor | **Disabled without replacement; integration mistake.** `showUI` and physical translation are different operations. |
+| Phone card mode, left/top/right and card-sized safe area | V3.8 | **Missing feature.** Legacy `/map` choices are not equivalent. Card availability and live position policy are separate questions. |
+| Road ETA suffix, fragment reservation and duplicate-clock avoidance | V3.8, `BAPBridge` | **Avoidable omission.** Add through the existing page formatter, retaining local road choice and destination-zone handling. |
+| Lower-bar-only operation without custom RGI card | V3.8 modes | **Avoidable omission.** Map-only currently skips the RGD module. Decouple information publication from renderer ownership. |
+| Native KOMO/model route information and its deferred cleanup | `fc9a8d3`, `ebe0f5c`, `LowerBarKomo` | **Missing adaptation, not automatically a duplicate.** Local direct BAP output does not update all these OEM models/KOMO fields. Gate any BAP side effects and preserve local formatting. |
+| CarPlay telephony with Bluetooth restoration | V3.8 | **Ported/adapted** into the one existing bus/framework. |
+| Fixed TCP6031 and applicable PF variant backup/restore | Fix5/Fix6 | **Ported/adapted.** Syntax/candidate checks and exact variant backups exist. Installed configuration is not proof of live loaded rules. |
+| New transaction recovery/rescue and one-step installer | Fix2/Fix4 and later scripts | **Not adopted wholesale.** Local preflight, pending journals, rollback and restore checks remain; they are not the same full pre-operation snapshot/stale-transaction/rescue mechanism. One-step UX is a policy conflict, but missing resilience is not justified by that alone. |
+| Dedicated firewall-source diagnostics | Later upstream scripts | **Not the same report.** Local boot/collection paths capture `pfctl -sr`; upstream's dedicated source report is absent. Do not claim either total diagnostic loss or exact parity. |
+| Q7/CN/other-firmware profiles | Upstream variants | **Outside approved scope**, not a Q5 omission. Keep MU1316 guards. |
+| Removed STATUS/restore-and-log entries, logos and Window58 path | Later upstream packaging | **Deliberate packaging divergence.** Keep useful local diagnostics and truthful restore labels; unused runtime paths/branding are not needed for feature parity. Keep license notices. |
+
+Key local evidence:
+`rgd/BAPBridge.java:928-930,2172,2304`;
+`rgd/ManeuverMapper.java:239`;
+`bus/CarplayBus.java:118-125,430-449`;
+`rgd/RendererServer.java:138-169`;
+`rgd/RouteGuidance.java:448-489`;
+`core/CarPlayApp.java:263-272`;
+`core/ScreenModule.java:40-44,392-434`;
+`maneuver_render/main.c:1035-1064`;
+`deploy/smartphone_integrator/carplay_monitor.sh:61-69,108-120`;
+`altscreen_native/hook/p1404_cockpit_native.c:1305-1375,1385-1442,2688-2702`;
+`altscreen_native/hook/p1404_airplay.c:1153-1155,1259`.
+Java paths without a root are below `java_patch/com/luka/carplay/`.
+
+`LowerBarKomo` calls `ClusterService.updateCurrentStreet`,
+`updateDistanceToDestination`, `updateArrivalTime` and `updateKOMOFollowInfo`.
+Our `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java:263-278,456-476,495-526`
+shows model and KOMO updates **and** BAP-listener side effects. Therefore importing
+it unchanged could interfere with direct BAP publication, but deleting it also
+loses another output path. Reconcile that fan-out under the existing gate.
+
+### Additional Luka changes discovered
+
+The audit fetched `rgi-upstream/main` at
+`ab3317c65cedd0d323da71192d60f627d6f13246`; it did not merge it.
+Allemon and yuedizhibo remote HEADs still matched the original pins.
+The integration must not be described as "latest Luka RGI".
+
+Four newer lane commits were inspected: `8818733`, `6f2a5dc`, `d3fcbd7`,
+`0f3c0c0`. They simplify lane selection to the active lane-event cache, remove
+legacy per-maneuver lane bookkeeping, and use insertion-order eviction plus
+passed-event removal on the activating 0x5201 update. This fork and pinned V3.8
+retain the older linked/LRU design. Our existing active-ID guards already prevent
+some aliasing, so absence of the simplification is not proof of every claimed
+wrong-lane symptom. The latest cache policy is nevertheless **not integrated**.
+
+This was a bounded inspection of those RGI commits, not a full audit of Luka's
+new snapshot/audio changes. Do not silently add unrelated audio upmix.
+
+### New host evidence and limits
+
+A temporary probe compiled the actual local mapper, data bus and renderer server,
+plus the pinned upstream mapper. It reproduced:
+
+```text
+MISSING_JUNCTION local=NO_INFO upstream=TURN defect_reproduced=1
+RENDERER_DEAD_WORKER connect=true worker_alive=false defect_reproduced=1
+BUS_DEAD_WORKER start_returned=true worker_alive=false defect_reproduced=1
+```
+
+The worker probes construct the retained state after worker exit, using a real
+terminated thread and an isolated listening socket. They do not simulate an
+Audi failure or prove a vehicle symptom. The count-zero, teardown, recovery,
+clock, logging and installer findings above are source/control-flow comparisons.
+Earlier passing suites did not test every upstream regression. No runtime,
+package or SD changes were made during this audit.
+
+### Agreed policies and remaining integration constraints
+
+The owner selected the arrow, live-position and installation policies below.
+These apply to the next implementation, not to the unchanged `490dce9` package.
+
+| Real conflict | Direction |
+| --- | --- |
+| Native versus Java UI/geometry/context ownership | Use upstream implementation with narrow MU1316/local adapters. Preserve explicit single owners, map context roles, and route local triggers through the chosen queue. Do not merely flip both native flags on. |
+| Upstream approach-only arrow versus current always-real arrow | **Agreed:** keep always-real as the default and add upstream approach mode as an option. Upstream uses 350 m normally and 1000 m for long/highway steps. |
+| Upstream live phone-card position versus reconnect-cached local layout | **Agreed:** allow live card-position changes; keep connection-dependent mode/geometry changes on reconnect. Never disconnect the phone silently. |
+| One-step upstream installation versus INSTALL/reboot/START/reboot | **Agreed target:** upstream one-step installation with integrated recovery and rescue, after transaction/restore integration and fault testing. Until then the existing deployment sequence remains authoritative. |
+| Legacy offsets/safe-area files versus the new geometry model | Migrate or isolate legacy expert overrides and define Reset. Never add an old Sport correction to an automatic Sport transform. |
+
+No policy decision is needed to retain the two basic maneuver fixes, transport
+worker recovery, correct timing arithmetic, Road ETA, lower-bar-only capability,
+or the missing VC speed-badge option. Those are corrections/additions, not reasons
+to discard local features. ABI restrictions, licenses and one-owner rules remain
+constraints, not optional preferences.
 
 ## License and source limits
 

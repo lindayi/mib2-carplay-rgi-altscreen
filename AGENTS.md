@@ -27,6 +27,16 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ### Source integration candidate: 2026-10-18
 
+- Prefer upstream implementation with local additions and narrow MU1316 adapters.
+  Do not treat an existing local path as a reason to omit an upstream feature.
+  Discuss true behavior/ownership conflicts before changing policy. Keep a
+  component/fix coverage map; passing existing tests is not upstream parity.
+- Agreed next-implementation policies: retain always-real arrows as the default
+  and add upstream approach mode; allow live phone-card position changes while
+  connection-dependent mode/geometry changes still require reconnect; target
+  upstream one-step installation with integrated transaction recovery/rescue.
+  These are not implemented in `490dce9`. Keep its existing deployment procedure
+  until the replacement is built and fault-tested; never disconnect silently.
 - `integrate-upstreams-20261018` merges Allemon `1289981`; PR 7's checksum fix
   is included. PR 14 is not: its `0x0117` night command collides with `CMD_TEL`
   and its delayed mode sends are not session-safe.
@@ -55,6 +65,19 @@ Do not turn this into a raw conversation log or store credentials/private captur
   to Fct19 road text but still retains a Road/Trip toggle. That suffix is absent
   from `490dce9`; adding it must preserve local road choice, scrolling and timezone
   behavior, without importing a second publisher. See the functionality audit.
+- The deployed RGI is still the local Luka/Allemon-derived stack with selective
+  ports, not wholesale V3.8 RGI. Top-upstream paths/packages differ and its pin
+  is not a merged ancestor. Do not call it latest Luka after fetching newer refs.
+- The deeper audit found missing count-zero/valid-list and absent-junction fixes,
+  Java bus/renderer dead-worker recovery, and 64-bit renderer elapsed arithmetic.
+  It also found disabled stopUI and no-frame recovery. The current candidate is
+  held for correction; no new SD/vehicle validation is implied.
+- Upstream context 81 is a map-preserving refresh context; local 81 is the active
+  CarPlay composition. Do not transplant the context fallback numerically.
+  `LowerBarKomo` updates OEM models/KOMO and also invokes BAP-listener setters:
+  adapt that fan-out through the existing gate rather than calling it redundant.
+  Upstream `ElapsedClock` filters backward wall jumps, not forward jumps; it is
+  not a true monotonic clock or a drop-in cross-process lease timestamp.
 - Shared native module `on_tick` callbacks use one framework dispatcher. Drain
   it before module shutdown; do not overwrite the bus timer from a module.
   Tracked iAP2 completion rechecks generation after the actual stock send.
