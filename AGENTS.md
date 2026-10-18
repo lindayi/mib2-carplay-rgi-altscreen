@@ -742,6 +742,9 @@ the documented toolchain/private inputs and recreate the Windows adapter if need
   retain the cross-build check, rather than assuming host header ordering matches.
 - `build_sd.sh` regenerates JAR size/POSIX cksum pins in INSTALL/START/STATUS and the
   package SHA256 manifest. Never swap a JAR alone into an already-staged package.
+- Regenerate `metainfo2.txt`'s `FinalScriptChecksum` from the staged final script.
+  SWDL checks this SHA-1 independently of the skip-CRC fields. Keep the source
+  metadata checked too; Allemon PR 7 corrects the stale original value.
 - Changing mirror scripts requires updating their release `SHA256SUMS` before SD
   staging. The 30-fps binary patcher checks exact upstream binary identities.
 

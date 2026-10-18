@@ -124,3 +124,6 @@ sh scripts/test_install_payload.sh
 
 printf '%-32s ' cluster_shift_test
 bash tests/cluster_shift_test.sh
+
+python3 tools/final_script_checksum.py altscreen
+python3 tests/final_script_checksum_test.py
