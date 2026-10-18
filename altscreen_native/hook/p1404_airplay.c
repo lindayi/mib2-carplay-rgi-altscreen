@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
+#include "local_ui_contract.h"
 
 /* Optional outside the exact K1004 direct overlay (not linked by some host
  * fixtures and legacy preload builds). */
@@ -41,6 +42,10 @@ static void bind_real(void);
 static void bind_cf(void);
 
 static int alt_runtime_negotiation_ready(const char *phase) {
+    if (alt_local_phone_profile() < 0) {
+        altscreen_log("ERROR PHASE=PHONE_PROFILE_INVALID action=STOCK_PASSTHROUGH");
+        return 0;
+    }
     if (!altscreen_runtime_is_ready || altscreen_runtime_is_ready()) return 1;
     if (altscreen_runtime_wait_ready &&
         altscreen_runtime_wait_ready(ALTSCREEN_NEGOTIATION_WAIT_MS)) {
@@ -451,40 +456,6 @@ struct alt_safe_rect {
     char source[32];
 };
 
-static void alt_trim_line(char *s) {
-    size_t n;
-    if (!s) return;
-    n = strlen(s);
-    while (n && (s[n - 1] == '\n' || s[n - 1] == '\r' ||
-                 s[n - 1] == ' ' || s[n - 1] == '\t'))
-        s[--n] = 0;
-}
-
-static int alt_kv_text(const char *line, const char *key,
-                       char *out, size_t cap) {
-    size_t n;
-    if (!line || !key || !out || !cap) return 0;
-    n = strlen(key);
-    if (strncmp(line, key, n) || line[n] != '=') return 0;
-    strncpy(out, line + n + 1u, cap - 1u);
-    out[cap - 1u] = 0;
-    alt_trim_line(out);
-    return 1;
-}
-
-static int alt_kv_i32(const char *line, const char *key, int *out) {
-    char *end = NULL;
-    long value;
-    size_t n;
-    if (!line || !key || !out) return 0;
-    n = strlen(key);
-    if (strncmp(line, key, n) || line[n] != '=') return 0;
-    value = strtol(line + n + 1u, &end, 10);
-    if (end == line + n + 1u || value < -8192L || value > 8192L) return 0;
-    *out = (int)value;
-    return 1;
-}
-
 static int alt_safe_rect_valid(const struct alt_safe_rect *r,
                                uint32_t w, uint32_t h) {
     if (!r || !r->w || !r->h) return 0;
@@ -496,86 +467,21 @@ static int alt_safe_rect_valid(const struct alt_safe_rect *r,
 static int alt_load_hmi_layout(char *view, size_t view_cap,
                                char *layout, size_t layout_cap,
                                int *small_dx, int *small_dy) {
-    FILE *f;
-    char line[256];
-    int have_view = 0, have_layout = 0;
-    int have_dx = 0, have_dy = 0;
-    if (ALTSCREEN_JAVA_OWNS_PLACEMENT) return 0;
-    if (!view || !view_cap || !layout || !layout_cap ||
-        !small_dx || !small_dy) return 0;
-    view[0] = 0;
-    layout[0] = 0;
-    *small_dx = 0;
-    *small_dy = 0;
-    f = fopen("/tmp/mmi-mirror-hmi.state", "r");
-    if (!f) return 0;
-    while (fgets(line, sizeof(line), f)) {
-        alt_trim_line(line);
-        if (alt_kv_text(line, "view", view, view_cap))
-            have_view = 1;
-        else if (alt_kv_text(line, "layout_name", layout, layout_cap))
-            have_layout = 1;
-        else if (alt_kv_i32(line, "small_stage_dx", small_dx))
-            have_dx = 1;
-        else if (alt_kv_i32(line, "small_stage_dy", small_dy))
-            have_dy = 1;
-    }
-    fclose(f);
-
-    /*
-     * The vehicle-tested B9Sport layout has the stock map-plane SMALL offset
-     * (-476,0). Prefer the live Layout values from Java, but keep this verified
-     * fallback so a temporarily older state writer cannot silently center the
-     * Sport SMALL map.
-     */
-    if (have_layout && strstr(layout, "LayoutMIB2HighB9Sport")) {
-        if (!have_dx) *small_dx = -476;
-        if (!have_dy) *small_dy = 0;
-    }
-    return have_view && have_layout;
+    return alt_ui_hmi_snapshot(view, view_cap, layout, layout_cap, small_dx, small_dy);
 }
 
 /*
- * Phone maneuver card (INSTALL WITH CARD / INSTALL WITH RGI CARD), ported from
- * the Logo tree. The installer leaves state/card.enabled; the green-menu CARD
- * LEFT/TOP/RIGHT entries write state/cluster-card-layout.txt (default top).
- * Only the FULL view of a known B9/Q7 layout has room for the card; SMALL and
- * unknown layouts keep the map-only context.
+ * Upstream phone-card safe areas selected before /info by the receiver wrapper.
+ * Position and URL remain connection-cached Java policy, not installer files.
  */
-#define ALT_CARD_STATE_DIR "/mnt/app/root/carplay-altscreen/state/"
 static int alt_phone_card_profile(void) {
-    if (ALTSCREEN_JAVA_OWNS_UI) return 0;
-    FILE *f = fopen(ALT_CARD_STATE_DIR "card.enabled", "r");
-    if (!f) return 0;
-    fclose(f);
-    return 1;
-}
-
-static int alt_phone_card_position(void) {
-    char mode[16];
-    FILE *f = fopen(ALT_CARD_STATE_DIR "cluster-card-layout.txt", "r");
-    mode[0] = 0;
-    if (f) {
-        if (!fgets(mode, sizeof(mode), f)) mode[0] = 0;
-        fclose(f);
-    }
-    alt_trim_line(mode);
-    if (!strcmp(mode, "left")) return 1;
-    if (!strcmp(mode, "right")) return 3;
-    return 2; /* top, and the default */
+    return alt_local_phone_profile() == 1;
 }
 
 int alt_phone_card_mode(void) {
-    char view[16], layout[128];
-    int dx, dy;
-    if (ALTSCREEN_JAVA_OWNS_UI) return 0;
-    if (!alt_phone_card_profile()) return 0;
-    if (!alt_load_hmi_layout(view, sizeof(view), layout, sizeof(layout), &dx, &dy))
-        return 0;
-    if (strcmp(view, "FULL") ||
-        (!strstr(layout, "LayoutMIB2HighB9") && !strstr(layout, "LayoutMIB2HighQ7")))
-        return 0;
-    return alt_phone_card_position();
+    /* The selected URL is authoritative; position is not read from a second
+     * upstream preference file. This legacy helper carries no UI policy. */
+    return 0;
 }
 
 /*
@@ -595,19 +501,6 @@ static struct alt_layout_rects alt_layout_rects(void) {
         r.full_x = 370u; r.full_w = 700u; r.small_x = 490u; r.small_w = 460u; r.card = 0;
     }
     return r;
-}
-
-static const char *alt_cluster_url_for_card(int card_mode, const char **layout_name) {
-    if (ALTSCREEN_JAVA_OWNS_UI) {
-        *layout_name = "java-owned";
-        return NULL;
-    }
-    switch (card_mode) {
-    case 1: *layout_name = "card-left"; return CP_ALT_CLUSTER_CARD_URL_LEFT;
-    case 2: *layout_name = "card-top"; return CP_ALT_CLUSTER_CARD_URL_TOP;
-    case 3: *layout_name = "card-right"; return CP_ALT_CLUSTER_CARD_URL_RIGHT;
-    default: *layout_name = "map-only"; return CP_ALT_CLUSTER_MAP_URL;
-    }
 }
 
 static int alt_is_measured_b9_canvas(uint32_t display_w,
@@ -898,6 +791,7 @@ void *alt_build_cluster_display(void) {
     int two_area_capable = 0;
     int initial_view_area = 0;
     int geometry_provisional = 0;
+    if (alt_local_phone_profile() < 0) return NULL;
     /*
      * V3.5 cold-start policy: /info must not permanently miss AltScreen just
      * because Screen display-1 appears a few hundred milliseconds later than
@@ -1064,6 +958,7 @@ struct alt111_event_context {
     uint32_t event_seq;
     volatile int refs;
     volatile int callback_called;
+    int queued; /* stale post-send rejection does not cancel callback ownership */
 };
 
 static void alt111_event_context_release(struct alt111_event_context *ctx) {
@@ -1120,18 +1015,37 @@ static int guarded_command_submit(airplay_send_command_fn submit,
     int admission = alt_session_guard_enter(receiver, operation, &lease);
     int rc = -6752;
     if (admission == ALT_SESSION_ENTERED) {
+        int view_current = 1;
+        if (ctx && ctx->event_kind == ALT111_EVENT_UPDATE_VIEW_AREA) {
+            char view[16], layout[128];
+            int dx, dy;
+            view_current = alt_ui_hmi_snapshot(view, sizeof(view), layout,
+                sizeof(layout), &dx, &dy) &&
+                ctx->event_value == (!strcmp(view, "SMALL") ? 1 : 0);
+        }
         /* Teardown may have completed between the caller's retain and this
          * lease. Recheck the mapping now that outer destruction is excluded.
          * Bootstrap/stop callers have their own backend/lifecycle ownership. */
-        if (!ctx || !ctx->stream || !ctx->generation ||
+        if (view_current && (!ctx || !ctx->stream || !ctx->generation ||
             ctx->event_kind == ALT111_EVENT_STOP_UI ||
-            p1404_cockpit_native_command_current(receiver, ctx->stream, ctx->generation))
+            p1404_cockpit_native_command_current(receiver, ctx->stream, ctx->generation)))
         {
 #ifdef ALT111_TRACKED_BOOTSTRAP
             if (!ctx || ctx->stream || !ctx->event_seq ||
                 bootstrap_command_current(receiver, ctx->event_seq))
 #endif
                 rc = submit(receiver, command, alt111_event_response, ctx);
+            if (ctx && rc == 0) ctx->queued = 1;
+            if (rc == 0 && ctx && ctx->event_kind != ALT111_EVENT_STOP_UI) {
+                if (ctx->stream && ctx->generation &&
+                    !p1404_cockpit_native_command_current(receiver, ctx->stream, ctx->generation))
+                    rc = -6752;
+#ifdef ALT111_TRACKED_BOOTSTRAP
+                if (!ctx->stream && ctx->event_seq &&
+                    !bootstrap_command_current(receiver, ctx->event_seq))
+                    rc = -6752;
+#endif
+            }
         }
     }
     alt_session_guard_leave(&lease, 0);
@@ -1141,7 +1055,7 @@ static int guarded_command_submit(airplay_send_command_fn submit,
 /* card_mode: showUI only; -1 = resolve the current phone-card mode now. */
 static int alt_send_cluster_event_impl(void *receiver, void *stream,
                            uint32_t generation, int event_kind, int bootstrap,
-                           uint32_t event_seq, int card_mode) {
+                           uint32_t event_seq, int card_mode, const char *selected_url) {
     airplay_send_command_fn send_command;
     struct alt111_event_context *ctx = NULL;
     const struct altscreen_display *display = altscreen_cluster_display();
@@ -1150,9 +1064,6 @@ static int alt_send_cluster_event_impl(void *receiver, void *stream,
     cf_obj command = NULL, params = NULL, type = NULL, uuid = NULL, url = NULL;
     int rc = -1;
 
-    if (ALTSCREEN_JAVA_OWNS_UI &&
-        event_kind != ALT111_EVENT_FORCE_KEYFRAME &&
-        event_kind != ALT111_EVENT_RECOVERY_KEYFRAME) return -1;
     if (!receiver || (!bootstrap && (!stream || !generation)) ||
         !display || !display->uuid)
         return -1;
@@ -1179,7 +1090,9 @@ static int alt_send_cluster_event_impl(void *receiver, void *stream,
         !cf_dict_set_cstr_obj(params, "uuid", uuid)) goto done;
     if (event_kind == ALT111_EVENT_SHOW_UI) {
         if (card_mode < 0) card_mode = alt_phone_card_mode();
-        map_url = alt_cluster_url_for_card(card_mode, &layout_name);
+        map_url = selected_url;
+        layout_name = "java-selected";
+        if (!map_url) goto done; /* never fabricate a second startup URL */
         url = cf_str_new(map_url, -1);
         if (!url || !cf_dict_set_cstr_obj(params, "url", url)) goto done;
     }
@@ -1202,7 +1115,7 @@ static int alt_send_cluster_event_impl(void *receiver, void *stream,
     altscreen_log("PHASE=ALT111_EVENT_SUBMIT receiver=%p stream=%p generation=%u event=%s uuid=%s layout=%s url=%s rc=%d response_callback=1",
                   receiver, stream, generation, type_name, display->uuid,
                   layout_name, map_url ? map_url : "-", rc);
-    if (rc == 0) {
+    if (rc == 0 || ctx->queued) {
         alt111_event_context_release(ctx); /* callback owns the remaining ref */
         ctx = NULL;
     } else if (__sync_fetch_and_add(&ctx->callback_called, 0)) {
@@ -1225,24 +1138,14 @@ done:
 
 int alt_send_cluster_event(void *receiver, void *stream, uint32_t generation,
                            int event_kind) {
-    return alt_send_cluster_event_impl(receiver, stream, generation, event_kind, 0, 0, -1);
+    return alt_send_cluster_event_impl(receiver, stream, generation, event_kind, 0, 0, -1, NULL);
 }
-
-/* Native showUI with the card mode the monitor targeted; request_seq fences a
- * late ACK of an older card refresh. */
-int alt_send_cluster_card_ui(void *receiver, void *stream, uint32_t generation,
-                             uint32_t request_seq, int card_mode) {
-    if (!request_seq) return -1;
-    return alt_send_cluster_event_impl(receiver, stream, generation,
-        ALT111_EVENT_SHOW_UI, 0, request_seq, card_mode);
-}
-
 
 int alt_send_cluster_recovery(void *receiver, void *stream,
                                uint32_t generation, uint32_t event_seq) {
     if (!event_seq) return -1;
     return alt_send_cluster_event_impl(receiver, stream, generation,
-        ALT111_EVENT_RECOVERY_KEYFRAME, 0, event_seq, -1);
+        ALT111_EVENT_RECOVERY_KEYFRAME, 0, event_seq, -1, NULL);
 }
 
 int alt_send_cluster_view_area(void *receiver, void *stream,
@@ -1256,7 +1159,6 @@ int alt_send_cluster_view_area(void *receiver, void *stream,
     int rc = -1;
     const int adjacent_index = view_area_index == 0 ? 1 : 0;
 
-    if (ALTSCREEN_JAVA_OWNS_UI) return -1;
     if (!receiver || !stream || !generation || !event_seq ||
         !display || !display->uuid ||
         (view_area_index != 0 && view_area_index != 1))
@@ -1307,7 +1209,7 @@ int alt_send_cluster_view_area(void *receiver, void *stream,
         receiver, stream, generation, event_seq, display->uuid,
         view_area_index, adjacent_index, rc);
 
-    if (rc == 0) {
+    if (rc == 0 || ctx->queued) {
         alt111_event_context_release(ctx);
         ctx = NULL;
     } else if (__sync_fetch_and_add(&ctx->callback_called, 0)) {
@@ -1338,7 +1240,7 @@ int alt_send_cluster_zoom(void *receiver, void *stream,
     cf_obj command = NULL, params = NULL, type = NULL, uuid = NULL;
     int rc = -1;
 
-    if (ALTSCREEN_JAVA_OWNS_UI) return -1;
+    if (ALTSCREEN_JAVA_OWNS_ZOOM) return -1;
     if (!receiver || !stream || !generation || !event_seq ||
         !display || !display->uuid || (direction != 0 && direction != 1))
         return -1;
@@ -1381,7 +1283,7 @@ int alt_send_cluster_zoom(void *receiver, void *stream,
         receiver, stream, generation, event_seq, display->uuid, direction,
         direction == 0 ? "ZOOM_IN" : "ZOOM_OUT", rc);
 
-    if (rc == 0) {
+    if (rc == 0 || ctx->queued) {
         alt111_event_context_release(ctx);
         ctx = NULL;
     } else if (__sync_fetch_and_add(&ctx->callback_called, 0)) {
@@ -1406,22 +1308,16 @@ done:
  * necessarily requested type111. This request has no private stream yet and
  * must not publish renderer/visibility success from its callback. */
 static int alt_request_cluster_after_main_tracked(void *receiver, uint32_t seq) {
-    if (ALTSCREEN_JAVA_OWNS_UI) {
-        int rc = alt_send_cluster_event_impl(receiver, NULL, 0,
-            ALT111_EVENT_FORCE_KEYFRAME, 1, seq, -1);
-        altscreen_log("PHASE=ALT111_REQUEST_AFTER_MAIN receiver=%p keyframe_rc=%d ui_owner=JAVA private_stream_required=0",
-                      receiver, rc);
-        return rc;
-    }
+    char selected[512];
+#ifdef ALT111_TRACKED_BOOTSTRAP
+    if (!bootstrap_selected_url(receiver, seq, selected, sizeof(selected))) return -1;
+#else
+    (void)selected;
+    return -1;
+#endif
     int show_rc = alt_send_cluster_event_impl(receiver, NULL, 0,
-                                             ALT111_EVENT_SHOW_UI, 1, seq, -1);
-    int key_rc = -1;
-    if (show_rc == 0)
-        key_rc = alt_send_cluster_event_impl(receiver, NULL, 0,
-                                             ALT111_EVENT_FORCE_KEYFRAME, 1, seq, -1);
-    altscreen_log("PHASE=ALT111_REQUEST_AFTER_MAIN receiver=%p show_rc=%d keyframe_rc=%d private_stream_required=0",
-                  receiver, show_rc, key_rc);
-    return show_rc ? show_rc : key_rc;
+                                             ALT111_EVENT_SHOW_UI, 1, seq, -1, selected);
+    return show_rc;
 }
 int alt_request_cluster_after_main(void *receiver) {
     return alt_request_cluster_after_main_tracked(receiver, 0);

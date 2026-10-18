@@ -1,7 +1,10 @@
 #include "ui_session.h"
+#include "../integration.h"
 #include "p1404_lock_wait.h"
 #include <stddef.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #define UI_SESSION_SLOTS 8
 static struct {
@@ -12,6 +15,12 @@ static struct {
 static volatile unsigned guard;
 static uint32_t next_epoch, newest_epoch;
 static uint32_t published_epoch;
+static struct {
+    uint32_t epoch, pid;
+    uint64_t expiry;
+    char view[16], layout[128];
+    int dx, dy;
+} hmi;
 
 /* The bus timer never waits for a writer, reads OEM memory or performs I/O. */
 uint32_t altscreen_ui_session_generation(void) {
@@ -21,11 +30,62 @@ static void lock(void) {
     while (__sync_lock_test_and_set(&guard, 1u)) p1404_lock_wait_yield();
 }
 static void unlock(void) { __sync_lock_release(&guard); }
+
+uint64_t alt_ui_realtime_ms(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) || now.tv_sec < 0 ||
+        now.tv_nsec < 0 || now.tv_nsec >= 1000000000L) return 0;
+    return (uint64_t)now.tv_sec * 1000u + (uint32_t)now.tv_nsec / 1000000u;
+}
+
+void alt_ui_hmi_publish(uint32_t epoch, uint32_t pid, uint64_t expiry,
+                        const char *view, const char *layout, int dx, int dy) {
+    uint64_t now = alt_ui_realtime_ms();
+    lock();
+    if (epoch == __atomic_load_n(&published_epoch, __ATOMIC_ACQUIRE)) {
+        hmi.epoch = view && layout && pid == (uint32_t)getpid() && now &&
+            expiry > now && expiry - now <= ALT_LOCAL_HMI_LEASE_MS ? epoch : 0;
+        if (hmi.epoch && strlen(view) < sizeof(hmi.view) && strlen(layout) < sizeof(hmi.layout)) {
+            memcpy(hmi.view, view, strlen(view) + 1);
+            memcpy(hmi.layout, layout, strlen(layout) + 1);
+            hmi.dx = dx; hmi.dy = dy;
+            hmi.pid = pid; hmi.expiry = expiry;
+        } else hmi.epoch = 0;
+    }
+    unlock();
+}
+
+/* Stock /info reads only bounded metadata and never waits for a worker. */
+int alt_ui_hmi_snapshot(char *view, size_t view_cap, char *layout, size_t layout_cap, int *dx, int *dy) {
+    int ok = 0;
+    uint64_t now = alt_ui_realtime_ms();
+    if (__sync_lock_test_and_set(&guard, 1u)) return 0;
+    if (hmi.epoch && hmi.epoch == __atomic_load_n(&published_epoch, __ATOMIC_ACQUIRE) &&
+        hmi.pid == (uint32_t)getpid() && now &&
+        hmi.expiry > now && hmi.expiry - now <= ALT_LOCAL_HMI_LEASE_MS &&
+        strlen(hmi.view) < view_cap && strlen(hmi.layout) < layout_cap) {
+        memcpy(view, hmi.view, strlen(hmi.view) + 1);
+        memcpy(layout, hmi.layout, strlen(hmi.layout) + 1);
+        *dx = hmi.dx; *dy = hmi.dy; ok = 1;
+    } else hmi.epoch = 0;
+    unlock();
+    return ok;
+}
 static int find(void *receiver) {
     int i;
     for (i = 0; i < UI_SESSION_SLOTS; ++i)
         if (sessions[i].receiver == receiver) return i;
     return -1;
+}
+
+uint32_t alt_ui_session_epoch(void *receiver) {
+    uint32_t epoch = 0;
+    int i;
+    lock();
+    i = find(receiver);
+    if (i >= 0 && !sessions[i].closing) epoch = sessions[i].epoch;
+    unlock();
+    return epoch;
 }
 
 uint32_t alt_ui_session_begin(void *receiver) {

@@ -147,18 +147,18 @@ features below follow it automatically.
   `changeMapZoomLevel` command to the iPhone for the cluster display (matching OEM CarPlay behavior).
   Scrolling away zooms out, scrolling towards you zooms in. The native Audi map beneath the video also
   continues to zoom ([details](docs/input/steering-wheel.md)).
-- **Cluster map layout selector (car marker centering).** To address the car location marker
-  offset caused by iOS reserving space for its own maneuver card, the MMI-Cockpit-Carplay GEM menu
-  provides a **Cluster map layout** selector with four options: *original AltScreen*,
-  *maneuver card on top (default)*, *maneuver card on the right*, and *no ETA*
-  (applied on next phone reconnect). With no saved preference, the maneuver card
+- **Cluster map layout selector (car marker centering).** Normal-MMI and VC settings
+  offer *original AltScreen*, *map only*, and maneuver cards on *top*, *right* or
+  *left*, plus a separate phone ETA choice. Card-to-card position changes apply
+  live; card/map profile and phone ETA changes require reconnect.
+  With no saved preference, the maneuver card
   defaults to the top; upgrades preserve explicitly saved layouts.
   The selected layout is reapplied on later route transitions, not just video
   startup, including in map-only mode. **Known limitation:** the intermittent
   Google Maps offset has not yet been vehicle-retested with this correction;
   neither the preset nor reapplication guarantees marker centering. The normal-MMI
   **Reapply cluster layout** action resends the current connection's layout without
-  restarting or reconnecting; it does not apply a newly saved layout early.
+  restarting or reconnecting; it does not apply pending profile/sign/ETA choices.
 - **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
 - **Optional left-side map cards:** independently enable Now Playing and Trip progress
   in **Carplay Altscreen -> Map cards** (VC: **More settings -> Map cards**).
@@ -246,7 +246,8 @@ The menu build also uses `tools/uninline/lib/asm-9.7.jar` and `asm-tree-9.7.jar`
 from the jxe2jar tooling. `tools/PatchNavigationSettings.java` checks the exact
 private stock factory fingerprint, adds our native subclasses, and rejects other
 input classes. The initial menu installation requires the normal Toolbox update,
-INSTALL/reboot/START/reboot sequence; subsequent menu preferences never reboot MMI.
+INSTALL and one full MMI reboot. INSTALL now includes boot-only START arming;
+subsequent menu preferences never reboot MMI.
 Run `TOOLS_DIR=<jxe2jar> ./scripts/test_mmi_settings.sh` for the menu/storage/session
 tests and `./scripts/test_route_labels.sh` for live overlay-option previews.
 Builds default to no artwork while retaining the VC menu. To include your own
@@ -311,32 +312,44 @@ SD=/Volumes/SD32 STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
 
 It fills in the JAR size/cksum that AltScreen's INSTALL/START/STATUS pin and regenerates
 `SHA256SUMS-SD.txt`; the card's `MMI-Cockpit-Carplay/` (AltScreen stock backups) is never touched.
-On the car: **Toolbox -> Update Toolbox**, then **MMI-Cockpit-Carplay -> INSTALL**, reboot, **START**,
-reboot. While the video runs the cluster uses ctx 81 (`{98, 101, 102, 3}`, maneuver panel over the
+On the car, parked with stable power and the phone disconnected:
+**Toolbox -> Update Toolbox**, then **MMI-Cockpit-Carplay -> INSTALL**. Wait for
+PASS, perform **one full MMI reboot**, then reconnect. Stop on FAIL. INSTALL
+includes boot-only START arming; a separate START/reboot step is no longer needed.
+This transaction is host-tested, not vehicle-confirmed.
+While the video runs the cluster uses ctx 81 (`{98, 101, 102, 3}`, maneuver panel over the
 video); without it route guidance falls back to ctx 80 over the stock map
 ([display-contexts](docs/cluster/display-contexts.md)). **STATUS** reports `DIO_PRELOAD_ALTSCREEN`,
 `DIO_PRELOAD_RGI`, `RGI_*` and the live context. **RESTORE ORIGINAL** removes both.
 The steering-wheel roller zooms the CarPlay cluster map as it zooms the native one
-([steering-wheel](docs/input/steering-wheel.md)); the GEM menu's **Cluster map layout** entries pick
-the iPhone's cluster presentation (applied on the next phone connect).
+([steering-wheel](docs/input/steering-wheel.md)); use **Carplay Altscreen** in
+normal MMI or the VC panel to choose the iPhone's cluster presentation.
+GEM layout/area/shift entry points are retired and cannot write preferences.
 The build compiles AltScreen's hook and mirror from `altscreen_native/`, then
 checks the source manifest and binary hashes. `ALTSCREEN_FULL_FPS` is retired.
 GEM **Dump cluster video to SD (diagnostic)** saves
 the last ~4 MB of the cluster H.264 stream to `MMI-Cockpit-Carplay/logs/h264/`;
 `python3 tools/h264_ring_analyze.py <file>` shows what the iPhone sent.
 End-to-end check of the package (needs an AltScreen stock backup from a unit):
-`FIXTURE=<card>/MMI-Cockpit-Carplay/backup ./scripts/test_altscreen_e2e.sh`.
-This host test explicitly stubs the ARM mirror launcher; it checks every command's
+`INSTALLER_PACKAGE_MODE=staged SD_DIR=<package> FIXTURE=<backup> ./scripts/test_altscreen_e2e.sh`.
+This uses the packaged scripts, pins and real ARM payloads without source overlays.
+It explicitly stubs native execution; it checks every command's
 exit status and the integrated completion message, not actual video output. It
 also exercises interrupted restore, cleanup failures, and retry recovery. Restore
 verifies the stock launcher configuration before removing the RGI runtime; failed
 cleanup retains the recovery scripts and pending transaction for a retry.
+The all-case runner also retains preference-aware mirror recovery checks.
+See [transaction and rescue](docs/upstream-integration.md#installation-and-rescue)
+for guarded manual recovery; these are not normal-MMI preference actions.
 
 #### Integrated AltScreen features:
 - **Source-native video pipeline:** current V3.8 transport/decoder code, with local
   UI ownership and source-level checks instead of binary patches.
 - **Steering-wheel cluster map zoom:** Each roller click sends `changeMapZoomLevel` directly to iOS via AirPlay (`CRSUIClusterZoomAction`); scrolling away zooms out, scrolling towards zooms in.
-- **Cluster map layout selector (vehicle marker centering):** GEM menu provides four selectable layouts (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`) to balance map layout and vehicle marker centering without obscuring navigation.
+- **Phone map controls:** shared MMI/VC choices for top/right/left cards, map-only,
+  original layout, phone ETA and Off/our badge/phone speed sign. Card position
+  applies live; profile, phone sign and ETA require reconnect. These requests
+  do not guarantee vehicle-marker centering or phone-app support.
 - **Corrected aspect ratio & projection:** Instead of stretching or squashing the image, the mirror sidecar is rebuilt with a 1:1 aspect ratio and clean bottom crop so that maps and road geometry display with natural proportions.
 - **No startup artwork:** No logo or watermark asset is required or staged. Only
   actual video presentation can establish readiness.
@@ -385,13 +398,17 @@ This installs both **AltScreen** (full CarPlay cluster video stream on the Virtu
 3. **Open GEM** (Green Engineering Menu):
    - Go to **Toolbox -> Update Toolbox** to load the scripts.
    - Go to **MMI-Cockpit-Carplay -> INSTALL**. The companion installer (`rgi_companion.sh`) automatically installs the native RGI files to `/mnt/app/root/hooks/`, places the unified HMI jar `carplay_hook-basevideo3.jar`, and patches `smartphone_integrator.json` (with `CARPLAY_PRELOAD_EXTRA`) and `dio_manager.json`.
-4. **Reboot the unit** normally.
-5. **Open GEM -> MMI-Cockpit-Carplay -> START** to activate the mirror display service.
-6. **Reboot the unit.**
+4. Wait for **INSTALL PASS**. Stop on any failure; do not bypass the guards.
+5. Perform **one full MMI reboot**, then reconnect the phone. INSTALL already
+   includes boot-only START arming. The separate START entry remains for
+   compatibility, not as a required second installation step.
 
 **On-Car Verification & Features:**
 - **Steering-wheel zoom:** Start CarPlay with the navigation map on the Virtual Cockpit and turn the left steering-wheel roller ("away" = zoom out, "towards" = zoom in).
-- **Vehicle marker alignment:** Build a route in CarPlay, navigate to **MMI-Cockpit-Carplay -> Cluster map layout** in GEM, and try the four options (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`), reconnecting the phone after each. These are iPhone layout requests, not direct control of the vehicle marker; their effect can differ by navigation app.
+- **Vehicle marker alignment:** While parked, build a route and use **Carplay
+  Altscreen -> CarPlay map layout** in normal MMI. Try top/right/left cards live.
+  Reconnect when moving between card/map profiles or changing phone ETA/sign.
+  These request iPhone layouts, not direct marker positions; results vary by app.
 - **STATUS:** Run **MMI-Cockpit-Carplay -> STATUS** in GEM to inspect system health. It reports `DIO_PRELOAD_ALTSCREEN`, `DIO_PRELOAD_RGI`, `RGI_*` status, and the live display context from `/tmp/carplay_cluster.ctx`.
 - **RESTORE ORIGINAL:** Selecting **RESTORE ORIGINAL** in GEM cleanly removes all patches and restores the stock firmware configuration from backup.
 

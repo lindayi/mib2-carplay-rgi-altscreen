@@ -18,25 +18,26 @@ import com.luka.carplay.core.ScreenModule;
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.settings.Preferences;
 import com.luka.carplay.settings.Setting;
+import com.luka.carplay.settings.ReceiverSession;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 public final class AltScreenCluster {
 
     private static final String TAG = "AltCluster";
     public static final String UI_URL_FILE = "/mnt/app/root/hooks/cluster_ui.url";
-    private static final String DEFAULT_UI_URL =
-        "maps:/car/instrumentcluster/map?maneuverLayout=topaligned";
-    private static final String URL_PREFIX = "maps:";
+    private static final String MAP_URL = "maps:/car/instrumentcluster/map";
+    private static final String CARD_URL = "maps:/car/instrumentcluster";
     private static final int MAX_URL = 400;
 
     /* Host tests point this at a scratch file. */
     private static String uiUrlPath = UI_URL_FILE;
 
     private static final Object LOCK = new Object();
-    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4, MMI_RETURN = 8, STARTUP = 16;
+    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4, MMI_RETURN = 8, STARTUP = 16, POSITION = 32;
     private static boolean enabled, video;
     private static int connection = -1;
     private static int pending;
@@ -52,12 +53,78 @@ public final class AltScreenCluster {
     /* Keep the applied layout across module restarts; saved changes require a receiver reconnect. */
     private static int urlConnection = -1;
     private static String sessionUrl;
+    private static int sessionLayout=-1,sessionEta=-1,sessionPhoneSign=-1;
     private static CarplayBus.Observer routeObserver;
     private static CarplayBus.Observer sessionObserver;
     private static boolean startupAllowed, suppressInitialVideo;
     private static long nativeSession, startupSentSession;
+    private static long nativeReceiverPid;
+    public static final int HMI_LEASE_MS=1500;
+    private static String hmiPath="/ramdisk/mmi-mirror-hmi.state";
+    private static final Object HMI_LOCK=new Object();
+    private static String lastHmiBody,lastHmiError;
+    private static long lastHmiWrite,lastHmiWarning;
+    private static File phoneSessionFile=new File("/ramdisk/carplay_menu_session");
 
     private AltScreenCluster() {}
+
+    private static boolean cardLayout(int layout) { return layout==0 || layout==1 || layout==4; }
+    private static String cardPosition(int layout) {
+        return layout==1?"rightaligned":layout==4?"leftaligned":"topaligned";
+    }
+    private static String uiUrl(int layout,int phoneSign,int eta) {
+        StringBuffer url=new StringBuffer(cardLayout(layout)?CARD_URL:MAP_URL);
+        url.append("?showSpeedLimit=").append(phoneSign==1?"user":"no");
+        if(layout!=3)url.append("&showCompass=user");
+        if(eta==0)url.append("&showETA=no");
+        if(cardLayout(layout))url.append("&maneuverLayout=").append(cardPosition(layout));
+        else if(layout==2)url.append("&maneuverLayout=");
+        return url.toString();
+    }
+    private static final class UiSelection {
+        final int layout,phoneSign,eta;
+        final String url;
+        UiSelection(int layout,int phoneSign,int eta) {
+            this.layout=layout;this.phoneSign=phoneSign;this.eta=eta;
+            url=uiUrl(layout,phoneSign,eta);
+        }
+    }
+
+    /** Requested phone content, not a claim that the app rendered or hid its sign. */
+    public static boolean phoneSignRequestedForSession() {
+        int generation=CarplayBus.getInstance().connectionGeneration();
+        synchronized(LOCK){return generation>=0 && urlConnection==generation && sessionPhoneSign==1;}
+    }
+    public static int phoneProfileForSession() {
+        int generation=CarplayBus.getInstance().connectionGeneration();
+        synchronized(LOCK) {
+            return generation<0 || urlConnection!=generation || sessionUrl==null?-1:cardLayout(sessionLayout)?1:0;
+        }
+    }
+    public static boolean reconnectPending(Preferences.Snapshot prefs) {
+        int generation=CarplayBus.getInstance().connectionGeneration();
+        synchronized(LOCK) {
+            if(generation<0 || urlConnection!=generation)return false;
+            if(sessionUrl==null)return true;
+            int layout=prefs.get(Setting.LAYOUT);
+            return sessionPhoneSign!=(prefs.get(Setting.SPEED_BADGE)==2?1:0)
+                || sessionEta!=prefs.get(Setting.PHONE_ETA)
+                || (sessionLayout!=layout && !(cardLayout(sessionLayout) && cardLayout(layout)));
+        }
+    }
+    /** Worker publication: only position may change inside a latched card profile. */
+    public static void updatePreferences(Preferences.Snapshot prefs) {
+        int generation=CarplayBus.getInstance().connectionGeneration();
+        synchronized(LOCK) {
+            int layout=prefs.get(Setting.LAYOUT);
+            if(!enabled || !prefs.on(Setting.ENABLED) || generation<0 || urlConnection!=generation
+                    || sessionUrl==null || !cardLayout(sessionLayout) || !cardLayout(layout)
+                    || sessionLayout==layout)return;
+            sessionLayout=layout;
+            sessionUrl=uiUrl(layout,sessionPhoneSign,sessionEta);
+            pending|=POSITION;revision++;
+        }
+    }
 
     public static final class MainScreenEvent {
         private final int run, generation;
@@ -114,19 +181,21 @@ public final class AltScreenCluster {
             CarplayBus.getInstance().addObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
             sessionObserver = new CarplayBus.Observer() {
                 public void onFrame(int generation, int type, int flags, byte[] payload, int len) {
-                    if ((flags & CarplayBus.FLAG_BINARY) == 0 || len != 4 || payload == null) {
-                        Log.w(TAG, "invalid native session readiness");
-                        return;
-                    }
                     synchronized (LOCK) {
                         if (!enabled || run != lifecycle
                                 || generation != CarplayBus.getInstance().connectionGeneration()) return;
                         useConnection(generation);
-                        long epoch = ((long)(payload[0] & 255) << 24)
-                            | ((long)(payload[1] & 255) << 16)
-                            | ((long)(payload[2] & 255) << 8) | (payload[3] & 255);
-                        if (nativeSession == epoch) return;
+                        if((flags & CarplayBus.FLAG_BINARY)==0 || len!=CarplayBus.ALT_SESSION_PAYLOAD_SIZE
+                                || payload==null || payload.length<len || unsignedInt(payload,4)<=1) {
+                            nativeSession=nativeReceiverPid=startupSentSession=0;
+                            pending&=~STARTUP;suppressInitialVideo=false;revision++;
+                            Log.w(TAG,"invalid native session identity; readiness withdrawn");
+                            return;
+                        }
+                        long epoch=unsignedInt(payload,0),pid=unsignedInt(payload,4);
+                        if(nativeSession==epoch && nativeReceiverPid==pid)return;
                         nativeSession = epoch;
+                        nativeReceiverPid=pid;
                         if (epoch == 0) { pending &= ~STARTUP; suppressInitialVideo = false; }
                         queueStartup();
                         revision++;
@@ -138,11 +207,13 @@ public final class AltScreenCluster {
     }
 
     public static void stop() {
+        int stoppedRun;
         synchronized (LOCK) {
             enabled = false;
             video = false;
             pending = 0;
             lifecycle++;
+            stoppedRun=lifecycle;
             revision++;
             resetRoute();
             resetStartup();
@@ -152,6 +223,63 @@ public final class AltScreenCluster {
             if (sessionObserver != null)
                 CarplayBus.getInstance().removeObserver(CarplayBus.EVT_ALT_SESSION, sessionObserver);
             sessionObserver = null;
+        }
+        publishHmiState(false,stoppedRun);
+    }
+
+    /** Screen worker only. No file access on the BAP or bus callback threads. */
+    public static void publishHmiState(boolean allowed) {
+        publishHmiState(allowed,-1);
+    }
+    private static void publishHmiState(boolean allowed,int stoppedRun) {
+        synchronized(HMI_LOCK) {
+            synchronized(LOCK) {
+                if(stoppedRun>=0 && (enabled || lifecycle!=stoppedRun))return;
+            }
+            File file=new File(hmiPath),temporary=new File(hmiPath+".new");
+            try {
+                String geometry=allowed?ClusterLayerController.nativeHmiState():null;
+                int run,generation;long epoch,pid;
+                synchronized(LOCK) {
+                    run=lifecycle;generation=connection;epoch=nativeSession;pid=nativeReceiverPid;
+                    if(!enabled || !startupAllowed || generation<0
+                            || generation!=CarplayBus.getInstance().connectionGeneration()
+                            || epoch==0 || pid<=1)geometry=null;
+                }
+                if(geometry==null) {
+                    if(lastHmiBody!=null && file.exists() && !file.delete())
+                        throw new IOException("Cannot withdraw native HMI state");
+                    lastHmiBody=null;lastHmiWrite=0;
+                    return;
+                }
+                String body=geometry+"receiver_epoch="+epoch+"\nreceiver_pid="+pid+"\n";
+                long now=System.currentTimeMillis(),expiry=now+HMI_LEASE_MS;
+                if(body.equals(lastHmiBody) && now>=lastHmiWrite && now-lastHmiWrite<500)return;
+                FileOutputStream out=new FileOutputStream(temporary);
+                try {out.write((body+"expiry_ms="+expiry+"\n").getBytes("US-ASCII"));out.flush();}
+                finally {out.close();}
+                synchronized(LOCK) {
+                    if(!enabled || !startupAllowed || run!=lifecycle || generation!=connection
+                            || epoch!=nativeSession || pid!=nativeReceiverPid
+                            || generation!=CarplayBus.getInstance().connectionGeneration())return;
+                }
+                long remaining=expiry-System.currentTimeMillis();
+                if(remaining<=0 || remaining>HMI_LEASE_MS)throw new IOException("Native HMI publication expired");
+                if(!temporary.renameTo(file))throw new IOException("Cannot publish native HMI state on /ramdisk");
+                lastHmiBody=body;lastHmiWrite=now;lastHmiError=null;
+            } catch(IOException e) {hmiError(e.toString());}
+              catch(SecurityException e) {hmiError(e.toString());}
+            finally {
+                try {
+                    if(temporary.exists() && !temporary.delete())hmiError("Cannot remove native HMI temporary state");
+                } catch(SecurityException e) {hmiError(e.toString());}
+            }
+        }
+    }
+    private static void hmiError(String message) {
+        long now=System.currentTimeMillis();
+        if(!message.equals(lastHmiError) || now<lastHmiWarning || now-lastHmiWarning>=30000) {
+            Log.e(TAG,message);lastHmiError=message;lastHmiWarning=now;
         }
     }
 
@@ -175,6 +303,12 @@ public final class AltScreenCluster {
     private static void resetStartup() {
         startupAllowed = suppressInitialVideo = false;
         nativeSession = startupSentSession = 0L;
+        nativeReceiverPid=0;
+    }
+
+    private static long unsignedInt(byte[] value,int at) {
+        return ((long)(value[at]&255)<<24) | ((long)(value[at+1]&255)<<16)
+            | ((long)(value[at+2]&255)<<8) | (value[at+3]&255);
     }
 
     private static void queueStartup() {
@@ -266,11 +400,12 @@ public final class AltScreenCluster {
         long request;
         String url;
         boolean load;
+        long receiverPid;
         synchronized (LOCK) {
             if (!enabled) return;
             generation = CarplayBus.getInstance().connectionGeneration();
             useConnection(generation);
-            if (generation < 0 || pending == 0
+            if (generation < 0 || pending == 0 || nativeSession==0 || nativeReceiverPid<=1
                     || (!video && (!startupAllowed || (pending & STARTUP) == 0))) return;
             long now = System.currentTimeMillis();
             if ((pending & VIEW) != 0 && now >= viewChangedAt && now - viewChangedAt < 350L) return;
@@ -279,15 +414,22 @@ public final class AltScreenCluster {
             request = revision;
             load = urlConnection != generation;
             url = sessionUrl;
+            receiverPid=nativeReceiverPid;
         }
-        if (load) url = readUiUrl();
+        UiSelection selection=load?readSessionSelection(receiverPid):null;
+        if (load) url=selection==null?null:selection.url;
         byte[] bytes = null;
         try { if (url != null) bytes = url.getBytes("UTF-8"); }
         catch (IOException e) { Log.e(TAG, "cannot encode cluster layout", e); }
         synchronized (LOCK) {
             if (!enabled || (!video && (!startupAllowed || (pending & STARTUP) == 0)) || revision != request
                     || generation != CarplayBus.getInstance().connectionGeneration()) return;
-            if (load) { sessionUrl = url; urlConnection = generation; }
+            if (load) {
+                sessionUrl=url;urlConnection=generation;
+                sessionLayout=selection==null?-1:selection.layout;
+                sessionEta=selection==null?-1:selection.eta;
+                sessionPhoneSign=selection==null?-1:selection.phoneSign;
+            }
             if (bytes == null) {
                 pending = 0;
                 Log.w(TAG, "cluster layout unavailable; reconnect after repairing preferences");
@@ -299,6 +441,7 @@ public final class AltScreenCluster {
             if ((reasons & VIEW) != 0) reason += (reason.length() == 0 ? "" : "+") + "view";
             if ((reasons & MMI_RETURN) != 0) reason += (reason.length() == 0 ? "" : "+") + "mmi-return";
             if ((reasons & STARTUP) != 0) reason += (reason.length() == 0 ? "" : "+") + "startup";
+            if ((reasons & POSITION) != 0) reason += (reason.length() == 0 ? "" : "+") + "card-position";
             boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes, generation);
             if (sent) {
                 pending = 0;
@@ -320,6 +463,7 @@ public final class AltScreenCluster {
             if (!enabled || !video) throw new IOException("CarPlay cluster video is not active");
             int generation = CarplayBus.getInstance().connectionGeneration();
             if (generation < 0) throw new IOException("Receiver is not connected");
+            if(nativeSession==0 || nativeReceiverPid<=1)throw new IOException("Receiver command session is not ready");
             if (urlConnection != generation || sessionUrl == null)
                 throw new IOException("Session layout is not ready; reconnect if preferences were invalid");
             if (!CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX,
@@ -348,19 +492,31 @@ public final class AltScreenCluster {
     }
 
     static String readUiUrl() {
+        UiSelection selected=readSelection();
+        return selected==null?null:selected.url;
+    }
+    private static UiSelection readSessionSelection(long pid) {
+        try {
+            ReceiverSession s=ReceiverSession.read(phoneSessionFile);
+            if(s.pid!=pid || s.enabled!=1 || s.video!=1 || s.configError!=0 || s.phoneLayout<0)
+                throw new IOException("Receiver phone profile is missing or belongs to another session");
+            return new UiSelection(s.phoneLayout,s.phoneSign,s.phoneEta);
+        } catch(IOException e) {Log.w(TAG,"Cannot read exec-time phone selection: "+e);}
+          catch(SecurityException e) {Log.w(TAG,"Phone session access denied: "+e);}
+        return null;
+    }
+    private static UiSelection readSelection() {
         FileInputStream in = null;
         try {
-            if(Preferences.get().exists()) {
-                if(Preferences.get().error().length()!=0)return null;
-                switch(Preferences.get().snapshot().get(Setting.LAYOUT)) {
-                    case 1:return "maps:/car/instrumentcluster/map?maneuverLayout=rightaligned";
-                    case 2:return "maps:/car/instrumentcluster/map?showETA=no";
-                    case 3:return "maps:/car/instrumentcluster/map";
-                    default:return DEFAULT_UI_URL;
-                }
+            Preferences preferences=Preferences.get();
+            if(preferences.exists()) {
+                preferences.refresh();
+                if(preferences.error().length()!=0)return null;
+                Preferences.Snapshot s=preferences.snapshot();
+                return new UiSelection(s.get(Setting.LAYOUT),s.get(Setting.SPEED_BADGE)==2?1:0,s.get(Setting.PHONE_ETA));
             }
             File f = new File(uiUrlPath);
-            if (!f.exists()) return DEFAULT_UI_URL;
+            if (!f.exists()) return new UiSelection(0,0,0);
             long length = f.length();
             if (length <= 0 || length > MAX_URL) {
                 Log.w(TAG, "ignoring " + uiUrlPath + ": invalid layout length");
@@ -376,11 +532,12 @@ public final class AltScreenCluster {
             }
             if (in.read() != -1) throw new IOException("Layout file grew during read");
             String url = new String(buf, 0, n, "UTF-8").trim();
-            if (!url.startsWith(URL_PREFIX)) {
-                Log.w(TAG, "ignoring " + uiUrlPath + ": not a maps: URL");
-                return null;
-            }
-            return url;
+            if(url.equals(MAP_URL))return new UiSelection(3,0,1);
+            if(url.equals(MAP_URL+"?maneuverLayout=topaligned"))return new UiSelection(0,0,1);
+            if(url.equals(MAP_URL+"?maneuverLayout=rightaligned"))return new UiSelection(1,0,1);
+            if(url.equals(MAP_URL+"?showETA=no"))return new UiSelection(2,0,0);
+            Log.w(TAG,"ignoring "+uiUrlPath+": unsupported legacy layout URL");
+            return null;
         } catch (IOException e) {
             Log.w(TAG, "cannot read cluster layout: " + e);
             return null;

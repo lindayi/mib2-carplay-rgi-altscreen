@@ -26,6 +26,8 @@ merge_start = hook.index('static void rgd_update_cache_merge(')
 merge = hook[merge_start:reset_start]
 partial_start = hook.index('static void write_bus_update_partial(const rgd_update_t* upd) {')
 partial = hook[partial_start:hook.index('\n/*', partial_start)]
+drop_start = hook.index('static void rgd_drop_passed_lane_events(uint16_t active) {')
+drop_passed = hook[drop_start:hook.index('\nstatic void rgd_update_session_active(', drop_start)]
 clock_start = hook.index('    bus_text_uint(b, "route_generation", g_rgd.route_generation);',
                         hook.index('static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,\n'))
 clock_fields = hook[clock_start:hook.index('    int listed_slots[', clock_start)]
@@ -50,7 +52,7 @@ static void write_bus_snapshot_from_cache(int slot,const rgd_maneuver_t *man,con
         assert(fwrite(text,1,b->len,f)==b->len);assert(!fclose(f));
     }
 }
-'''+partial+r'''
+'''+drop_passed+'\n'+partial+r'''
 static size_t field(uint8_t *buf,size_t off,uint16_t key,const uint8_t *value,size_t size) {
     write_be16(buf+off,size+4);write_be16(buf+off+2,key);
     if(size)memcpy(buf+off+4,value,size);return off+size+4;

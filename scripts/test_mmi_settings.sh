@@ -53,6 +53,7 @@ bash /src/scripts/test_supervisor_lifecycle.sh
 mkdir -p /tmp/lifecycle
 javac -encoding UTF-8 -d /tmp/lifecycle \
     /src/java_patch/com/luka/carplay/core/CarPlayApp.java /src/java_patch/com/luka/carplay/core/Module.java \
+    /src/java_patch/com/luka/carplay/framework/ElapsedClock.java \
     /src/tests/CarPlayAppLifecycleTest.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java \

@@ -50,8 +50,12 @@ compare("hook/framework/bus_protocol.h", "java_patch/com/luka/carplay/bus/Carpla
     "BUS_TCP_PORT": "PORT", "BUS_MAGIC": "MAGIC", "BUS_HEADER_SIZE": "HEADER_SIZE",
     "BUS_MAX_PAYLOAD": "MAX_PAYLOAD", "BUS_FLAG_STICKY": "FLAG_STICKY",
     "BUS_FLAG_BINARY": "FLAG_BINARY", "BUS_FLAG_REPLAY": "FLAG_REPLAY",
+    "ALT_SESSION_PAYLOAD_SIZE": "ALT_SESSION_PAYLOAD_SIZE",
 }, ("CMD_", "EVT_"))
 compare("hook/framework/bus.c", "java_patch/com/luka/carplay/bus/CarplayBus.java", {"MAX_TYPES": "MAX_TYPES"})
+compare("altscreen_native/integration.h", "java_patch/com/luka/carplay/cluster/AltScreenCluster.java", {
+    "ALT_LOCAL_HMI_LEASE_MS": "HMI_LEASE_MS",
+})
 bus_limit = numeric(constants("hook/framework/bus.c")["MAX_TYPES"])
 bus_opcodes = {}
 for name, value in constants("hook/framework/bus_protocol.h").items():

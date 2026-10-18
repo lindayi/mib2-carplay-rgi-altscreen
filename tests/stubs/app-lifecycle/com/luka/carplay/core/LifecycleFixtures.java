@@ -53,6 +53,7 @@ final class RgdModule extends LifecycleTestModule {
     static volatile int refreshes;
     RgdModule() { super(1); }
     public void refreshServiceBindings() { checkLock(); refreshes++; }
+    public void retryCleanup() { checkLock(); }
 }
 final class SteeringWheelInputModule extends LifecycleTestModule { SteeringWheelInputModule() { super(2); } }
 final class SpeedSourceDiagnostics extends LifecycleTestModule { SpeedSourceDiagnostics() { super(3); } }

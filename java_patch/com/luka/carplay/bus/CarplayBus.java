@@ -49,6 +49,7 @@ public final class CarplayBus {
     public static final int EVT_RGD_UPDATE  = 0x0020;
     public static final int EVT_TEL_LISTS   = 0x0040;
     public static final int EVT_ALT_SESSION = 0x0031;
+    public static final int ALT_SESSION_PAYLOAD_SIZE = 8;
     public static final int EVT_TEL_COMM    = 0x0041;
 
     /* commands Java -> hook (mirror bus_protocol.h) */
@@ -91,6 +92,7 @@ public final class CarplayBus {
      * so on() hands it over.  [flags, payload].
      * Valid only for the connection it came on (a new hook = a new session). */
     private final Object[][] unheard = new Object[MAX_TYPES][];
+    private Object[] nativeSessionReplay;
     private static final int WRITE_QUEUE_CAPACITY = 32;
 
     private volatile boolean running = false;
@@ -117,12 +119,17 @@ public final class CarplayBus {
     /* ---- lifecycle ---- */
     public void start() {
         synchronized (lock) {
-            if (running) return;
+            if(running && ioThread!=null && ioThread.isAlive()
+                    && (writerThread==null || writerThread.isAlive())
+                    && (readerThread==null || readerThread.isAlive()))return;
+            if(running || serverSocket!=null)failRun(lifecycleGeneration,"worker-restart",null);
             final int lifecycle = ++lifecycleGeneration;
             running = true;
-            ioThread = new Thread(new Runnable() { public void run() { ioLoop(lifecycle); } }, "carplay-bus");
-            ioThread.setDaemon(true);
-            ioThread.start();
+            try {
+                ioThread = new Thread(new Runnable() { public void run() { runWorker(lifecycle,0); } }, "carplay-bus");
+                ioThread.setDaemon(true);
+                ioThread.start();
+            } catch(Throwable t) {failRun(lifecycle,"worker-start",t);return;}
         }
         Log.i(TAG, "started (server " + HOST + ":" + port + ")");
     }
@@ -153,6 +160,30 @@ public final class CarplayBus {
         return running && lifecycleGeneration == lifecycle;
     }
 
+    private void runWorker(int lifecycle,int role) {
+        try {
+            if(role==0)ioLoop(lifecycle);
+            else if(role==1)writerLoop(lifecycle);
+            else readerLoop(lifecycle);
+        } catch(Throwable t) {bindWarning("bus worker "+role+" failed: "+t);}
+        finally {failRun(lifecycle,"worker-exit",null);}
+    }
+    private void failRun(int lifecycle,String reason,Throwable failure) {
+        synchronized(lock) {
+            if(lifecycleGeneration!=lifecycle)return;
+            running=false;++lifecycleGeneration;
+            closeConnectionLocked(reason);
+            if(serverSocket!=null) {
+                try {serverSocket.close();}catch(IOException e){Log.w(TAG,"listener close failed: "+e);}
+                serverSocket=null;
+            }
+            synchronized(writeLock){clearWriteQueueLocked();writeLock.notifyAll();}
+            ioThread=null;readerThread=null;writerThread=null;
+            lock.notifyAll();
+        }
+        bindWarning(reason+(failure==null?"":": "+failure));
+    }
+
     private Thread readerThread;   /* dedicated reader — decoupled from accept (see ioLoop) */
 
     public boolean isConnected() {
@@ -164,9 +195,10 @@ public final class CarplayBus {
     }
 
     /* ---- listeners ---- */
-    public void addObserver(int type, Observer observer) {
+    public void addObserver(final int type, final Observer observer) {
         if (type < 0 || type >= MAX_TYPES || observer == null)
             throw new IllegalArgumentException("Invalid bus observer");
+        final Object[] held;
         synchronized (lock) {
             Observer[] old = observers[type];
             int n = old == null ? 0 : old.length;
@@ -175,7 +207,29 @@ public final class CarplayBus {
             if (n != 0) System.arraycopy(old, 0, next, 0, n);
             next[n] = observer;
             observers[type] = next;
+            held=type==EVT_ALT_SESSION?nativeSessionReplay:null;
         }
+        if(held==null)return;
+        // Registration must not wait for a reader holding a consumer's monitor.
+        Thread replay=new Thread(new Runnable() {
+            public void run() {
+                synchronized(dispatchLock) {
+                    synchronized(lock) {
+                        if(nativeSessionReplay!=held)return;
+                        boolean registered=false;
+                        Observer[] current=observers[type];
+                        for(int i=0;current!=null && i<current.length;i++)
+                            if(current[i]==observer)registered=true;
+                        if(!registered)return;
+                    }
+                    byte[] payload=(byte[])held[1];
+                    try {observer.onFrame(((Integer)held[2]).intValue(),type,
+                        ((Integer)held[0]).intValue()|FLAG_REPLAY,payload,payload.length);}
+                    catch(Throwable e){Log.w(TAG,"native session replay failed: "+e);}
+                }
+            }
+        },"carplay-bus-native-replay");
+        replay.setDaemon(true);replay.start();
     }
 
     public void removeObserver(int type, Observer observer) {
@@ -427,25 +481,33 @@ public final class CarplayBus {
      * throws → it switches to the new socket).  This makes the bus un-wedgeable no matter how many
      * hook instances connect and die — no reboot needed to recover a stuck connection. */
     private void ioLoop(final int lifecycle) {
-        if (!openServerSocket(lifecycle)) {
-            Log.e(TAG, "bind failed; bus disabled");
-            synchronized (lock) {
-                if (lifecycleGeneration == lifecycle) running = false;
-            }
-            return;
+        int bindDelay=200;
+        while(isCurrentRun(lifecycle) && !openServerSocket(lifecycle)) {
+            sleep(bindDelay);bindDelay=Math.min(2000,bindDelay*2);
         }
+        if(!isCurrentRun(lifecycle))return;
         synchronized (lock) {
             if (!isCurrentRun(lifecycle)) return;
-            writerThread = new Thread(new Runnable() { public void run() { writerLoop(lifecycle); } }, "carplay-bus-writer");
+            writerThread = new Thread(new Runnable() { public void run() { runWorker(lifecycle,1); } }, "carplay-bus-writer");
             writerThread.setDaemon(true);
             writerThread.start();
-            readerThread = new Thread(new Runnable() { public void run() { readerLoop(lifecycle); } }, "carplay-bus-reader");
+            readerThread = new Thread(new Runnable() { public void run() { runWorker(lifecycle,2); } }, "carplay-bus-reader");
             readerThread.setDaemon(true);
             readerThread.start();
         }
         while (isCurrentRun(lifecycle)) {
             if (!acceptOne(lifecycle)) { if (isCurrentRun(lifecycle)) sleep(200); }
         }
+    }
+
+    private long lastBindWarning;
+    private void bindWarning(String message) {
+        long now=com.luka.carplay.framework.ElapsedClock.nowMs();
+        synchronized(lock) {
+            if(lastBindWarning!=0 && now>=lastBindWarning && now-lastBindWarning<10000L)return;
+            lastBindWarning=now;
+        }
+        Log.w(TAG,message);
     }
 
     private boolean openServerSocket(int lifecycle) {
@@ -462,7 +524,7 @@ public final class CarplayBus {
                 return true;
             } catch (IOException e) {
                 if (ss != null) try { ss.close(); } catch (IOException closeError) { }
-                Log.e(TAG, "bind " + HOST + ":" + port + " failed: " + e.getMessage());
+                bindWarning("bind " + HOST + ":" + port + " failed: " + e.getMessage());
                 return false;
             }
         }
@@ -553,6 +615,8 @@ public final class CarplayBus {
                 l = listeners[type];
                 copy = observers[type];
                 connection = connectionGeneration;
+                if(type==EVT_ALT_SESSION)
+                    nativeSessionReplay=new Object[]{new Integer(flags),payload,new Integer(connection)};
                 if (l != null) unheard[type] = null;                   /* newer than a held one */
                 else if ((flags & FLAG_STICKY) != 0)
                     unheard[type] = new Object[] { new Integer(flags), payload };
@@ -573,6 +637,7 @@ public final class CarplayBus {
 
     /* caller holds lock */
     private void closeConnectionLocked(String why) {
+        nativeSessionReplay=null;
         if (sock != null) Log.i(TAG, "closing connection (" + why + ")");
         for (int i = 0; i < MAX_TYPES; i++) unheard[i] = null;   /* that hook's state is gone */
         if (in   != null) { try { in.close();   } catch (IOException e) {} in = null; }

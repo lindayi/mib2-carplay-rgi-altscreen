@@ -1,10 +1,49 @@
 #!/bin/bash
 set -euo pipefail
 RELEASE=${1:?mirror release directory required}
-T=$(mktemp -d /tmp/mirror-health-test.XXXXXX)
+HERE="$(cd "$(dirname "$0")" && pwd)"
+WORK="${MIRROR_TEST_WORK:-$HERE/../build/mirror-health-tests}"
+mkdir -p "$WORK"
+WORK="$(cd "$WORK" && pwd)"
+T="$WORK/run-$(date +%Y%m%d-%H%M%S)-$$"
+mkdir "$T"
+PREFERENCES_FIXTURE="$HERE/fixtures/carplay-preferences.txt"
 sleep 300 &
 TEST_OWNER_PID=$!
-trap 'kill "$TEST_OWNER_PID" 2>/dev/null || true; wait "$TEST_OWNER_PID" 2>/dev/null || true; rm -rf "$T"' EXIT
+finish(){
+    rc=$?
+    kill "$TEST_OWNER_PID" 2>/dev/null || true
+    wait "$TEST_OWNER_PID" 2>/dev/null || true
+    if [ "$rc" = 0 ]; then rm -rf "$T"
+    else echo "Mirror failure evidence retained: $T"; fi
+    exit "$rc"
+}
+trap finish EXIT
+# Keep the real packaged scripts/parser. The sole fixture adapter extends the
+# TESTING-only path guard so this suite writes below build/, never system /tmp.
+SOURCE_RELEASE="$RELEASE"
+RELEASE="$T/package/mirror_display/release"
+mkdir -p "$RELEASE" "$T/package/rgi"
+for name in start_vehicle.sh mirror_health.sh; do
+    cp "$SOURCE_RELEASE/$name" "$RELEASE/$name"
+    cmp "$SOURCE_RELEASE/$name" "$RELEASE/$name"
+done
+cp "$SOURCE_RELEASE/../../rgi/carplay_settings.sh" "$T/package/rgi/carplay_settings.sh"
+cmp "$SOURCE_RELEASE/../../rgi/carplay_settings.sh" "$T/package/rgi/carplay_settings.sh"
+python3 - "$RELEASE/mirror_health.sh" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+old = 'case "$TMP_ROOT" in /tmp/*|/var/tmp/*)'
+new = 'case "$TMP_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*)'
+if old in text:
+    assert text.count(old) == 1
+    path.write_text(text.replace(old, new))
+else:
+    assert text.count(new) == 1, "unexpected testing-root guard"
+PY
+echo "MIRROR_ACCEPTANCE_SOURCE=$SOURCE_RELEASE"
+echo "HOST_FIXTURE_ADAPTER=testing_root_guard_only mock_native_execution=YES packaged_source_unchanged=YES"
 export ALTSCREEN_CHAIN_TESTING=1 ALT111_TEST_INTERVAL=0.02 ALT111_TEST_READY_LIMIT=4 ALT111_TEST_STALL_LIMIT=6
 TMP_ROOT=$T
 DEMAND=$T/active STOP_GUARD=$T/stop LOGFILE=$T/mirror.log
@@ -59,7 +98,7 @@ test "$MH_STALLED" -eq 30
 sample 54 4
 export CP_SETTINGS_FILE="$T/preferences"
 MH_SETTINGS_HELPER="$RELEASE/../../rgi/carplay_settings.sh"
-sed 's/enabled=0/enabled=1/;s/recovery=1/recovery=0/' /tests/fixtures/carplay-preferences.txt > "$CP_SETTINGS_FILE"
+sed 's/enabled=0/enabled=1/;s/recovery=1/recovery=0/' "$PREFERENCES_FIXTURE" > "$CP_SETTINGS_FILE"
 sample 55 keep
 grep -q 'HEALTH_STATE=RECOVERY_DISABLED' "$MH_STATUS"
 rm "$CP_SETTINGS_FILE"
@@ -129,7 +168,9 @@ await_file(){
     echo "FAIL: file not published: $1"; return 1
 }
 make_launch_fixture(){
-    D=$(mktemp -d "$T/launch.XXXXXX")
+    LAUNCH_INDEX=$((${LAUNCH_INDEX:-0} + 1))
+    D="$T/launch.$LAUNCH_INDEX"
+    mkdir "$D"
     mkdir "$D/release"
     cp "$RELEASE/start_vehicle.sh" "$RELEASE/mirror_health.sh" "$D/release/"
     cat > "$D/fake-mirror" <<'FAKE'
@@ -168,4 +209,40 @@ fi
 test ! -e "$D/launched"
 grep -q 'COLD_START_TIMEOUT=JAVA_CLUSTER_CONTEXT' "$D/MMI-Cockpit-Carplay.mirror.log"
 
-echo "Mirror health: cold gate, timeout, active-input freeze, telemetry calibration, stop/identity guards and retry exhaustion PASS"
+# Automatic recovery Off must not gate the initial delayed launch. Use the
+# actual packaged preference parser, not a stubbed mh_recovery_allowed.
+export ALT111_SETTINGS_HELPER="$T/package/rgi/carplay_settings.sh"
+make_launch_fixture
+export CP_SETTINGS_FILE="$D/preferences"
+sed 's/enabled=0/enabled=1/;s/recovery=1/recovery=0/' "$PREFERENCES_FIXTURE" > "$CP_SETTINGS_FILE"
+/bin/sh "$D/release/start_vehicle.sh" > "$D/launch.log" 2>&1
+test ! -e "$D/launched"
+echo "$TEST_OWNER_PID" > "$D/carplay_supervisor.owner"
+printf 'ctx=74\n' > "$D/carplay_cluster.ctx"
+await_file "$D/launched"
+test "$(cat "$D/recovery-mode")" = 1
+echo "Mirror initial launch with recovery Off PASS"
+
+for scenario in master-off audi-map master-off-session audi-map-session stale-owner; do
+    make_launch_fixture
+    export CP_SETTINGS_FILE="$D/preferences"
+    sed 's/enabled=0/enabled=1/' "$PREFERENCES_FIXTURE" > "$CP_SETTINGS_FILE"
+    echo "$TEST_OWNER_PID" > "$D/carplay_supervisor.owner"
+    printf 'ctx=74\n' > "$D/carplay_cluster.ctx"
+    case "$scenario" in
+        master-off) sed -i 's/enabled=1/enabled=0/' "$CP_SETTINGS_FILE" ;;
+        audi-map) sed -i 's/mode=0/mode=2/' "$CP_SETTINGS_FILE" ;;
+        master-off-session) sed -i 's/enabled=1/enabled=0/;s/video=1/video=0/' "$D/carplay_menu_session" ;;
+        audi-map-session) sed -i 's/video=1/video=0/' "$D/carplay_menu_session" ;;
+        stale-owner) echo 999999 > "$D/carplay_supervisor.owner" ;;
+    esac
+    /bin/sh "$D/release/start_vehicle.sh" > "$D/launch.log" 2>&1
+    test ! -e "$D/launched"
+    touch "$D/MMI-Cockpit-Carplay.mirror.stop.requested"
+    sleep 0.1
+    test ! -e "$D/launched"
+    echo "Mirror suppressed: $scenario PASS"
+done
+unset CP_SETTINGS_FILE ALT111_SETTINGS_HELPER
+
+echo "Mirror health: preference-aware initial launch, cold gate, timeout, active-input freeze, telemetry calibration, stop/identity/generation guards and retry exhaustion PASS"

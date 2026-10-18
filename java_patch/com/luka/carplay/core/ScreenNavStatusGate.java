@@ -20,6 +20,7 @@ public final class ScreenNavStatusGate {
     private static boolean desiredRouteBlocked;
     private static boolean appliedRouteBlocked;
     private static boolean desiredCurrentPositionBlocked;
+    private static boolean desiredCurrentPositionTextOnly;
     private static boolean installScheduled;
     private static int installTicket;
     private static int policyRevision;
@@ -89,7 +90,7 @@ public final class ScreenNavStatusGate {
                 }
                 if (previous != null && previous != gate) previous.retire();
                 gate.setRouteGuidanceBlocked(desiredRouteBlocked);
-                gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
+                gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked,desiredCurrentPositionTextOnly);
                 if (current != gate) cs.setCombiBAPListenerCombiService(gate);
                 clusterService = cs;
                 seedAcceptedState(cs);
@@ -97,7 +98,7 @@ public final class ScreenNavStatusGate {
             }
 
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
-            gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
+            gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked,desiredCurrentPositionTextOnly);
             appliedRouteBlocked = desiredRouteBlocked;
             appliedRevision = gate.hasPendingReplay() ? -1 : policyRevision;
         } catch (Throwable t) {
@@ -168,7 +169,7 @@ public final class ScreenNavStatusGate {
         clusterService = cs;
         gate = next;
         gate.setRouteGuidanceBlocked(desiredRouteBlocked);
-        gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
+        gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked,desiredCurrentPositionTextOnly);
         appliedRouteBlocked = desiredRouteBlocked;
         appliedRevision = gate.hasPendingReplay() ? -1 : policyRevision;
         installScheduled = false;
@@ -185,6 +186,7 @@ public final class ScreenNavStatusGate {
         if (blocked && gate != null) gate.setRouteGuidanceBlocked(true);
         if (!blocked) {
             desiredCurrentPositionBlocked = false;
+            desiredCurrentPositionTextOnly = false;
         }
         scheduleInstallLocked();
         return gate != null && appliedRouteBlocked == blocked && appliedRevision == policyRevision && !installScheduled;
@@ -194,10 +196,18 @@ public final class ScreenNavStatusGate {
      * session-long native-RG gate. The wrapper is already installed on
      * NavigationJobs. Tightening is immediate; release/replay is queued. */
     public static synchronized void setCurrentPositionInfoBlocked(boolean blocked) {
-        if (desiredCurrentPositionBlocked != blocked) ++policyRevision;
+        setCurrentPositionInfoBlocked(blocked,false);
+    }
+    public static synchronized void setCurrentPositionInfoBlocked(boolean blocked,boolean textOnly) {
+        textOnly=blocked && textOnly;
+        if (desiredCurrentPositionBlocked != blocked || desiredCurrentPositionTextOnly!=textOnly) ++policyRevision;
         desiredCurrentPositionBlocked = blocked;
-        if (blocked && gate != null) gate.setCurrentPositionInfoBlocked(true);
+        desiredCurrentPositionTextOnly=textOnly;
+        if (blocked && gate != null) gate.tightenCurrentPositionInfo(textOnly);
         scheduleInstallLocked();
+    }
+    public static synchronized boolean isCurrentPositionInfoBlocked(boolean textOnly) {
+        return gate!=null && gate.ownsCurrentPosition(textOnly) && appliedRevision==policyRevision && !installScheduled;
     }
 
     /** Called by the existing resident lifecycle monitor, including after disconnect. */
@@ -236,7 +246,7 @@ public final class ScreenNavStatusGate {
             CarPlayApp.onNavigationServiceChanged();
             return;
         }
-        if (desiredRouteBlocked) scheduleInstallLocked();
+        if (desiredRouteBlocked || desiredCurrentPositionBlocked) scheduleInstallLocked();
         CarPlayApp.onNavigationServiceChanged();
     }
 }

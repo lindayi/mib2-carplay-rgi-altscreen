@@ -146,7 +146,8 @@ public final class VcPanel {
         if(page.equals("more"))return new Page("More settings",null,
             new String[]{"Guidance","Appearance","Information bar","Controls","Reapply map layout","Map cards"});
         if(page.equals("cards"))return new Page("Map cards",new int[]{Setting.NOW_PLAYING_CARD,Setting.TRIP_CARD,Setting.SPEED_BADGE},null);
-        if(page.equals("guidance"))return new Page("Guidance",new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS},null);
+        if(page.equals("presentation"))return new Page("Phone map layout",new int[]{Setting.LAYOUT,Setting.PHONE_ETA},null);
+        if(page.equals("guidance"))return new Page("Guidance",new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS,Setting.ARROW_POLICY},null);
         if(page.equals("appearance"))return new Page("Appearance",new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND},null);
         if(page.equals("information"))return new Page("Information bar",new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},null);
         if(page.equals("controls"))return new Page("Controls",new int[]{Setting.ZOOM,Setting.ZOOM_SPEED,Setting.TOUCHPAD,Setting.TOUCH_SENSITIVITY},null);
@@ -194,6 +195,7 @@ public final class VcPanel {
         } else if(page.equals("root")) {
             if(focus==0){SettingsRuntime.set(Setting.ENABLED,0);closeLocked("master off");}
             else if(focus==4)enter("more");
+            else if(focus==2)enter("presentation");
             else setting(new int[]{Setting.ENABLED,Setting.MODE,Setting.LAYOUT,Setting.MASCOT}[focus]);
         } else if(page.equals("more")) {
             if(focus==4)SettingsRuntime.action("reapply_layout");
@@ -220,10 +222,11 @@ public final class VcPanel {
         boolean reconnect=SettingsRuntime.reconnectPending();
         if(reconnect && hint.startsWith("Saved:"))hint="Saved; CarPlay reconnect pending";
         if(hint.length()==0) {
-            boolean choiceNeedsReconnect=page.startsWith("choice:") &&
-                Setting.ALL[Integer.parseInt(page.substring(7))].reconnect;
+            int choice=page.startsWith("choice:")?Integer.parseInt(page.substring(7)):-1;
             hint=reconnect?"Reconnect CarPlay to apply saved changes":
-                choiceNeedsReconnect?"Layout changes require a CarPlay reconnect":"Hold roller: close";
+                choice==Setting.LAYOUT?"Card position live; other layouts need reconnect":
+                choice==Setting.SPEED_BADGE?"Phone sign changes need CarPlay reconnect":
+                choice==Setting.PHONE_ETA?"Phone ETA changes need CarPlay reconnect":"Hold roller: close";
         }
         out.append(text(hint,63)).append('\n');
         for(int i=0;i<m.count();i++) {

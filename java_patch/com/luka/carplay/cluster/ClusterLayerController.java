@@ -62,6 +62,7 @@ public final class ClusterLayerController {
         -476, 0,
         "fallback-sport");
     private static boolean haveLayout;
+    private static boolean haveActualLayout;
     private static boolean errorLogged;
     private static String lastAppliedSignature;
     private static volatile ViewportListener viewportListener;
@@ -87,6 +88,16 @@ public final class ClusterLayerController {
     }
 
     private ClusterLayerController() {}
+
+    /** Accepted native state only; fallback renderer geometry is not phone geometry. */
+    static String nativeHmiState() {
+        synchronized(LOCK) {
+            if(!haveActualLayout || !haveVcStage || lastDm==null)return null;
+            Geometry g=lastGeometry;
+            return "view="+(vcPopup?"FULL":"SMALL")+"\nlayout_name="+g.layoutName
+                +"\nsmall_stage_dx="+g.smallStageDX+"\nsmall_stage_dy="+g.smallStageDY+"\n";
+        }
+    }
 
     private static final class Geometry {
         final int inTubeX, inTubeY, popupX, popupY;
@@ -166,6 +177,7 @@ public final class ClusterLayerController {
             lastTerminal = terminal;
             lastGeometry = geometry;
             haveLayout = true;
+            haveActualLayout = true;
         }
         if (changed) {
             ViewportListener listener = viewportListener;
@@ -191,6 +203,7 @@ public final class ClusterLayerController {
             if (lastDm != dm) {
                 lastStockVisible = false;
                 lastStockOpacity = 0;
+                haveActualLayout = false;
             }
             lastDm = dm;
             lastTerminal = terminal;

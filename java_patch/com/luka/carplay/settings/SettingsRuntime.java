@@ -33,10 +33,8 @@ public final class SettingsRuntime {
     private static volatile boolean sessionVideo;
     private static volatile boolean sessionVerbose;
     private static volatile String sessionError="";
-    private static volatile boolean layoutPending;
     private static volatile boolean readyMarker;
     private static String lastSession="";
-    private static int lastLayout=-1;
     private static volatile String mirrorHealth="UNKNOWN",clusterContext="UNKNOWN";
     private static volatile String mascotHealth="OFF";
     private static volatile String cardHealth="OFF";
@@ -101,7 +99,8 @@ public final class SettingsRuntime {
         Preferences.Snapshot s=Preferences.get().snapshot();
         return !sessionKnown || s.on(Setting.ENABLED)!=sessionEnabled
             || (s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2)!=sessionVideo
-            || s.on(Setting.VERBOSE)!=sessionVerbose || layoutPending;
+            || s.on(Setting.VERBOSE)!=sessionVerbose
+            || com.luka.carplay.cluster.AltScreenCluster.reconnectPending(s);
     }
     public static boolean verboseDiagnosticSession(){
         return sessionKnown && sessionEnabled && sessionVerbose;
@@ -110,7 +109,8 @@ public final class SettingsRuntime {
         Preferences p=Preferences.get();
         Preferences.Snapshot s=p.snapshot();
         return sessionKnown && sessionEnabled && sessionVideo && p.error().length()==0 &&
-            s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2 && s.on(Setting.SPEED_BADGE);
+            s.on(Setting.ENABLED) && s.get(Setting.MODE)!=2 && s.get(Setting.SPEED_BADGE)==1
+            && !com.luka.carplay.cluster.AltScreenCluster.phoneSignRequestedForSession();
     }
     private static void changed(){
         Object[] copy;
@@ -136,30 +136,7 @@ public final class SettingsRuntime {
         changed();
     }
     static boolean[] parseSession(String text) throws IOException {
-        int pid=-1,enabled=-1,video=-1,verbose=-1,configError=-1;
-        java.util.HashSet seen=new java.util.HashSet();
-        BufferedReader reader=new BufferedReader(new StringReader(text));
-        for(String line;(line=reader.readLine())!=null;) {
-            int e=line.indexOf('=');
-            if(e<=0 || e!=line.lastIndexOf('='))throw new IOException("Invalid session status");
-            String key=line.substring(0,e),value=line.substring(e+1);
-            if(!seen.add(key))throw new IOException("Duplicate session status field");
-            try {
-                if(key.equals("pid"))pid=Integer.parseInt(value);
-                else if(key.equals("enabled"))enabled=Integer.parseInt(value);
-                else if(key.equals("video"))video=Integer.parseInt(value);
-                else if(key.equals("verbose"))verbose=Integer.parseInt(value);
-                else if(key.equals("config_error"))configError=Integer.parseInt(value);
-                else throw new IOException("Unknown session status field");
-            } catch(NumberFormatException x){throw new IOException("Invalid session status");}
-        }
-        if(pid<=1 || enabled<0 || enabled>1 || video<0 || video>1 || verbose<0 || verbose>1
-                || configError<0 || configError>1)throw new IOException("Incomplete session status");
-        File owner=new File("/ramdisk/carplay_supervisor.owner");
-        boolean known=new File("/proc/"+pid).isDirectory() && owner.isFile()
-            && Preferences.read(owner,32).trim().equals(Integer.toString(pid));
-        return new boolean[]{known,known && enabled==1 && configError==0,
-            known && video==1 && configError==0,known && verbose==1};
+        return ReceiverSession.parse(text).flags();
     }
     private static void tick(int run) {
         Preferences prefs=Preferences.get();prefs.refresh();
@@ -188,9 +165,9 @@ public final class SettingsRuntime {
         Preferences.Snapshot s=prefs.snapshot();
         if(!current(run))return;
         if(sessionKnown && !sessionText.equals(lastSession)) {
-            lastSession=sessionText;layoutPending=false;
-        } else if(lastLayout>=0 && lastLayout!=s.get(Setting.LAYOUT))layoutPending=true;
-        lastLayout=s.get(Setting.LAYOUT);
+            lastSession=sessionText;
+        }
+        com.luka.carplay.cluster.AltScreenCluster.updatePreferences(s);
         boolean effective=s.on(Setting.ENABLED) && sessionEnabled && prefs.error().length()==0;
         String mascotState;
         try {
@@ -238,7 +215,7 @@ public final class SettingsRuntime {
         String cards;
         try {
             cards=MapCardControl.publish(allowed && s.on(Setting.NOW_PLAYING_CARD),
-                allowed && s.on(Setting.TRIP_CARD),allowed && s.on(Setting.SPEED_BADGE));
+                allowed && s.on(Setting.TRIP_CARD),allowed && speedBadgeSession());
         } catch(IOException e) {
             cards="CONTROL_ERROR";
             if(!cards.equals(cardHealth))Log.e("Settings","Map cards unavailable",e);
@@ -258,13 +235,11 @@ public final class SettingsRuntime {
                             savedAt=System.currentTimeMillis();
                             result="Saved: "+Setting.ALL[job.id].label+" - "+Setting.ALL[job.id].choices[job.value];
                         }
-                        if(job.id==Setting.LAYOUT)layoutPending=true;
                     } else if(job.action.equals("reapply_layout")) {
                         com.luka.carplay.cluster.AltScreenCluster.reapplyLayout();
                         result="Layout queued to receiver; not phone-confirmed";
                     } else if(job.action.equals("reset")) {
                         Preferences.get().reset();
-                        layoutPending=true;
                         result="Defaults saved; master switch preserved. Reconnect for map layout.";
                     } else {
                         synchronized(LOCK) {

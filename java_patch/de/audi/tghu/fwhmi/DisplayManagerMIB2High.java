@@ -33,11 +33,12 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
     private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + stock native map
     private static final int CTX_CARPLAY_VIDEO = 81; // CarPlay: maneuver + backing + AltScreen video (3)
+    private static final int CTX_CARPLAY_REFRESH = 82; // Preserve video/backings while rebinding maneuver 98
     private static final int ALTSCREEN_VIDEO = 3;    // AltScreen mirror sink (1440x455 GLES)
     private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
 
     /* ---- context-table sizing / G24 KDK variants ---- */
-    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
+    private static final int DC_SIZE_A5  = 83;    // stock 0..78 + CarPlay 80/81/82
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
     private int lastBlockedCarPlayContext = -1;
@@ -184,6 +185,8 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 33});
             this.dc[CTX_CARPLAY_VIDEO] = new DisplayContext(CTX_CARPLAY_VIDEO,
                 new int[]{98, 101, 102, ALTSCREEN_VIDEO});
+            this.dc[CTX_CARPLAY_REFRESH] = new DisplayContext(CTX_CARPLAY_REFRESH,
+                new int[]{101, 102, ALTSCREEN_VIDEO});
         } else {
             this.defineContextsForG24();
         }

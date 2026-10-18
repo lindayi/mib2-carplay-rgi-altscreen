@@ -69,7 +69,7 @@ public final class Preferences {
             if(equals<=0 || equals!=line.lastIndexOf('='))throw new IOException("Invalid setting line");
             String key=line.substring(0,equals), raw=line.substring(equals+1);
             if(key.equals("format")) {
-                if(format!=0 || !raw.equals("1") && !raw.equals("2") && !raw.equals("3") && !raw.equals("4") && !raw.equals("5"))
+                if(format!=0 || !raw.equals("1") && !raw.equals("2") && !raw.equals("3") && !raw.equals("4") && !raw.equals("5") && !raw.equals("6"))
                     throw new IOException("Unsupported settings format");
                 format=Integer.parseInt(raw);continue;
             }
@@ -84,11 +84,17 @@ public final class Preferences {
         }
         if(format==0)throw new IOException("Missing settings format");
         int count=format==1?Setting.VERSION_1_COUNT:format==2?Setting.VERSION_2_COUNT:
-            format==3?Setting.VERSION_3_COUNT:format==4?Setting.VERSION_4_COUNT:values.length;
+            format==3?Setting.VERSION_3_COUNT:format==4?Setting.VERSION_4_COUNT:
+            format==5?Setting.VERSION_5_COUNT:values.length;
         for(int i=0;i<seen.length;i++) {
             if(i>=count) {
                 if(seen[i])throw new IOException("Setting not supported by declared version");
             } else if(!seen[i])throw new IOException("Missing setting: "+Setting.ALL[i].key);
+        }
+        if(format<6) {
+            if(values[Setting.SPEED_BADGE]>1 || values[Setting.LAYOUT]>3)
+                throw new IOException("Setting value not supported by declared version");
+            values[Setting.PHONE_ETA]=values[Setting.LAYOUT]==2?0:1;
         }
         return values;
     }
@@ -102,11 +108,12 @@ public final class Preferences {
             else if(url.equals("maps:/car/instrumentcluster/map?showETA=no"))values[Setting.LAYOUT]=2;
             else if(!url.equals("maps:/car/instrumentcluster/map?maneuverLayout=topaligned"))
                 throw new IOException("Unrecognized saved cluster layout");
+            values[Setting.PHONE_ETA]=values[Setting.LAYOUT]==2?0:1;
         }
         return values;
     }
     static String encode(int[] values) {
-        StringBuffer out=new StringBuffer("format=5\n");
+        StringBuffer out=new StringBuffer("format=6\n");
         for(int i=0;i<values.length;i++)out.append(Setting.ALL[i].key).append('=').append(values[i]).append('\n');
         return out.toString();
     }

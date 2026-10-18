@@ -8,6 +8,7 @@ typedef long clock_t;
 struct timeval { long tv_sec; long tv_usec; };
 struct timespec { long tv_sec; long tv_nsec; };
 #define CLOCK_MONOTONIC 2
+#define CLOCK_REALTIME 0
 extern int clock_gettime(int clock_id, struct timespec *ts);
 extern time_t time(time_t *t);
 extern int gettimeofday(struct timeval *tv, void *tz);

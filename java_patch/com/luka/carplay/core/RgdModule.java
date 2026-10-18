@@ -28,6 +28,10 @@ final class RgdModule implements Module {
         if (rg != null) rg.refreshServiceBindings();
     }
 
+    void retryCleanup() {
+        com.luka.carplay.rgd.LowerBarKomo.retryPending();
+    }
+
     public boolean start(FrameworkRef fw) {
         if (fw == null || !fw.isReady()) return false;             /* framework not up → retry */
         if (!ScreenModule.isPlatformSupported(fw)) {
@@ -45,7 +49,7 @@ final class RgdModule implements Module {
          * fresh BAPBridge each call → would re-wrap the gate every retry).  rg.start() is
          * idempotent (returns early if already running). */
         if (rg == null) {
-            RouteGuidance r = new RouteGuidance();
+            RouteGuidance r = new RouteGuidance(!CarPlayApp.isGuidanceEnabled());
             if (!r.init(navi)) {                                  /* BAPBridge init (ClusterService) not ready */
                 return false;
             }

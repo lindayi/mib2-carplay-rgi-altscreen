@@ -35,6 +35,9 @@ Toolbox/scripts/altscreen_chain_test.sh
 Toolbox/scripts/altscreen_chain_test_known.sh
 Toolbox/scripts/altscreen_chain_test_universal.sh
 Toolbox/scripts/altscreen_firewall.sh
+Toolbox/scripts/altscreen_firewall_diag.sh
+Toolbox/scripts/altscreen_transaction.sh
+Toolbox/scripts/altscreen_rescue.sh
 Toolbox/scripts/altscreen_live_diag.sh
 Toolbox/scripts/altscreen_persistent_diag.sh
 Toolbox/scripts/altscreen_preload.awk

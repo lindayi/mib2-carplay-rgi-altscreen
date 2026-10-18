@@ -80,9 +80,10 @@ These main-MMI layers remain separate from the experimental VC panel described b
 | Main | Enabled | Off releases our cockpit modules immediately; the complete preload/extra-video bypass takes effect on the next CarPlay session. On after bypass also requires reconnect. |
 | Main | CarPlay map + guidance / CarPlay map only / Audi map + guidance | Direct access beside Enabled. Display and RGI changes apply live when possible. The launcher excludes the AltScreen preload for a new Audi-map session; switching back then needs reconnect. |
 | Main | Reapply cluster layout | Queues the current connection's selected URL again; no restart, reconnect or crop change. Requires active cluster video and a live receiver with a latched URL. Success means queued, not phone-confirmed or guaranteed recentering. |
-| Phone map | Top / right / no ETA / original AltScreen | Reconnect; requests the iPhone layout, not direct marker positioning. |
-| Map cards | Now Playing; Trip progress; experimental speed/limit badge | Independent, default Off, live on CarPlay video. Music/Trip stay fixed left; the speed badge uses a View-dependent top-right inset. |
+| Phone map | Top / right / left maneuver card, map only, original AltScreen; phone arrival time | Card-to-card position changes apply live. Card/map profile and phone ETA changes require reconnect. These request the iPhone layout, not direct marker positioning. |
+| Map cards | Now Playing; Trip progress; Speed-limit display: Off / Our camera-first badge / Phone sign | Cards default Off and apply live. Off/our badge changes apply live unless leaving a cached phone-sign session. Entering or leaving phone-sign mode requires reconnect. |
 | Guidance | Overlay distance, road/exit, lanes, arrow progress fill | Live. This controls our overlay, not the HUD's BAP data. |
+| Guidance | Maneuver arrow timing: Always show maneuver / Upstream approach mode | Live, shared by the HUD and custom renderer. Always-real arrows remain the default. |
 | VC information bar | Default Road/exit or Trip summary; next-road/exit or current-road text; timed return or keep selection | Live, in the existing lower VC bar. No new overlay on the main MMI map or additional content in the maneuver box. |
 | Appearance | Custom / Minimal / Standard / Large text presets; individual text size, scrolling and backing controls | Live. Road transport remains bounded to 32 UTF-8 bytes, with grapheme-safe ellipsis; scrolling is of that bounded label, not unlimited text. |
 | Appearance | Map mascot: Off / local pack choices (up to 16) | Default Off. Live on the CarPlay cluster map only; animated focused previews in the VC menu, not main MMI. |
@@ -95,10 +96,12 @@ No preference invokes a full MMI reboot, disconnects the phone automatically, or
 uninstalls the patch. The initial patch installation still needs the normal
 installation reboot.
 
-The phone-map URL is latched per receiver connection and reapplied on later
-route transitions and settled View-size changes, including in map-only mode. A live route change or video
-restart does not silently apply a newly saved layout; reconnect CarPlay for that
-change. This addresses missing layout requests, not direct vehicle-marker
+The phone-map profile, sign and ETA are latched per receiver connection and
+reapplied on later route transitions and settled View-size changes, including
+in map-only mode. A card-to-card position edit updates the cached URL live,
+without applying pending sign/ETA changes. A route change or video/module restart
+does not apply other pending choices; reconnect CarPlay for those changes.
+This addresses missing layout requests, not direct vehicle-marker
 positioning. Google Maps alignment still needs vehicle confirmation; see
 [layout request lifetime](../input/steering-wheel.md#google-maps-alignment-route-lifetime-correction-vehicle-confirmation-pending).
 
@@ -109,7 +112,14 @@ default page 20 seconds after successful publication. **Keep until OK or route
 ends** also preserves the selection across View changes. A route/session boundary
 resets to the configured default; changing that default applies it immediately.
 The current-road option affects only this lower bar: the maneuver footer still
-uses next-road/exit information. No now-playing page is added.
+uses next-road/exit information. Road text also carries the upstream arrival
+suffix on each scrolling fragment, without duplicating the Trip arrival clock.
+No now-playing page is added.
+
+CarPlay map-only mode retains Road/Trip output through Fct19/20 without acquiring
+the custom renderer, RGI context or native model/KOMO fields. Full guidance uses
+the existing native model formatting with separate project ownership; release
+restores the latest native values. Switching this mode restarts only RGI.
 
 | Preset | Distance | Road | Lanes | Progress | Text | Scrolling | Backing |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -239,10 +249,18 @@ both Off and confirm the original map presentation returns without reconnecting.
 
 ### Experimental speed/limit badge
 
-**Map cards -> Speed / limit badge (experimental)** defaults Off and applies live.
-It is separate from the small maneuver box and the fixed left music/Trip frame.
-It uses the mirror-only canvas and the same worker/control path; it never changes
-Audi coding, subscriptions, sign-recognition settings or OEM observers.
+**Map cards -> Speed-limit display** offers **Off**, **Our camera-first badge**
+and **Phone sign** in both normal MMI and the VC panel. It defaults Off.
+Our badge is separate from the small maneuver box and fixed left music/Trip
+frame. It uses the mirror-only canvas and the same worker/control path; it never
+changes Audi coding, subscriptions, sign-recognition settings or OEM observers.
+
+Phone sign requests the navigation app's own rendered sign. It is not a numeric
+phone speed-limit feed and cannot accept our camera value or custom artwork.
+App support, appearance and accuracy need a parked check. Entering or leaving
+phone-sign mode requires reconnect; route/View/manual reapply cannot bypass this.
+While a cached phone-sign session remains active, our badge stays suppressed,
+even if it is newly selected. Off/our badge changes otherwise apply live.
 
 The provisional selection is **camera first, map fallback**. Camera candidates
 must have accepted callback validity, an explicit camera-only source and a
@@ -486,20 +504,24 @@ be performed on the car with a fresh connection.
 
 `/mnt/persist/var/app/carplay_altscreen/preferences` is a strict, versioned
 key/index file. Java and shell validate the same complete schema. New saves use
-`format=5` (24 settings). Complete `format=1` files (16 settings) are accepted with
+`format=6` (26 settings). Complete `format=1` files (16 settings) are accepted with
 Road/exit, next-road text, 20-second return, Custom and mascot Off defaults.
 Complete `format=2` files (20 settings) retain their choices and default mascot Off.
 Complete `format=3` files (21 settings) retain their mascot selection.
 Formats 1-3 default both map cards Off. Complete `format=4` files (23 settings)
-retain both card choices. All older formats default the speed badge Off. Reads do not
+retain both card choices. Formats 1-4 default the speed badge Off. Complete
+`format=5` files (24 settings) retain Off/our badge with their original bounds.
+Formats 1-5 default to always-real arrows and derive phone ETA from the old
+layout: Hide for layout 2, App default otherwise. Reads do not
 rewrite old files; the next save migrates them. Incomplete or mixed-version files
 are rejected rather than filled with silent defaults. Save uses a
 flushed/synced temporary file and rename. Invalid settings select the safe disabled
 path and report an error; preference reset can repair them without enabling the
 master switch. The old `cluster_ui.url` is imported only when no new preference
-file exists. The GEM layout picker updates the new setting once it exists.
+file exists. GEM now directs preference changes to normal MMI. Obsolete GEM
+layout/shift/safe-area scripts fail explicitly without changing existing files.
 
-Older builds cannot read format 5, even when the badge is Off. An intentional
+Older builds cannot read format 6, even when the badge is Off. An intentional
 downgrade needs a complete preference file supported by that build or its Reset
 preferences action; unsupported data takes the disabled path, never a partially
 interpreted configuration.

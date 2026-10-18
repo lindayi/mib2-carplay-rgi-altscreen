@@ -11,8 +11,8 @@ ROOT=""; VOLUME=""
 if [ "${ALTSCREEN_CHAIN_TESTING:-0}" = 1 ]; then
     ROOT=${ALTSCREEN_CHAIN_ROOT:-}
     VOLUME=${ALTSCREEN_CHAIN_VOLUME:-}
-    case "$ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid test root"; exit 2 ;; esac
-    case "$VOLUME" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid test SD"; exit 2 ;; esac
+    case "$ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid test root"; exit 2 ;; esac
+    case "$VOLUME" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid test SD"; exit 2 ;; esac
 else
     for candidate in /net/mmx/fs/sda0 /net/mmx/fs/sda1 /net/mmx/fs/sdb0 /net/mmx/fs/sdb1 /fs/sda0 /fs/sda1 /fs/sdb0 /fs/sdb1; do
         if [ -f "$candidate/Toolbox/scripts/export_mmi_cockpit_diagnostics.sh" ]; then
@@ -61,12 +61,16 @@ summary(){
     echo "FIRMWARE_TRAIN=${train:-UNKNOWN}"
     marker RUNTIME_TRANSACTION "$STATE/transaction.pending"
     marker START_TRANSACTION "$STATE/start.pending"
+    marker INSTALL_SNAPSHOT "$VOLUME/MMI-Cockpit-Carplay/install-transaction/active/PREPARED"
+    marker RESTORE_SNAPSHOT "$VOLUME/MMI-Cockpit-Carplay/restore-transaction/active/PREPARED"
+    marker MANUAL_RESCUE_SNAPSHOT "$VOLUME/MMI-Cockpit-Carplay/restore-transaction/rescue/PREPARED"
     marker MIRROR_ENABLED "$STATE/basevideo3.enabled"
     marker VIDEO_DEMAND "$ROOT/tmp/mmi-mirror-active"
     marker FIRST_PRESENT_MARKER "$ROOT/tmp/mmi-mirror-basevideo.ready"
     marker MASCOT_RAMDISK "$ROOT/ramdisk"
     marker ALTSCREEN_DISPLAY_OWNERSHIP "$ROOT/ramdisk/mmi-altscreen-displayable3.state"
     marker ALTSCREEN_KEYFRAME_REQUEST "$ROOT/ramdisk/altscreen-private111.keyframe-request"
+    marker HMI_VIEW_AREA_LEASE "$ROOT/ramdisk/mmi-mirror-hmi.state"
     marker MASCOT_CONTROL "$ROOT/ramdisk/carplay_mascot.control"
     marker MASCOT_STATUS "$ROOT/ramdisk/carplay_mascot.status"
     marker MAP_CARDS_CONTROL "$ROOT/ramdisk/carplay_cards.control"
@@ -124,7 +128,8 @@ SUMMARY.txt contains selected operational fields, not a guarantee of live pixels
 private/ contains bounded raw log tails. They may include road names, destinations,
 device identifiers, network details and protocol data. They are NOT anonymized.
 Keep this directory local; review and redact it before sharing.
-No firmware dumps, configuration files or video payloads are copied.
+No firmware dumps or video payloads are copied. The private firewall report
+includes bounded source excerpts and checksums, not just the live pfctl rules.
 Missing logs are reported explicitly and may be normal for a quiet or new session.
 PRIVACY
 [ "$?" -eq 0 ] || { echo "FAIL: cannot write privacy notice"; exit 1; }
@@ -151,7 +156,23 @@ for name in $LOGS; do
     fi
 done
 if [ "$PRIVATE" = 1 ]; then
-    for name in mmi-altscreen-displayable3.state altscreen-private111.keyframe-request; do
+    helper="$VOLUME/Toolbox/scripts/altscreen_firewall_diag.sh"
+    if [ -f "$helper" ] && /bin/sh "$helper" > "$OUT/private/firewall_sources.log"; then
+        echo "COPIED_BOUNDED firewall_sources.log" >> "$OUT/FILES.txt" || exit 1
+        COPIED=$((COPIED + 1))
+    else
+        echo "FAILED firewall_sources.log" >> "$OUT/FILES.txt" || exit 1
+        ERRORS=$((ERRORS + 1))
+    fi
+    for name in transaction.log transaction.previous.log install-transaction.log restore-transaction.log; do
+        source="$VOLUME/MMI-Cockpit-Carplay/logs/$name"
+        [ -f "$source" ] || continue
+        if tail -c 262144 "$source" > "$OUT/private/$name"; then
+            echo "COPIED_TAIL_MAX_262144 $name" >> "$OUT/FILES.txt" || exit 1
+            COPIED=$((COPIED + 1))
+        else ERRORS=$((ERRORS + 1)); fi
+    done
+    for name in mmi-altscreen-displayable3.state altscreen-private111.keyframe-request mmi-mirror-hmi.state; do
         source="$ROOT/ramdisk/$name"
         if [ ! -f "$source" ]; then
             echo "MISSING ramdisk/$name" >> "$OUT/FILES.txt" || exit 1

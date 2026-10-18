@@ -15,7 +15,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     "$PROJECT_DIR/tests/AltScreenLayoutLifecycleTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" \
     com.luka.carplay.cluster.AltScreenLayoutTest "$PROJECT_DIR/altscreen/Toolbox/scripts/cluster_layout.sh"
-"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" \
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$TOOLS_DIR/out/${STOCK_JAR:-MU1316-P5145-stock.jar}:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar" \
     com.luka.carplay.cluster.AltScreenLayoutLifecycleTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
@@ -37,6 +37,7 @@ mkdir -p "$TEST_DIR/nav-init"
 mkdir -p "$TEST_DIR/lifecycle"
 "$TEST_JDK/bin/javac" -encoding UTF-8 -d "$TEST_DIR/lifecycle" \
     "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
+    "$PROJECT_DIR/java_patch/com/luka/carplay/framework/ElapsedClock.java" \
     "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
     "$PROJECT_DIR/tests/CarPlayAppLifecycleTest.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \

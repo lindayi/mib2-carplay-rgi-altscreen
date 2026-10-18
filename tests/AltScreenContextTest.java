@@ -15,6 +15,7 @@ public final class AltScreenContextTest implements InvocationHandler {
     final List switches = Collections.synchronizedList(new ArrayList());
     volatile int current = 74;
     volatile boolean pauseReconcile;
+    volatile boolean rejectRefresh, ignoreVideoWrites;
     final CountDownLatch paused = new CountDownLatch(1);
     final CountDownLatch resume = new CountDownLatch(1);
     Object dm;
@@ -28,8 +29,10 @@ public final class AltScreenContextTest implements InvocationHandler {
     public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
         if (method.getName().equals("getDisplayManager")) return dm;
         if (method.getName().equals("switchContext") && ((Integer)args[1]).intValue() == 1) {
-            current = ((Integer)args[0]).intValue();
-            switches.add(Integer.valueOf(current));
+            int requested = ((Integer)args[0]).intValue();
+            switches.add(Integer.valueOf(requested));
+            if (requested == 82 && rejectRefresh) throw new IllegalStateException("refresh context rejected");
+            if (requested != 81 || !ignoreVideoWrites) current = requested;
         }
         if (method.getName().equals("getCurrentContextID")) {
             if (pauseReconcile && ScreenModule.isClusterContextWriterThread()) {
@@ -67,6 +70,81 @@ public final class AltScreenContextTest implements InvocationHandler {
         throw new AssertionError(message + " (actual ctx " + current + ", switches " + switches + ")");
     }
 
+    void awaitBinding(int revision) throws Exception {
+            long end=System.currentTimeMillis()+5000L;
+            while(System.currentTimeMillis()<end){
+                if(ScreenModule.isRendererBindingApplied(revision))return;
+                Thread.sleep(20L);
+            }
+            throw new AssertionError("unconfirmed binding "+revision+" switches="+switches);
+        }
+
+        static Field field(Class type,String name)throws Exception {
+            for(Class c=type;c!=null;c=c.getSuperclass())try{
+                Field f=c.getDeclaredField(name);f.setAccessible(true);return f;
+            }catch(NoSuchFieldException missing){}
+            throw new NoSuchFieldException(name);
+        }
+
+        static sun.misc.Unsafe unsafe()throws Exception {
+            Field f=sun.misc.Unsafe.class.getDeclaredField("theUnsafe");f.setAccessible(true);
+            return (sun.misc.Unsafe)f.get(null);
+        }
+
+        static void compositionContract(AltScreenContextTest capture)throws Exception {
+            Class type=de.audi.tghu.fwhmi.DisplayManagerMIB2High.class;
+            Object actual=unsafe().allocateInstance(type);
+            field(type,"framework").set(actual,capture.proxy(de.audi.atip.base.IFrameworkAccess.class));
+            Method define=type.getDeclaredMethod("defineContexts");define.setAccessible(true);define.invoke(actual);
+            Object[] contexts=(Object[])field(type,"dc").get(actual);
+            int[][] expected={{98,101,102,33},{98,101,102,3},{101,102,3}};
+            for(int i=0;i<3;i++){
+                int[] layers=null;
+                for(Field f:contexts[80+i].getClass().getFields())
+                    if(f.getType()==int[].class)layers=(int[])f.get(contexts[80+i]);
+                check(Arrays.equals(layers,expected[i]),"actual context "+(80+i)+" composition changed");
+            }
+        }
+
+        static final class Renderer extends com.luka.carplay.rgd.RendererServer {
+            boolean framed;int peer=1;
+            public boolean connect(){return true;}
+            public boolean isReady(){return true;}
+            public boolean isFrameReady(){return framed;}
+            public int connectionGeneration(){return peer;}
+            public boolean sendVisibleArea(int x,int y,int w,int h){return true;}
+            public boolean sendDisplayOptions(){return true;}
+            public boolean sendRouteLabels(String distance,String road){return true;}
+            public boolean sendManeuver(int icon,int dir,int angle,int side,int[] roads,int level,int mode,int perspective){return true;}
+        }
+
+        void rendererBinding()throws Exception {
+            com.luka.carplay.rgd.BAPBridge bridge=new com.luka.carplay.rgd.BAPBridge();
+            Renderer renderer=new Renderer();
+            field(bridge.getClass(),"initialized").setBoolean(bridge,true);
+            field(bridge.getClass(),"bapSessionStarted").setBoolean(bridge,true);
+            field(bridge.getClass(),"csRef").set(bridge,unsafe().allocateInstance(de.audi.tghu.navi.app.cluster.ClusterService.class));
+            field(bridge.getClass(),"rendererClient").set(bridge,renderer);
+            switches.clear();
+            check(!bridge.preparePresentation(),"unframed renderer became ready");
+            Thread.sleep(100L);check(switches.isEmpty(),"unframed renderer requested a context");
+            renderer.framed=true;
+            check(!bridge.preparePresentation(),"unconfirmed binding became ready");
+            int ticket=field(bridge.getClass(),"rendererBinding").getInt(bridge);
+            awaitBinding(ticket);
+            check(bridge.preparePresentation(),"confirmed renderer not ready");
+            check(switches.contains(82) && !switches.contains(72),"renderer rebind lost video: "+switches);
+            int before=switches.size();
+            for(int i=0;i<5;i++)check(bridge.preparePresentation(),"ready renderer regressed");
+            check(switches.size()==before,"successful binding repeated");
+            renderer.peer++;
+            check(!bridge.preparePresentation(),"rapid peer replacement reused old binding");
+            int replacement=field(bridge.getClass(),"rendererBinding").getInt(bridge);
+            check(replacement!=ticket,"peer replacement lost revision");
+            awaitBinding(replacement);check(bridge.preparePresentation(),"replacement binding not ready");
+            bridge.onRouteEnd();
+            ScreenModule.setNavActive(false);
+        }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
         check(contextFor(false, true, true) == 74, "disconnected is always stock");
@@ -82,6 +160,7 @@ public final class AltScreenContextTest implements InvocationHandler {
         set(AltScreenVideo.class, "readyPath", ready.getPath());
 
         AltScreenContextTest capture = new AltScreenContextTest();
+        compositionContract(capture);
         capture.dm = capture.proxy(IDisplayManagerKombiControl.class);
         FrameworkRef fw = new FrameworkRef((IContext)capture.proxy(IContext.class));
         final ScreenModule module = new ScreenModule();
@@ -98,6 +177,19 @@ public final class AltScreenContextTest implements InvocationHandler {
         int i81 = capture.switches.lastIndexOf(Integer.valueOf(81));
         check(i81 > 0 && ((Integer)capture.switches.get(i81 - 1)).intValue() == 72,
             "ctx 81 is entered through the 72 bounce: " + capture.switches);
+        capture.rendererBinding();
+
+        capture.switches.clear();capture.rejectRefresh=true;
+        int fallback=ScreenModule.requestRendererBinding();capture.awaitBinding(fallback);
+        check(capture.switches.contains(72),"rejected refresh had no verified fallback");
+        capture.rejectRefresh=false;capture.ignoreVideoWrites=true;capture.switches.clear();
+        int unconfirmed=ScreenModule.requestRendererBinding();
+        long rejectionDeadline=System.currentTimeMillis()+3000L;
+        while(!capture.switches.contains(81) && System.currentTimeMillis()<rejectionDeadline)Thread.sleep(20L);
+        check(capture.switches.contains(81),"fixture never attempted final context");
+        Thread.sleep(400L);
+        check(!ScreenModule.isRendererBindingApplied(unconfirmed),"unreadable final context was acknowledged");
+        capture.ignoreVideoWrites=false;capture.awaitBinding(unconfirmed);
 
         // Route guidance during video keeps the video context; video loss falls back to the map.
         ScreenModule.setNavActive(true);
@@ -119,6 +211,7 @@ public final class AltScreenContextTest implements InvocationHandler {
         check(capture.paused.await(5, TimeUnit.SECONDS), "pause worker before reconnect");
         try {
             module.stop();
+            check(!ScreenModule.isRendererBindingApplied(unconfirmed),"disconnect retained old renderer binding");
             check(module.start(fw), "restart actual screen module with unchanged markers");
         } finally {
             capture.resume.countDown();
@@ -134,6 +227,6 @@ public final class AltScreenContextTest implements InvocationHandler {
         check(capture.current == 74 && !ScreenModule.isAltScreenVideo(), "stale markers ignored while disconnected");
 
         active.delete(); ready.delete(); dir.delete();
-        System.out.println("AltScreenContextTest: marker gating, 72 bounce, nav/video priority, video loss, drift, rapid reconnect, disconnect PASS");
+        System.out.println("AltScreenContextTest: real context composition, map-preserving renderer rebind, readback/fallback, peer replacement, video loss, drift, reconnect and disconnect PASS");
     }
 }

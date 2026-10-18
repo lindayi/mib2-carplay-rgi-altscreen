@@ -32,7 +32,7 @@ TESTING=${ALTSCREEN_CHAIN_TESTING:-0}
 DEVICE_ROOT=""
 if [ "$TESTING" = 1 ]; then
     DEVICE_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
-    case "$DEVICE_ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
+    case "$DEVICE_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
 fi
 p(){ printf '%s%s\n' "$DEVICE_ROOT" "$1"; }
 
@@ -167,11 +167,11 @@ remove_files(){
         rm -f "$HOOKS/$name" "$HOOKS/$name.rgi-new."* || return 1
         [ ! -e "$HOOKS/$name" ] || return 1
     done
-    rm -f "$HOOKS/cluster_ui.url" "$HOOKS/cluster_fps" "$HOOKS/cluster_shift.cfg" "$HOOKS/cluster_viewarea.cfg" || return 1
+    # These are user preferences, not executables. Keep them across restore.
     rmdir "$HOOKS" 2>/dev/null || true
 }
 
-cmd_install(){
+cmd_preflight(){
     VOLUME=$(find_volume) || { echo "FAIL: no SD card with Toolbox/carplay_alt_screen/rgi"; exit 1; }
     SRC=$VOLUME/Toolbox/carplay_alt_screen/rgi
     AWKF=$VOLUME/Toolbox/scripts/altscreen_preload.awk
@@ -182,7 +182,10 @@ cmd_install(){
     for name in carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_settings.sh carplay_cleanup.sh; do
         sh -n "$SRC/$name" || { echo "FAIL: RGI script syntax: $name"; exit 1; }
     done
+}
 
+cmd_install(){
+    cmd_preflight || return 1
     mount_app_rw || fail "cannot mount /mnt/app writable"
     mount_system_rw || fail "cannot mount /mnt/system writable"
     mkdir -p "$HOOKS" || fail "cannot create $HOOKS"
@@ -221,6 +224,7 @@ cmd_remove(){
 }
 
 case "$ACTION" in
+    preflight) cmd_preflight ;;
     install) cmd_install ;;
     remove)  cmd_remove ;;
     *) echo "usage: rgi_companion.sh install|remove"; exit 2 ;;

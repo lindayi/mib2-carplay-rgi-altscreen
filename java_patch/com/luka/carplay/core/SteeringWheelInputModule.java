@@ -168,7 +168,7 @@ public final class SteeringWheelInputModule implements Module {
      *  The stock keyboard stack posts the collapsed HMI event asynchronously, so
      *  the short-lived marker is armed in the raw DSI callback first. */
     public static boolean consumeCollapsedSelect(KeyState state) {
-        long now = System.currentTimeMillis();
+        long now = com.luka.carplay.framework.ElapsedClock.nowMs();
         synchronized (SELECT_LOCK) {
             if (state != null && state.is(KeyState.PRESSED)) {
                 boolean consume = pendingPressUntil >= now;
@@ -192,7 +192,7 @@ public final class SteeringWheelInputModule implements Module {
             state.is(KeyState.LONGPRESSED)?2:-1;
         if(index<0)return false;
         synchronized(SELECT_LOCK) {
-            boolean consume=panelBackUntil[index]>=System.currentTimeMillis();
+            boolean consume=panelBackUntil[index]>=com.luka.carplay.framework.ElapsedClock.nowMs();
             panelBackUntil[index]=0L;return consume;
         }
     }
@@ -201,7 +201,7 @@ public final class SteeringWheelInputModule implements Module {
     }
 
     private static void armCollapsedSelect(int rawState) {
-        long until = System.currentTimeMillis() + COLLAPSED_SELECT_WINDOW_MS;
+        long until = com.luka.carplay.framework.ElapsedClock.nowMs() + COLLAPSED_SELECT_WINDOW_MS;
         synchronized (SELECT_LOCK) {
             if (rawState == KST_PRESSED) pendingPressUntil = until;
             else if (rawState == KST_RELEASED) pendingReleaseUntil = until;
@@ -272,7 +272,7 @@ public final class SteeringWheelInputModule implements Module {
                     }
                     synchronized(SELECT_LOCK) {
                         int index=rawStateIndex(keyState);
-                        if(panelBackGesture && index>=0)panelBackUntil[index]=System.currentTimeMillis()+COLLAPSED_SELECT_WINDOW_MS;
+                        if(panelBackGesture && index>=0)panelBackUntil[index]=com.luka.carplay.framework.ElapsedClock.nowMs()+COLLAPSED_SELECT_WINDOW_MS;
                         if(keyState==KST_RELEASED)panelBackGesture=false;
                     }
                     return;

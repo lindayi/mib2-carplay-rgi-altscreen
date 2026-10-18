@@ -13,10 +13,14 @@ import java.util.concurrent.*;
 /** Real bus and layout policy, without BAP or a renderer (also covers map-only mode). */
 public final class AltScreenLayoutLifecycleTest {
     private static final String BASE = "maps:/car/instrumentcluster/map";
-    private static final String TOP = BASE + "?maneuverLayout=topaligned";
+    private static final String CARD="maps:/car/instrumentcluster";
+    private static final String TOP=CARD+"?showSpeedLimit=no&showCompass=user&showETA=no&maneuverLayout=topaligned";
+    private static final String MAP_ONLY=BASE+"?showSpeedLimit=no&showCompass=user&showETA=no&maneuverLayout=";
+    private static final String ORIGINAL=BASE+"?showSpeedLimit=no&showETA=no";
     private static final CarplayBus bus = CarplayBus.getInstance();
     private static volatile CountDownLatch delivered;
     private static int primaryCalls;
+    private static Path phoneSession;
 
     private static void check(boolean value, String why) {
         if (!value) throw new AssertionError(why);
@@ -25,6 +29,7 @@ public final class AltScreenLayoutLifecycleTest {
         Field f = type.getDeclaredField(name); f.setAccessible(true); return f;
     }
     private static Socket connect() throws Exception {
+        String requested=AltScreenCluster.readUiUrl();
         int old = bus.connectionGeneration();
         ServerSocket server = (ServerSocket)field(CarplayBus.class, "serverSocket").get(bus);
         Socket peer = new Socket("127.0.0.1", server.getLocalPort());
@@ -34,6 +39,14 @@ public final class AltScreenLayoutLifecycleTest {
             Thread.sleep(1);
         }
         peer.setSoTimeout(2000);
+        int layout=requested==null?-1:requested.contains("/map?")?(requested.contains("maneuverLayout=")?2:3)
+            :requested.contains("leftaligned")?4:requested.contains("rightaligned")?1:0;
+        if(requested==null)write(phoneSession,"invalid\n");
+        else write(phoneSession,"pid="+(1000+bus.connectionGeneration())
+            +"\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\nphone_layout="+layout
+            +"\nphone_sign="+(requested.contains("showSpeedLimit=user")?1:0)
+            +"\nphone_eta="+(requested.contains("showETA=no")?0:1)+"\n");
+        if(old>=0)nativeSession(peer,1);
         return peer;
     }
     private static void route(Socket peer, String text) throws Exception {
@@ -52,7 +65,8 @@ public final class AltScreenLayoutLifecycleTest {
         out.writeInt(CarplayBus.MAGIC); out.writeInt(1);
         out.writeShort(CarplayBus.EVT_ALT_SESSION);
         out.writeByte(CarplayBus.FLAG_STICKY | CarplayBus.FLAG_BINARY); out.writeByte(0);
-        out.writeInt(4); out.writeInt(epoch); out.flush();
+        out.writeInt(CarplayBus.ALT_SESSION_PAYLOAD_SIZE);out.writeInt(epoch);
+        out.writeInt(1000+bus.connectionGeneration());out.flush();
         check(delivered.await(3, TimeUnit.SECONDS), "native session readiness delivery");
     }
     private static void expect(Socket peer, String url) throws Exception {
@@ -61,7 +75,7 @@ public final class AltScreenLayoutLifecycleTest {
         check(in.readUnsignedShort() == CarplayBus.CMD_ALT_UICTX, "layout command type");
         check(in.readUnsignedByte() == CarplayBus.FLAG_BINARY, "layout flags"); in.readByte();
         byte[] bytes = new byte[in.readInt()]; in.readFully(bytes);
-        check(url.equals(new String(bytes, "UTF-8")), "selected URL was overridden");
+        check(url.equals(new String(bytes, "UTF-8")), "expected "+url+", received "+new String(bytes,"UTF-8"));
     }
     private static void quiet(Socket peer, String why) throws Exception {
         peer.setSoTimeout(80);
@@ -72,10 +86,67 @@ public final class AltScreenLayoutLifecycleTest {
         } finally { peer.setSoTimeout(2000); }
     }
     private static void flush(Socket peer, String url) throws Exception {
+        long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);
+        while(field(AltScreenCluster.class,"nativeSession").getLong(null)==0) {
+            check(System.nanoTime()<end,"native identity replay after module restart");Thread.sleep(1);
+        }
         AltScreenCluster.flushLayout(); expect(peer, url);
     }
     private static void write(Path file, String text) throws Exception {
         Files.write(file, text.getBytes("UTF-8"));
+    }
+    private static void exerciseHmiState(Path root,Socket peer) throws Exception {
+        Path hmi=root.resolve("mmi-mirror-hmi.state");
+        field(AltScreenCluster.class,"hmiPath").set(null,hmi.toString());
+        AltScreenCluster.publishHmiState(true);
+        check(!Files.exists(hmi),"fallback geometry must not be published to native");
+        Class<?> controller=ClusterLayerController.class;
+        Object oldGeometry=field(controller,"lastGeometry").get(null);
+        Constructor<?> constructor=oldGeometry.getClass().getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        Object[] values=new Object[15];
+        for(int i=0;i<14;i++)values[i]=Integer.valueOf(0);
+        values[12]=Integer.valueOf(-476);values[14]="LayoutMIB2HighB9Sport";
+        Object geometry=constructor.newInstance(values);
+        Class<?> display=Class.forName("de.audi.tghu.fwhmi.IDisplayManagerKombiControl");
+        Object dm=java.lang.reflect.Proxy.newProxyInstance(display.getClassLoader(),new Class<?>[]{display},
+            (proxy,method,args)->null);
+        field(controller,"lastGeometry").set(null,geometry);
+        field(controller,"lastDm").set(null,dm);
+        field(controller,"haveActualLayout").setBoolean(null,true);
+        field(controller,"haveVcStage").setBoolean(null,true);
+        field(controller,"vcPopup").setBoolean(null,true);
+        AltScreenCluster.publishHmiState(true);
+        check(!field(AltScreenCluster.class,"video").getBoolean(null),"HMI precedes video readiness");
+        String first=new String(Files.readAllBytes(hmi),"US-ASCII");
+        check(first.startsWith("view=FULL\nlayout_name=LayoutMIB2HighB9Sport\nsmall_stage_dx=-476\nsmall_stage_dy=0\n"),
+            "actual HMI metadata");
+        check(first.contains("receiver_epoch=4275878552\nreceiver_pid="+(1000+bus.connectionGeneration())+"\n"),
+            "unsigned epoch and native receiver PID");
+        long expiry=Long.parseLong(first.substring(first.indexOf("expiry_ms=")+10).trim());
+        long remaining=expiry-System.currentTimeMillis();
+        check(remaining>0 && remaining<=AltScreenCluster.HMI_LEASE_MS,"bounded realtime HMI lease");
+        AltScreenCluster.publishHmiState(true);
+        check(first.equals(new String(Files.readAllBytes(hmi),"US-ASCII")),"unchanged snapshot rate limit");
+        field(controller,"vcPopup").setBoolean(null,false);
+        AltScreenCluster.publishHmiState(true);
+        check(new String(Files.readAllBytes(hmi),"US-ASCII").startsWith("view=SMALL\n"),"accepted View edge");
+        CarplayBus.Observer observer=(CarplayBus.Observer)field(AltScreenCluster.class,"sessionObserver").get(null);
+        observer.onFrame(bus.connectionGeneration()-1,CarplayBus.EVT_ALT_SESSION,CarplayBus.FLAG_BINARY,new byte[8],8);
+        check(field(AltScreenCluster.class,"nativeReceiverPid").getLong(null)>1,"stale event cannot clear current identity");
+        observer.onFrame(bus.connectionGeneration(),CarplayBus.EVT_ALT_SESSION,CarplayBus.FLAG_BINARY,new byte[4],4);
+        AltScreenCluster.publishHmiState(true);
+        check(!Files.exists(hmi),"malformed old protocol withdraws HMI readiness");
+        nativeSession(peer,0xFEDCBA98);
+        flush(peer,TOP);
+        AltScreenCluster.publishHmiState(true);
+        check(Files.exists(hmi),"valid native identity restores HMI");
+        AltScreenCluster.publishHmiState(false);
+        check(!Files.exists(hmi),"withdraw on lost ownership");
+        field(controller,"lastGeometry").set(null,oldGeometry);
+        field(controller,"lastDm").set(null,null);
+        field(controller,"haveActualLayout").setBoolean(null,false);
+        field(controller,"haveVcStage").setBoolean(null,false);
     }
 
     public static void main(String[] args) throws Exception {
@@ -83,6 +154,8 @@ public final class AltScreenLayoutLifecycleTest {
         Path root = Files.createTempDirectory("layout-lifecycle-");
         Path preference = root.resolve("cluster_ui.url");
         Path nativePreference = root.resolve("preferences");
+        phoneSession=root.resolve("receiver-session");
+        field(AltScreenCluster.class,"phoneSessionFile").set(null,phoneSession.toFile());
         Field singleton = field(Preferences.class, "instance");
         Object previousPreferences = singleton.get(null);
         field(AltScreenCluster.class, "uiUrlPath").set(null, preference.toString());
@@ -108,6 +181,7 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.start();
             AltScreenCluster.flushLayout();
             peer = connect();
+            write(preference,BASE);
             AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
             AltScreenCluster.flushLayout(); quiet(peer, "OEM readiness alone cannot send startup UI");
             nativeSession(peer, 0);
@@ -117,6 +191,8 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.flushLayout(); quiet(peer, "native session alone cannot bypass OEM readiness");
             AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
             flush(peer, TOP);
+            Files.delete(preference);
+            exerciseHmiState(root,peer);
             for (int i = 0; i < 5; i++) {
                 nativeSession(peer, 0xFEDCBA98);
                 AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
@@ -202,8 +278,8 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.setVideoReady(true); flush(peer, TOP);
 
             // No preference reload until receiver reconnect, even if HMI modules restart.
-            String right = BASE + "?maneuverLayout=rightaligned";
-            write(preference, right);
+            String right = CARD+"?showSpeedLimit=no&showCompass=user&maneuverLayout=rightaligned";
+            write(preference, BASE+"?maneuverLayout=rightaligned");
             AltScreenCluster.onMainScreen(AltScreenCluster.captureMainScreenEvent(),true);
             Thread.sleep(360);flush(peer,TOP);
             route(peer, "route_generation:n:106\n"); flush(peer, TOP);
@@ -241,8 +317,12 @@ public final class AltScreenLayoutLifecycleTest {
             current.onFrame(oldConnection, CarplayBus.EVT_RGD_UPDATE, 0, stale, stale.length);
             AltScreenCluster.flushLayout();
             quiet(peer, "only one reconnect request without video edge");
-            for (String selected : new String[]{BASE + "?showETA=no", BASE, TOP}) {
-                write(preference, selected);
+            String[] legacy={BASE+"?showETA=no",BASE,BASE+"?maneuverLayout=topaligned"};
+            String[] translated={MAP_ONLY,BASE+"?showSpeedLimit=no",
+                CARD+"?showSpeedLimit=no&showCompass=user&maneuverLayout=topaligned"};
+            for (int choice=0;choice<legacy.length;choice++) {
+                String selected=translated[choice];
+                write(preference, legacy[choice]);
                 old = peer; peer = connect(); old.close();
                 flush(peer, selected);
                 route(peer, "route_state:n:1\nroute_generation:n:1\n"); flush(peer, selected);
@@ -259,12 +339,13 @@ public final class AltScreenLayoutLifecycleTest {
             Preferences nativePrefs = constructor.newInstance(nativePreference.toFile(), preference.toFile());
             singleton.set(null, nativePrefs);
             nativePrefs.set(Setting.LAYOUT, 2);
+            nativePrefs.set(Setting.PHONE_ETA,0);
             old = peer; peer = connect(); old.close();
-            flush(peer, BASE + "?showETA=no");
+            flush(peer, MAP_ONLY);
             nativePrefs.set(Setting.LAYOUT, 3);
-            route(peer, "route_state:n:1\n"); flush(peer, BASE + "?showETA=no");
+            route(peer, "route_state:n:1\n"); flush(peer, MAP_ONLY);
             old = peer; peer = connect(); old.close();
-            flush(peer, BASE);
+            flush(peer, ORIGINAL);
             byte[] validPreferences = Files.readAllBytes(nativePreference);
             write(nativePreference, "format=broken\n"); nativePrefs.refresh();
             old = peer; peer = connect(); old.close();
@@ -276,21 +357,59 @@ public final class AltScreenLayoutLifecycleTest {
             nativePrefs.set(Setting.LAYOUT, 0);
             old = peer; peer = connect(); old.close(); flush(peer, TOP);
 
-            // Block the preference lookup: teardown/route callbacks must not wait for it,
+            Class runtime=com.luka.carplay.settings.SettingsRuntime.class;
+            for(String flag:new String[]{"sessionKnown","sessionEnabled","sessionVideo"})field(runtime,flag).setBoolean(null,true);
+            nativePrefs.set(Setting.SPEED_BADGE,1);
+            check(com.luka.carplay.settings.SettingsRuntime.speedBadgeSession(),"local selection should apply live");
+            check(!AltScreenCluster.reconnectPending(nativePrefs.snapshot()),"Off/local needs no reconnect when phone sign is hidden");
+            nativePrefs.set(Setting.LAYOUT,1);nativePrefs.set(Setting.SPEED_BADGE,2);nativePrefs.set(Setting.PHONE_ETA,1);
+            AltScreenCluster.updatePreferences(nativePrefs.snapshot());
+            String liveRight=TOP.replace("topaligned","rightaligned");
+            flush(peer,liveRight);
+            check(!com.luka.carplay.settings.SettingsRuntime.speedBadgeSession(),"phone selection enabled local badge");
+            check(!AltScreenCluster.phoneSignRequestedForSession() && AltScreenCluster.reconnectPending(nativePrefs.snapshot()),
+                "live position applied pending sign or ETA");
+            AltScreenCluster.reapplyLayout();expect(peer,liveRight);
+            AltScreenCluster.stop();AltScreenCluster.start();AltScreenCluster.setVideoReady(true);flush(peer,liveRight);
+            old=peer;peer=connect();old.close();
+            String phoneRight=liveRight.replace("showSpeedLimit=no","showSpeedLimit=user").replace("&showETA=no","");
+            flush(peer,phoneRight);
+            check(AltScreenCluster.phoneSignRequestedForSession() && !AltScreenCluster.reconnectPending(nativePrefs.snapshot()),
+                "reconnect did not latch phone sign and ETA");
+            nativePrefs.set(Setting.SPEED_BADGE,1);nativePrefs.set(Setting.PHONE_ETA,0);nativePrefs.set(Setting.LAYOUT,4);
+            AltScreenCluster.updatePreferences(nativePrefs.snapshot());
+            flush(peer,phoneRight.replace("rightaligned","leftaligned"));
+            check(!com.luka.carplay.settings.SettingsRuntime.speedBadgeSession(),"pending local mode overlapped cached phone sign");
+            old=peer;peer=connect();old.close();flush(peer,TOP.replace("topaligned","leftaligned"));
+            check(com.luka.carplay.settings.SettingsRuntime.speedBadgeSession(),"local badge did not resume after reconnect");
+            nativePrefs.set(Setting.SPEED_BADGE,0);
+            check(!com.luka.carplay.settings.SettingsRuntime.speedBadgeSession()
+                && !AltScreenCluster.reconnectPending(nativePrefs.snapshot()),"local Off did not apply live");
+            nativePrefs.set(Setting.LAYOUT,2);AltScreenCluster.updatePreferences(nativePrefs.snapshot());
+            check(AltScreenCluster.reconnectPending(nativePrefs.snapshot()),"card-to-map profile silently applied live");
+            AltScreenCluster.flushLayout();quiet(peer,"profile change must wait for reconnect");
+            nativePrefs.set(Setting.LAYOUT,0);AltScreenCluster.updatePreferences(nativePrefs.snapshot());flush(peer,TOP);
+
+            // Block the exec-time lookup: teardown/route callbacks must not wait for it,
             // and that old lookup must not enqueue after the module has been replaced.
-            field(AltScreenCluster.class, "urlConnection").setInt(null, -1);
+            old=peer;peer=connect();old.close();
             route(peer, "route_generation:n:3\nroute_state:n:1\n");
+            final Object fileReadLock=new Object();
+            File blockedSession=new File(phoneSession.toString()) {
+                public String getPath(){synchronized(fileReadLock){return super.getPath();}}
+            };
+            field(AltScreenCluster.class,"phoneSessionFile").set(null,blockedSession);
             final Throwable[] failure = {null};
             Thread lookup = new Thread(new Runnable() {
                 public void run() {
                     try { AltScreenCluster.flushLayout(); } catch (Throwable t) { failure[0] = t; }
                 }
             });
-            synchronized (Preferences.class) {
+            synchronized (fileReadLock) {
                 lookup.start();
                 end = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
                 while (lookup.getState() != Thread.State.BLOCKED) {
-                    check(System.nanoTime() < end, "lookup must reach preference read"); Thread.sleep(1);
+                    check(System.nanoTime() < end, "lookup must reach exec-time snapshot read"); Thread.sleep(1);
                 }
                 route(peer, "route_state:n:0\n");
                 AltScreenCluster.stop();
@@ -298,6 +417,7 @@ public final class AltScreenLayoutLifecycleTest {
                 AltScreenCluster.setVideoReady(true);
             }
             lookup.join(3000);
+            field(AltScreenCluster.class,"phoneSessionFile").set(null,phoneSession.toFile());
             check(!lookup.isAlive() && failure[0] == null, "lookup worker failed");
             quiet(peer, "stale file lookup leaked through stop/start");
             flush(peer, TOP);
@@ -315,7 +435,8 @@ public final class AltScreenLayoutLifecycleTest {
             AltScreenCluster.stop(); bus.stop();
             if (peer != null) peer.close();
             singleton.set(null, previousPreferences);
-            Files.deleteIfExists(nativePreference); Files.deleteIfExists(preference); Files.delete(root);
+            Files.deleteIfExists(nativePreference); Files.deleteIfExists(preference);
+            Files.deleteIfExists(phoneSession);Files.deleteIfExists(root.resolve("mmi-mirror-hmi.state"));Files.delete(root);
         }
         System.out.println("AltScreenLayoutLifecycleTest: repeated routes on live video, generations, reroutes, sources, "
             + "coalesced View edges, no polling spam, explicit presets, reconnect, cancellation and nonblocking callbacks PASS");

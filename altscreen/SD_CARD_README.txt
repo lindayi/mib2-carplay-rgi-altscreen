@@ -17,7 +17,10 @@ distance work. Google Maps centering is intermittent and can regress on later
 routes; the top-card preset is not a confirmed centering fix. This report does not
 validate the later native-menu or recovery additions.
 
-1. Copy all contents of this package directly to the root of a FAT32 SD card.
+1. Before updating the card, back up and hash-verify all data files, including
+   hidden files except Windows System Volume Information. Keep earlier backups.
+   Merge this package's contents into the FAT32 card root. Do not format, mirror
+   or delete unrelated files. Verify package hashes and unchanged existing files.
    The card root should directly contain:
    metainfo2.txt, Toolbox/, SD_CARD_README.txt, and SHA256SUMS-SD.txt.
 2. If your previous SD card already has an MMI-Cockpit-Carplay directory with stock
@@ -25,20 +28,32 @@ validate the later native-menu or recovery additions.
    requires the original backups created during the initial installation.
 3. Unit already has MIB Toolbox: Run "Update Toolbox" in the Toolbox menu to refresh
    scripts and the Green Engineering Menu (GEM).
-   Unit does not have MIB Toolbox: Install the menu and scripts via the MMI Software
-   Update (SWDL) menu using metainfo2.txt.
+   Do not use the red Software Update menu for this existing-Toolbox upgrade.
 4. Execution in GEM (MMI-Cockpit-Carplay menu):
-   Disconnect iPhone -> INSTALL -> Full MMI Reboot -> START -> Full MMI Reboot ->
-   Connect iPhone / CarPlay -> Launch navigation.
+   Park with stable power -> Disconnect iPhone -> INSTALL -> Wait for PASS ->
+   One full MMI reboot -> Connect iPhone / CarPlay -> Launch navigation.
+   Stop on FAIL. INSTALL includes boot-only START arming. The separate START
+   entry remains compatible but is not a required second installation step.
+   This replacement transaction is host-tested, not vehicle-confirmed.
 5. This fork targets the owner's Q5 2020 P5145/MU1316 only. Earlier upstream builds
    were tested on Audi Q5 FY 2019, MHI2Q_ER_AUG22_P5092, MU1329.
    - Display video is rendered at 1:1 aspect ratio with clean bottom crop (no distortion).
    - No logo or watermark assets are used. The mirror waits for actual video.
    - Steering-wheel roller zooms CarPlay map and native map simultaneously.
-   - Four Cluster map layout presets are available in GEM. Maneuver card on top
-     is the default when no preference is saved; upgrades preserve explicit choices.
-     Select "original AltScreen" to request the original layout. Reconnect to apply.
+   - Normal-MMI and VC settings provide top/right/left cards, map-only and original
+     layouts, plus phone ETA and Off/our badge/phone sign. Card position applies
+     live; profile, phone sign and ETA require reconnect. Top is the default when
+     no preference is saved; upgrades preserve explicit choices. GEM's retired
+     layout/area/shift scripts cannot change preferences.
 6. To restore stock firmware configurations, run RESTORE ORIGINAL from the menu.
+   Failed transactions retain recovery evidence. Do not delete it or bypass
+   unit/checksum guards. Guarded manual rescue is separate from normal MMI:
+   with the matching SD inserted, run the installed altscreen_rescue.sh helper
+   under /mnt/app/root/carplay-altscreen/bin with "recover", or
+   "restore-original --confirm-stock-rescue".
+   Successful stock rescue removes that installed directory. Its reversal uses
+   the matching SD's Toolbox/scripts/altscreen_rescue.sh with
+   "undo --confirm-pre-rescue". Undo restores the pre-rescue state, even if damaged.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.
    Cold boots do not require the SD card to remain inserted once installed.
    The SD card holds stock backups and diagnostic logs; always retain your backup card.

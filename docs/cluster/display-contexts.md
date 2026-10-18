@@ -64,6 +64,10 @@ flowchart LR
   connected: video -> 81, else nav -> 80, else 74. Without AltScreen neither marker exists and 81 is
   never selected. The last applied context is written to `/tmp/carplay_cluster.ctx` for status
   scripts.
+- **dc[82]** `CTX_CARPLAY_REFRESH` = `{101, 102, 3}` - temporary video/backings
+  composition used to rebind maneuver displayable 98 without removing the map.
+  Upstream V3.8 calls this role 81; its numeric context cannot be copied directly
+  into this fork, where 81 already has a different role.
 
 `getMappedInternalContext` is identity on MIB2High, so `switchContext(80)` lands on exactly the
 declared context. G24 clusters have no such composition and the feature is disabled there.
@@ -85,8 +89,9 @@ stateDiagram-v2
     Ctx80 --> Stock74: setUpdateRate(0) -> switchContext(74) -> setUpdateRate(30)
 ```
 
-- `desiredCtx = (connected && navActive) ? 80 : 74` - pure function, worker converges to it
-  (reconciled every 250 ms).
+- Desired context is 74 when disconnected; otherwise allowed/live video selects
+  81, active guidance selects 80, and idle selects 74. The worker reconciles it
+  every 250 ms. The diagram above shows the native-map branch.
 - `navActive` is set by `RouteGuidance` on a successful BAP start ([rgd-activation](../rgd/rgd-activation.md)). On route end
   `setNavActive(false)` keeps it true (`navHidePending`) while `ClusterLayerController.isKdkVisible()`,
   i.e. while the VC is still fading its KDK out; `onVcKdkVisibility(false)` (FctID 44) then releases it.
@@ -94,6 +99,13 @@ stateDiagram-v2
 - Entering 80 from stock needs a real context change first, so the worker **bounces** through ctx 72
   (`CTX_MAP`, kombi-map - never ours) for 180 ms, then switches to 80 and sets 30 FPS. This forces
   `preContextSwitchHook` + the MOST encoder re-point that `switchContext` otherwise short-circuits.
+- A ready renderer needs a verified binding before BAPBridge considers its
+  presentation active. Over an already-active video context, the worker verifies
+  82, then verifies the return to 81. Rejected/unconfirmed 82 uses the existing
+  72/180-ms fallback. An unconfirmed final context cannot acknowledge the binding.
+  Renderer socket replacement creates a new ticket, even if its brief unready
+  state was missed. Session generations fence pending work; successful bindings
+  are not repeated on a timer. Lower-bar-only mode requests no such binding.
 - `isClusterContextWriterThread()` lets `DisplayManagerMIB2High` distinguish our serialized writes
   from stock screen-controller requests while CarPlay owns terminal 1.
 

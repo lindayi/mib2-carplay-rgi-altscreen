@@ -1,4 +1,5 @@
-/* Included by fullchain after the session guard. Metadata never spans OEM I/O. */
+/* One receiver UI queue, using upstream leases, retained receiver and tracked
+ * completion. Metadata locks never span OEM I/O. Included by fullchain. */
 #ifndef P1404_BOOTSTRAP_H
 #define P1404_BOOTSTRAP_H
 #include <time.h>
@@ -11,9 +12,9 @@
 #define ALT_BOOTSTRAP_ATTEMPTS 3u
 static struct {
     void *receiver;
-    int main_ready, sent, worker, pending, failed, show_ack, key_ack, local_failed;
-    int wait_logged;
-    uint32_t token, request;
+    int main_ready, worker, pending, failed, show_ack, stopped, stop_sent;
+    uint32_t token, request, revision, attempted_revision, accepted_revision;
+    char url[512], inflight_url[512];
 } bootstrap[8];
 static volatile unsigned bootstrap_guard;
 static volatile unsigned oem_map_ready;
@@ -38,14 +39,138 @@ static void bootstrap_forget(void *receiver) {
         if (bootstrap[i].receiver == receiver) memset(&bootstrap[i], 0, sizeof(bootstrap[i]));
     bootstrap_unlock();
 }
+
+int altscreen_queue_ui(const char *url, uint32_t epoch) {
+    unsigned i;
+    size_t n, base_len;
+    int profile = alt_local_phone_profile();
+    const char *base = profile == 1 ? "maps:/car/instrumentcluster" :
+                                     "maps:/car/instrumentcluster/map";
+    int result = -1;
+    if (!url || !epoch || profile < 0 ||
+        epoch != altscreen_ui_session_generation()) return -1;
+    for (n = 0; n < sizeof(bootstrap[0].url) && url[n]; ++n) {}
+    base_len = strlen(base);
+    if (n < base_len || n >= sizeof(bootstrap[0].url) ||
+        strncmp(url, base, base_len) ||
+        (url[base_len] && url[base_len] != '?')) return -1;
+    for (i = 0; i < n; ++i)
+        if ((unsigned char)url[i] <= 32u || (unsigned char)url[i] >= 127u) return -1;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i) {
+        if (!bootstrap[i].receiver || bootstrap[i].stopped ||
+            alt_ui_session_epoch(bootstrap[i].receiver) != epoch ||
+            altscreen_ui_session_generation() != epoch) continue;
+        /* Pending identical startup/route requests coalesce. An intentional
+         * later same-URL request remains a real reapply, never a timer resend. */
+        if (bootstrap[i].revision != bootstrap[i].attempted_revision &&
+            !strcmp(bootstrap[i].url, url)) { result = 0; break; }
+        if (bootstrap[i].pending && !strcmp(bootstrap[i].inflight_url, url) &&
+            !strcmp(bootstrap[i].url, url)) {
+            result = 0; break;
+        }
+        if (bootstrap[i].revision == UINT32_MAX) break;
+        memcpy(bootstrap[i].url, url, n + 1);
+        ++bootstrap[i].revision;
+        result = 0;
+        break;
+    }
+    bootstrap_unlock();
+    return result;
+}
+
+uint32_t alt_ui_accepted_revision(void *receiver) {
+    unsigned i;
+    uint32_t revision = 0;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i)
+        if (bootstrap[i].receiver == receiver && !bootstrap[i].stopped &&
+            alt_ui_session_epoch(receiver) &&
+            alt_ui_session_epoch(receiver) == altscreen_ui_session_generation())
+            revision = bootstrap[i].accepted_revision;
+    bootstrap_unlock();
+    return revision;
+}
+
+void alt_ui_reapply(void *receiver) {
+    unsigned i;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i)
+        if (bootstrap[i].receiver == receiver && !bootstrap[i].stopped &&
+            bootstrap[i].accepted_revision && !bootstrap[i].pending &&
+            bootstrap[i].revision == bootstrap[i].attempted_revision &&
+            bootstrap[i].revision < UINT32_MAX && alt_ui_session_epoch(receiver))
+            ++bootstrap[i].revision;
+    bootstrap_unlock();
+}
+
+/* Called within upstream's teardown lease, before stock stops its event client.
+ * It never waits for a phone response. Completion is logged, not fabricated. */
+int alt_ui_stop(void *receiver) {
+    unsigned i, slot = 8;
+    uint32_t token = 0;
+    int rc;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i) {
+        if (bootstrap[i].receiver != receiver) continue;
+        bootstrap[i].stopped = 1;
+        bootstrap[i].pending = 0;
+        if (bootstrap[i].request && !bootstrap[i].stop_sent) {
+            slot = i; token = bootstrap[i].token;
+            bootstrap[i].stop_sent = 1;
+        }
+
+        break;
+    }
+    bootstrap_unlock();
+    if (slot == 8) return 0;
+    rc = alt_send_cluster_event_impl(receiver, NULL, 0,
+        ALT111_EVENT_STOP_UI, 1, 0, -1, NULL);
+    altscreen_log("PHASE=ALT111_STOP_SUBMIT receiver=%p token=%u rc=%d before_teardown=1 acknowledgement=CALLBACK_ONLY",
+                  receiver, token, rc);
+    return rc;
+}
+
+/* A replacement Type111 reuses its receiver's selected URL and UI worker. */
+void alt_ui_resume(void *receiver) {
+    unsigned i;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i)
+        if (bootstrap[i].receiver == receiver && bootstrap[i].stopped &&
+            alt_ui_session_epoch(receiver) &&
+            alt_ui_session_epoch(receiver) == altscreen_ui_session_generation() &&
+            bootstrap[i].revision < UINT32_MAX) {
+            bootstrap[i].stopped = bootstrap[i].stop_sent = 0;
+            bootstrap[i].accepted_revision = 0;
+            if (bootstrap[i].url[0]) ++bootstrap[i].revision;
+        }
+    bootstrap_unlock();
+}
+
 static int bootstrap_command_current(void *receiver, uint32_t seq) {
     unsigned i; int current = 0;
     bootstrap_lock();
     for (i = 0; i < 8; ++i)
         if (bootstrap[i].receiver == receiver && bootstrap[i].request == seq &&
-            bootstrap[i].pending && !bootstrap[i].failed) { current = 1; break; }
+            bootstrap[i].pending && !bootstrap[i].stopped &&
+            alt_ui_session_epoch(receiver) != 0 &&
+            alt_ui_session_epoch(receiver) == altscreen_ui_session_generation()) {
+            current = 1; break;
+        }
     bootstrap_unlock();
     return current;
+}
+static int bootstrap_selected_url(void *receiver, uint32_t seq, char *url, size_t cap) {
+    unsigned i; int result = 0;
+    bootstrap_lock();
+    for (i = 0; i < 8; ++i)
+        if (bootstrap[i].receiver == receiver && bootstrap[i].request == seq &&
+            bootstrap[i].pending && !bootstrap[i].stopped &&
+            strlen(bootstrap[i].inflight_url) < cap) {
+            memcpy(url, bootstrap[i].inflight_url, strlen(bootstrap[i].inflight_url) + 1); result = 1; break;
+        }
+    bootstrap_unlock();
+    return result;
 }
 static void bootstrap_event_result(void *receiver, uint32_t seq, int event,
                                     int status, int response) {
@@ -53,11 +178,12 @@ static void bootstrap_event_result(void *receiver, uint32_t seq, int event,
     bootstrap_lock();
     for (i = 0; i < 8; ++i) {
         if (bootstrap[i].receiver != receiver || bootstrap[i].request != seq ||
-            !bootstrap[i].pending) continue;
+            !bootstrap[i].pending || bootstrap[i].stopped ||
+            !alt_ui_session_epoch(receiver) ||
+            alt_ui_session_epoch(receiver) != altscreen_ui_session_generation()) continue;
         applied = 1;
-        if (status || !response) { bootstrap[i].failed = 1; if (status && !response) bootstrap[i].local_failed = 1; }
+        if (status || !response) bootstrap[i].failed = 1;
         else if (event == ALT111_EVENT_SHOW_UI) bootstrap[i].show_ack = 1;
-        else if (event == ALT111_EVENT_FORCE_KEYFRAME) bootstrap[i].key_ack = 1;
         break;
     }
     bootstrap_unlock();
@@ -70,150 +196,86 @@ static int bootstrap_job_current_locked(const struct bootstrap_job *job) {
 }
 static void *bootstrap_worker(void *opaque) {
     struct bootstrap_job *job = opaque;
-    unsigned attempt, poll, local_failures = 0;
-    uint32_t seq;
-    int rc, current, accepted = 0, failed, local_failed;
-    /* Submission runs after the outer SETUP/START lease has normally left.
-     * Command admission still fences any concurrent stop before OEM access. */
-    usleep(ALT_BOOTSTRAP_POLL_US);
-    for (attempt = 1; attempt <= ALT_BOOTSTRAP_ATTEMPTS; ++attempt) {
+    unsigned attempt = 0, poll;
+    uint32_t revision = 0, seq = 0;
+    int rc, current, accepted, failed;
+    for (;;) {
+        char view[16], layout[128];
+        int dx, dy;
+        usleep(ALT_BOOTSTRAP_POLL_US);
+        (void)alt_local_hmi(view, sizeof(view), layout, sizeof(layout), &dx, &dy);
         bootstrap_lock();
         current = bootstrap_job_current_locked(job);
-        seq = current ? bootstrap_identity_locked() : 0;
-        if (current && seq) {
-            bootstrap[job->slot].request = seq;
-            bootstrap[job->slot].pending = 1;
-            bootstrap[job->slot].failed = bootstrap[job->slot].local_failed = 0;
-            bootstrap[job->slot].show_ack = bootstrap[job->slot].key_ack = 0;
+        if (!current) { bootstrap_unlock(); break; }
+        if (bootstrap[job->slot].stopped || !alt_oem_map_startup_ready() ||
+            !alt_ui_session_epoch(job->receiver) ||
+            alt_ui_session_epoch(job->receiver) != altscreen_ui_session_generation() ||
+            !bootstrap[job->slot].revision ||
+            bootstrap[job->slot].revision == bootstrap[job->slot].attempted_revision) {
+            bootstrap_unlock(); continue;
         }
+        if (revision != bootstrap[job->slot].revision) {
+            revision = bootstrap[job->slot].revision;
+            attempt = 0;
+        }
+        seq = bootstrap_identity_locked();
+        if (!seq) { bootstrap_unlock(); break; }
+        bootstrap[job->slot].request = seq;
+        bootstrap[job->slot].pending = 1;
+        bootstrap[job->slot].failed = bootstrap[job->slot].show_ack = 0;
+        memcpy(bootstrap[job->slot].inflight_url, bootstrap[job->slot].url,
+               strlen(bootstrap[job->slot].url) + 1);
         bootstrap_unlock();
-        if (!current || !seq) break;
+        ++attempt;
         rc = alt_request_cluster_after_main_tracked(job->receiver, seq);
+        accepted = 0;
         for (poll = 0; poll < ALT_BOOTSTRAP_ACK_POLLS; ++poll) {
             bootstrap_lock();
             current = bootstrap_job_current_locked(job);
-            failed = !current || bootstrap[job->slot].failed || rc != 0;
-            accepted = current && !failed &&
-                (ALTSCREEN_JAVA_OWNS_UI || bootstrap[job->slot].show_ack) &&
-                bootstrap[job->slot].key_ack;
+            failed = !current || bootstrap[job->slot].stopped ||
+                !bootstrap[job->slot].pending || bootstrap[job->slot].request != seq ||
+                bootstrap[job->slot].failed || rc != 0 ||
+                !alt_ui_session_epoch(job->receiver) ||
+                alt_ui_session_epoch(job->receiver) != altscreen_ui_session_generation();
+            accepted = current && !failed && bootstrap[job->slot].show_ack;
             bootstrap_unlock();
             if (failed || accepted) break;
             usleep(ALT_BOOTSTRAP_POLL_US);
         }
         bootstrap_lock();
         current = bootstrap_job_current_locked(job);
-        if (current) {
-            bootstrap[job->slot].pending = 0; /* fence late completion */
-            bootstrap[job->slot].sent = accepted;
+        if (current && !bootstrap[job->slot].stopped) {
+            bootstrap[job->slot].pending = 0;
+            if (accepted) bootstrap[job->slot].accepted_revision = revision;
+            if (accepted || attempt >= ALT_BOOTSTRAP_ATTEMPTS)
+                bootstrap[job->slot].attempted_revision = revision;
         }
-        local_failed = current && (rc != 0 || bootstrap[job->slot].local_failed);
         bootstrap_unlock();
-        altscreen_log("PHASE=ALT111_BOOTSTRAP_ATTEMPT receiver=%p request=%u attempt=%u submit_rc=%d remote_accepted=%d current=%d ack_timeout=%d picture_ready=UNPROVEN",
-                      job->receiver, seq, attempt, rc, accepted, current, poll == ALT_BOOTSTRAP_ACK_POLLS);
-        if (!current || accepted) break;
-        if (local_failed) {
-            /* Local admission failures are not phone attempts. Bound the worker
-             * lifetime separately; a later lifecycle notification may retry. */
-            if (++local_failures >= 10u) break;
-            --attempt;
-        }
-        /* Bounded backoff without wall-clock/date assumptions. */
-        for (poll = 0; poll < 5u * (attempt ? attempt : 1u); ++poll) {
-            usleep(ALT_BOOTSTRAP_POLL_US);
-            bootstrap_lock(); current = bootstrap_job_current_locked(job); bootstrap_unlock();
-            if (!current) break;
-        }
+        altscreen_log("PHASE=ALT111_BOOTSTRAP_ATTEMPT receiver=%p request=%u revision=%u attempt=%u submit_rc=%d remote_accepted=%d current=%d picture_ready=UNPROVEN",
+                      job->receiver, seq, revision, attempt, rc, accepted, current);
+        if (!current) break;
+        if (!accepted)
+            for (poll = 0; poll < 5u * attempt; ++poll) usleep(ALT_BOOTSTRAP_POLL_US);
     }
     bootstrap_lock();
-    if (bootstrap_job_current_locked(job)) {
+    if (bootstrap[job->slot].receiver == job->receiver &&
+        bootstrap[job->slot].token == job->token)
         bootstrap[job->slot].worker = 0;
-        bootstrap[job->slot].pending = 0;
-    }
     bootstrap_unlock();
-    if (!accepted) altscreen_log("WARN PHASE=ALT111_BOOTSTRAP_FINISH receiver=%p token=%u accepted=0 retries_bounded=1", job->receiver, job->token);
     alt_airplay_release_object(job->receiver);
     free(job);
     return NULL;
 }
-/* bootstrap_lock held. Reserves the single worker for one slot, or records
- * why the request is still waiting (logged once per slot by the caller). */
-static struct bootstrap_job *bootstrap_reserve_locked(unsigned slot, int *wait_reason) {
-    void *event_client = NULL;
-    void *receiver = bootstrap[slot].receiver;
-    struct bootstrap_job *job;
-    *wait_reason = 0;
-    if (!receiver || !bootstrap[slot].main_ready || bootstrap[slot].sent ||
-        bootstrap[slot].worker) return NULL;
-    /* SessionStart publishes the stock event client at this measured offset. */
-    memcpy(&event_client, (const unsigned char *)receiver + 0x2c0, sizeof(event_client));
-    if (!event_client || !alt_oem_map_startup_ready()) {
-        if (!bootstrap[slot].wait_logged) {
-            bootstrap[slot].wait_logged = 1;
-            *wait_reason = event_client ? 1 : 2;
-        }
-        return NULL;
-    }
-    job = malloc(sizeof(*job));
-    if (!job) return NULL;
-    job->receiver = receiver; job->slot = slot; job->token = bootstrap[slot].token;
-    bootstrap[slot].worker = 1;
-    return job;
-}
-static void bootstrap_log_wait(void *receiver, int wait_reason) {
-    if (wait_reason)
-        altscreen_log("PHASE=ALT111_REQUEST_DEFERRED receiver=%p reason=%s capabilities=EARLY Main110=UNCHANGED",
-                      receiver, wait_reason == 1 ? "oem_map_not_initialized" : "event_channel_not_started");
-}
-/* Outside every lock. The worker owns one receiver reference. */
-static void bootstrap_spawn(struct bootstrap_job *job) {
-    pthread_t thread;
-    int rc = -1;
-    int (*detach_fn)(pthread_t) = (int (*)(pthread_t))dlsym(RTLD_DEFAULT, "pthread_detach");
-    void *receiver = job->receiver;
-    if (!detach_fn || !alt_airplay_retain_object(receiver)) goto failed;
-    rc = pthread_create(&thread, NULL, bootstrap_worker, job);
-    if (!rc) {
-        int detach_rc = detach_fn(thread);
-        if (detach_rc) altscreen_log("ERROR PHASE=ALT111_BOOTSTRAP_DETACH receiver=%p rc=%d", receiver, detach_rc);
-        return;
-    }
-    alt_airplay_release_object(receiver);
-failed:
-    bootstrap_lock();
-    if (bootstrap_job_current_locked(job)) bootstrap[job->slot].worker = 0;
-    bootstrap_unlock();
-    free(job);
-    altscreen_log("ERROR PHASE=ALT111_BOOTSTRAP_WORKER receiver=%p rc=%d retry_requires_lifecycle_notification=1", receiver, rc);
-}
-/* Bus 0x0119 from Java, via the RGI library. Latched once per process: hiding
- * the OEM map later does not close the gate again. */
+
 void altscreen_oem_map_ready(int ready) {
-    struct bootstrap_job *jobs[8];
-    void *waiting[8];
-    int reasons[8];
-    unsigned i, latched = 0;
-    if (!ready) return;
-    bootstrap_lock();
-    if (!oem_map_ready) {
-        __sync_lock_test_and_set(&oem_map_ready, 1u);
-        latched = 1;
-    }
-    for (i = 0; i < 8; ++i) {
-        waiting[i] = bootstrap[i].receiver;
-        jobs[i] = bootstrap_reserve_locked(i, &reasons[i]);
-    }
-    bootstrap_unlock();
-    if (latched)
-        altscreen_log("PHASE=OEM_MAP_READY source=Java_NavigationJobs bus=0119 boot_latched=1");
-    for (i = 0; i < 8; ++i) {
-        bootstrap_log_wait(waiting[i], reasons[i]);
-        if (jobs[i]) bootstrap_spawn(jobs[i]);
-    }
+    if (ready) __sync_lock_test_and_set(&oem_map_ready, 1u);
 }
 static void bootstrap_note(void *receiver, int main_ready) {
     unsigned i, slot = 8;
     struct bootstrap_job *job = NULL;
-    int wait_reason = 0;
+    pthread_t thread;
+    int rc = -1;
+    int (*detach_fn)(pthread_t) = (int (*)(pthread_t))dlsym(RTLD_DEFAULT, "pthread_detach");
     if (!receiver) return;
     bootstrap_lock();
     for (i = 0; i < 8; ++i) {
@@ -226,12 +288,26 @@ static void bootstrap_note(void *receiver, int main_ready) {
             if (bootstrap[slot].token) bootstrap[slot].receiver = receiver;
         }
         if (main_ready) bootstrap[slot].main_ready = 1;
-        job = bootstrap_reserve_locked(slot, &wait_reason);
+        if (bootstrap[slot].receiver && bootstrap[slot].main_ready &&
+            !bootstrap[slot].worker && !bootstrap[slot].stopped) {
+            job = malloc(sizeof(*job));
+            if (job) {
+                job->receiver = receiver; job->slot = slot; job->token = bootstrap[slot].token;
+                bootstrap[slot].worker = 1;
+            }
+        }
     }
     bootstrap_unlock();
-    if (slot == 8)
-        altscreen_log("ERROR PHASE=ALT111_REQUEST_DEFERRED receiver=%p reason=bootstrap_slots_full", receiver);
-    bootstrap_log_wait(receiver, wait_reason);
-    if (job) bootstrap_spawn(job);
+    if (!job) return;
+    if (detach_fn && alt_airplay_retain_object(receiver)) {
+        rc = pthread_create(&thread, NULL, bootstrap_worker, job);
+        if (!rc) { (void)detach_fn(thread); return; }
+        alt_airplay_release_object(receiver);
+    }
+    bootstrap_lock();
+    if (bootstrap_job_current_locked(job)) bootstrap[slot].worker = 0;
+    bootstrap_unlock();
+    free(job);
+    altscreen_log("ERROR PHASE=ALT111_BOOTSTRAP_WORKER receiver=%p rc=%d", receiver, rc);
 }
 #endif

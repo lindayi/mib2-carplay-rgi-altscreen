@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 extern int fake_live, fake_copy_calls;
 const void* AirPlayReceiverSessionScreen_CopyDisplaysInfo(void* session, int32_t* err);
@@ -56,8 +57,8 @@ static const void* copy(void) {
     return d;
 }
 
-int main(void) {
-    char path[] = "/tmp/alt_viewarea_test.XXXXXX";
+int main(int argc, char **argv) {
+    char path[] = "alt_viewarea_test.XXXXXX";
     int fd = mkstemp(path);
     if (fd < 0) return 1;
     close(fd); remove(path);
@@ -108,6 +109,16 @@ int main(void) {
         areas(d, r);
         CHECK(r[2] == 1440 && r[6] == 1440, bad[i]);
         CFRelease(d);
+    }
+    if (argc > 1) {
+        void *native = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);
+        CHECK(native != NULL, "source native bridge fixture loaded");
+        write_cfg(path, "view 0 0 1134 542\nsafe 306 0 828 542\n");
+        d = copy(); areas(d, r);
+        CHECK(r[2] == 1440 && r[6] == 1440,
+              "source native queue isolates old geometry override");
+        CFRelease(d);
+        if (native) dlclose(native);
     }
     remove(path);
     CHECK(fake_live == 0, "no CF objects leaked");

@@ -21,7 +21,7 @@ struct alt111_stream_recovery {
     uint32_t frame_generation, frame_count;
     uint32_t last_progress_at, last_submit_at, stable_at, stable_count;
     uint32_t command_seq, inflight_seq;
-    unsigned attempts;
+    unsigned attempts, local_failures;
     int initialized, waiting_frame, exhausted_logged, have_submit;
 };
 
@@ -31,7 +31,7 @@ static unsigned alt111_recovery_poll(struct alt111_stream_recovery *s,
         uint32_t now, uint32_t generation, uint32_t count, int eligible) {
     unsigned result = 0;
     uint32_t seq;
-    if (!generation || !count) return 0;
+    if (!generation) return 0;
     if (!s->initialized || s->frame_generation != generation) {
         seq = s->command_seq;
         memset(s, 0, sizeof(*s));
@@ -56,6 +56,7 @@ static unsigned alt111_recovery_poll(struct alt111_stream_recovery *s,
         if ((uint32_t)(now - s->stable_at) >= ALT111_RECOVERY_STABLE_US &&
             (uint32_t)(count - s->stable_count) >= 30u) {
             s->attempts = 0;
+            s->local_failures = 0;
             s->exhausted_logged = 0;
         }
         return result;
@@ -70,7 +71,7 @@ static unsigned alt111_recovery_poll(struct alt111_stream_recovery *s,
     if (s->have_submit &&
         (uint32_t)(now - s->last_submit_at) < ALT111_RECOVERY_RETRY_US)
         return result;
-    if (s->attempts >= ALT111_RECOVERY_MAX_ATTEMPTS) {
+    if (s->attempts >= ALT111_RECOVERY_MAX_ATTEMPTS || s->local_failures >= 3u) {
         if (!s->exhausted_logged) {
             s->exhausted_logged = 1;
             result |= ALT111_RECOVERY_EXHAUSTED;
@@ -94,6 +95,7 @@ static int alt111_recovery_submit_failed(struct alt111_stream_recovery *s, uint3
     s->inflight_seq = 0;
     s->waiting_frame = 0;
     if (s->attempts) --s->attempts;
+    ++s->local_failures;
     return 1;
 }
 

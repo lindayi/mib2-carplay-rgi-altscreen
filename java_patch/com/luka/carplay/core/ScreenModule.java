@@ -1,11 +1,12 @@
 /*
  * ScreenModule — instrument-cluster (LVDS2 / terminal 1) CONTEXT MANAGER.
  *
- * Owns the CarPlay cluster context and selects between exactly three contexts:
+ * Owns three steady cluster contexts and a transient renderer refresh:
  *
  *   dc[81] = {98 maneuver, 101/102 KDK backing, 3 AltScreen video}     — AltScreen video live
  *   dc[80] = {98 maneuver, 101/102 KDK backing, 33 stock native map}   — nav active
  *   dc[74] = stock cluster                                             — otherwise
+ *   dc[82] = {101/102 KDK backing, 3 AltScreen video}                 — renderer rebind
  *
  * The maneuver overlay (displayable 98, maneuver_render, transparent when idle)
  * composites over the head unit's OWN native map (displayable 33), or over the CarPlay
@@ -40,6 +41,7 @@ public final class ScreenModule implements Module {
     public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 101/102 backing, 33 stock map} */
     public static final int CTX_CLUSTER_VIDEO = 81;   /* AltScreen video: {98 maneuver, 101/102 backing, 3 CarPlay video} */
     public static final int CTX_STOCK_CLUSTER = 74;
+    private static final int CTX_VIDEO_REFRESH = 82;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
     private static final long CONTEXT_RECONCILE_MS = 250L;
@@ -51,10 +53,12 @@ public final class ScreenModule implements Module {
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
     private static volatile Thread contextWriterThread;
 
-    /* true while the cluster is on OUR context (set AFTER the physical switch completes). */
+    /* Set only after readback confirms our context, not when a switch is requested. */
     private static volatile boolean clusterActive = false;
     private static volatile boolean platformSupported = true;
     private boolean enabled;
+    private int contextFailures;
+    private static int contextGeneration, rendererTicketCounter, rendererRevision, rendererBoundRevision;
 
     /**
      * True from start() (BEFORE any switch) until stop() — i.e. this returns our *intent* to own the
@@ -64,7 +68,7 @@ public final class ScreenModule implements Module {
      * Intent-based pin closes that window from t0. */
     public static boolean isConnected() { return platformSupported && connected; }
 
-    /** DisplayManagerMIB2High uses this to distinguish our serialized 72/80/74
+    /** DisplayManagerMIB2High uses this to distinguish our serialized 72/74/80/81/82
      * writes from stock screen-controller requests while CarPlay owns terminal 1. */
     public static boolean isClusterContextWriterThread() {
         return Thread.currentThread() == contextWriterThread;
@@ -126,6 +130,10 @@ public final class ScreenModule implements Module {
         int startupConnection = com.luka.carplay.bus.CarplayBus.getInstance().connectionGeneration();
         com.luka.carplay.cluster.AltScreenCluster.setStartupAllowed(startupConnection,
             OemMapStartupGate.isPublished(startupConnection));
+        com.luka.carplay.cluster.AltScreenCluster.publishHmiState(connected && videoAllowed);
+        com.luka.carplay.cluster.AltScreenCluster.flushLayout();
+        com.luka.carplay.cluster.AltScreenPlacement.setPhoneProfile(
+            com.luka.carplay.cluster.AltScreenCluster.phoneProfileForSession());
         boolean ready = com.luka.carplay.cluster.AltScreenVideo.isReady();
         boolean changed;
         synchronized (LOCK) {
@@ -161,6 +169,13 @@ public final class ScreenModule implements Module {
         republish();
     }
 
+    /** Module teardown is not a route fade: the old renderer no longer owns a surface. */
+    public static void releaseGuidance() {
+        synchronized(LOCK){navHidePending=false;navActive=false;rendererRevision=rendererBoundRevision=0;}
+        republish();
+        com.luka.carplay.cluster.ClusterLayerController.reapply();
+    }
+
     /** Called after the layer controller has applied the received Fct44 visibility.
      *  A View fade-out must not release context while the route remains active. */
     public static void onVcKdkVisibility(boolean visible) {
@@ -178,6 +193,29 @@ public final class ScreenModule implements Module {
     /** The cluster-layer visibility gate read by CombiMapController.  It follows the confirmed BAP
      *  presentation and, after route end, VC's own KDK withdrawal; never a stray stock KDK bit. */
     public static boolean isNavActive() { return navActive; }
+
+    /** A new acknowledged renderer window needs a fresh binding on the sole context worker. */
+    public static int requestRendererBinding() {
+        synchronized (LOCK) {
+            if (!connected || !platformSupported) return 0;
+            ++rendererTicketCounter;
+            if (rendererTicketCounter == 0) ++rendererTicketCounter;
+            rendererRevision = rendererTicketCounter;
+            navActive = true;
+            navHidePending = false;
+            desiredCtx = contextFor(connected, altScreenVideo && videoAllowed, true);
+            LOCK.notifyAll();
+            return rendererRevision;
+        }
+    }
+
+    public static boolean isRendererBindingApplied(int revision) {
+        synchronized (LOCK) {
+            return revision != 0 && connected && navActive && clusterActive
+                && revision == rendererRevision && revision == rendererBoundRevision
+                && currentCtx == desiredCtx;
+        }
+    }
 
     /* ------------------------------------------------------------
      * Cluster map view size (Audi View button / NAV_VIEW_SIZE_CHOICE).
@@ -240,7 +278,7 @@ public final class ScreenModule implements Module {
     /** Raw DSI key 40 (left steering-wheel roller press).  SteeringWheelInputModule already gates
      *  this callback to the confirmed VC map tab; the toggle is meaningful only with active RGI. */
     public static void onSteeringWheelOkPressed() {
-        if (!isConnected() || !isNavActive()) return;
+        if (!isConnected()) return;
         InfoModeListener listener = infoModeListener;
         if (listener == null) return;
         listener.onInfoModeToggle();
@@ -277,6 +315,8 @@ public final class ScreenModule implements Module {
             /* A replaced DisplayManager invalidates the cached currentCtx — reset so the worker
              * re-applies the desired ctx to the new one.  (In practice the same object each session.) */
             if (dm != d) { dm = d; currentCtx = -1; }
+            ++contextGeneration;
+            rendererRevision = rendererBoundRevision = 0;
             connected = true;
             navActive = false;
             altScreenVideo = false;
@@ -306,6 +346,8 @@ public final class ScreenModule implements Module {
          * do NOT kill the worker or null dm — the worker being the sole always-live DM writer is what
          * makes stale-worker races impossible (no per-session worker to outlive its session). */
         synchronized (LOCK) {
+            ++contextGeneration;
+            rendererRevision = rendererBoundRevision = 0;
             connected = false;
             OemMapStartupGate.setActive(false);
             navActive = false;
@@ -329,7 +371,7 @@ public final class ScreenModule implements Module {
                 while (dm == null) {
                     try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
                 }
-                if (desiredCtx == currentCtx) {
+                if (desiredCtx == currentCtx && !(navActive && rendererRevision != rendererBoundRevision)) {
                     /* A connected session keeps a timed wait even on 74: the AltScreen markers are
                      * files, so the video edge is only seen by polling. */
                     try {
@@ -338,7 +380,8 @@ public final class ScreenModule implements Module {
                         else
                             LOCK.wait();
                     } catch (InterruptedException e) { /* persistent worker */ }
-                    if (dm == null || desiredCtx != currentCtx) continue;
+                    if (dm == null || desiredCtx != currentCtx
+                            || (navActive && rendererRevision != rendererBoundRevision)) continue;
                     if (desiredCtx < CTX_CLUSTER) continue;
                     reconcileOnly = true;
                 }
@@ -395,19 +438,34 @@ public final class ScreenModule implements Module {
      *  the newly-desired ctx — it is self-healing.  Closing it fully needs LOCK held across a DSI IPC
      *  call → deadlock risk, not worth it for a cosmetic transient on connect/disconnect. */
     private void applySwitch(int ctx, IDisplayManager d) {
+        final int generation, revision;
+        synchronized (LOCK) { generation = contextGeneration; revision = navActive ? rendererRevision : 0; }
+        if (!stillWanted(d, ctx, generation)) return;
         try {
             if (ctx != CTX_STOCK_CLUSTER) {
-                /* Coming from stock (74) or an unknown state (-1): the MOST encoder is off, so the grab
-                 * of the cluster needs a real context change via a throwaway ctx (72) + settle before
-                 * switchContext(80) will re-point the encoder. */
-                int bounce = (ctx != CTX_BOUNCE) ? CTX_BOUNCE : CTX_STOCK_CLUSTER;
-                d.switchContext(bounce, TERMINAL_CLUSTER, null);
-                try { Thread.sleep(BOUNCE_SLEEP_MS); }
-                catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                int actual = d.getCurrentContextID(TERMINAL_CLUSTER);
+                if (actual < 0) throw new IllegalStateException("Context readback unavailable");
+                if (!stillWanted(d, ctx, generation)) return;
+                boolean refreshed = false;
+                if (ctx == CTX_CLUSTER_VIDEO && actual == CTX_CLUSTER_VIDEO && revision != 0) {
+                    try {
+                        d.switchContext(CTX_VIDEO_REFRESH, TERMINAL_CLUSTER, null);
+                        refreshed = verifyContext(d, CTX_VIDEO_REFRESH, ctx, generation);
+                    } catch (Throwable failure) {
+                        Log.w(TAG, "map-preserving refresh failed: " + failure);
+                    }
+                    if (!stillWanted(d, ctx, generation)) return;
+                    if (!refreshed) Log.w(TAG, "RGI refresh fallback: 82 unavailable/unconfirmed; using 72");
+                }
+                if (!refreshed) {
+                    d.switchContext(CTX_BOUNCE, TERMINAL_CLUSTER, null);
+                    try { Thread.sleep(BOUNCE_SLEEP_MS); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
                 /* Coalesce: if the desired target or the DM changed during the settle, abandon THIS
                  * switch (cluster is on the bounce ctx) and let the loop apply the latest desired. */
                 synchronized (LOCK) {
-                    if (dm != d || desiredCtx != ctx) {
+                    if (dm != d || desiredCtx != ctx || contextGeneration != generation) {
                         currentCtx = -1;
                         Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
                         return;
@@ -415,7 +473,6 @@ public final class ScreenModule implements Module {
                 }
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
                 d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
-                clusterActive = true;
             } else {
                 /* Preserve the stop-before-switch ordering, but never leave terminal 1
                  * parked at 0 FPS. On this A5/MHI2Q the stock
@@ -430,9 +487,18 @@ public final class ScreenModule implements Module {
                 } finally {
                     d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
                 }
-                clusterActive = false;
             }
-            synchronized (LOCK) { if (dm == d) currentCtx = ctx; }
+            if (!verifyContext(d, ctx, ctx, generation)) {
+                if (!stillWanted(d, ctx, generation)) return;
+                throw new IllegalStateException("Context " + ctx + " not confirmed");
+            }
+            synchronized (LOCK) {
+                if (dm != d || desiredCtx != ctx || contextGeneration != generation) return;
+                currentCtx = ctx;
+                clusterActive = ctx != CTX_STOCK_CLUSTER;
+                if (revision != 0 && revision == rendererRevision) rendererBoundRevision = revision;
+            }
+            contextFailures = 0;
             /* Context composition is now final: replay the last KDK popup geometry so a
              * navActive edge cannot leave planes 98/101/102 at their previous opacity. */
             com.luka.carplay.cluster.ClusterLayerController.reapply();
@@ -440,10 +506,31 @@ public final class ScreenModule implements Module {
             publishCtxState(ctx);
         } catch (Throwable t) {
             Log.w(TAG, "switch(" + ctx + ") failed: " + t);
-            synchronized (LOCK) { currentCtx = -1; }
+            synchronized (LOCK) { currentCtx = -1; clusterActive = false; }
             /* Throttle the retry: the bounce write and the stock path have no settle sleep, so a
              * persistently-throwing switchContext would otherwise hot-spin (busy loop + log flood). */
-            try { Thread.sleep(BOUNCE_SLEEP_MS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            synchronized (LOCK) {
+                int delay = ++contextFailures >= 3 ? 2000 : BOUNCE_SLEEP_MS;
+                try { LOCK.wait(delay); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
         }
+    }
+
+    private boolean stillWanted(IDisplayManager d, int target, int generation) {
+        synchronized (LOCK) {
+            if (dm == d && desiredCtx == target && contextGeneration == generation) return true;
+            currentCtx = -1;
+            return false;
+        }
+    }
+
+    private boolean verifyContext(IDisplayManager d, int expected, int target, int generation)
+            throws InterruptedException {
+        for (int attempt = 0; attempt < 7; ++attempt) {
+            if (!stillWanted(d, target, generation)) return false;
+            if (d.getCurrentContextID(TERMINAL_CLUSTER) == expected) return true;
+            if (attempt < 6) Thread.sleep(50L);
+        }
+        return false;
     }
 }

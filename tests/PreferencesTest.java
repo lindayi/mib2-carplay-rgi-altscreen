@@ -35,11 +35,29 @@ public final class PreferencesTest {
         if(args.length>1)check(valid.equals(new String(Files.readAllBytes(Paths.get(args[1])),"UTF-8")),"shell/Java fixture format");
         expectInvalid(valid+"enabled=1\n");
         expectInvalid(valid.replace("mode=0","mode=3"));
-        expectInvalid(valid.replace("format=5","format=6"));
-        for(int version=1;version<=4;version++)expectInvalid(valid.replace("format=5","format="+version));
+        expectInvalid(valid.replace("format=6","format=7"));
+        for(int version=1;version<=5;version++)expectInvalid(valid.replace("format=6","format="+version));
         expectInvalid(valid.replace("speed_badge=0\n",""));
-        expectInvalid(valid.replace("speed_badge=0","speed_badge=2"));
-        String version4=valid.substring(0,valid.indexOf("speed_badge=")).replace("format=5","format=4");
+        expectInvalid(valid.replace("speed_badge=0","speed_badge=3"));
+        expectInvalid(valid.replace("arrow_policy=0\n",""));
+        expectInvalid(valid.replace("phone_eta=0\n",""));
+        String version5=valid.substring(0,valid.indexOf("arrow_policy=")).replace("format=6","format=5");
+        if(args.length>1)check(version5.equals(new String(Files.readAllBytes(
+            Paths.get(args[1]).resolveSibling("carplay-preferences-v5.txt")),"UTF-8")),"historical v5 fixture");
+        for(int badge=0;badge<=1;badge++) {
+            String old=version5.replace("speed_badge=0","speed_badge="+badge);
+            Files.write(file.toPath(),old.getBytes("UTF-8"));preferences.refresh();
+            check(preferences.error().length()==0 && preferences.snapshot().get(Setting.SPEED_BADGE)==badge,
+                "v5 badge Off/On preserved");
+            check(preferences.snapshot().get(Setting.ARROW_POLICY)==0
+                && preferences.snapshot().get(Setting.PHONE_ETA)==1,"v5 presentation defaults preserved");
+            check(Preferences.read(file,8192).equals(old),"v5 read never rewrites");
+        }
+        expectInvalid(version5.replace("speed_badge=0","speed_badge=2"));
+        expectInvalid(version5.replace("layout=0","layout=4"));
+        check(Preferences.parse(version5.replace("layout=0","layout=2"))[Setting.PHONE_ETA]==0,
+            "legacy No ETA preserved independently");
+        String version4=valid.substring(0,valid.indexOf("speed_badge=")).replace("format=6","format=4");
         if(args.length>1)check(version4.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v4.txt")),"UTF-8")),"historical v4 fixture");
         Files.write(file.toPath(),version4.getBytes("UTF-8"));preferences.refresh();
@@ -47,7 +65,7 @@ public final class PreferencesTest {
         check(Preferences.read(file,8192).equals(version4),"v4 read never rewrites");
         expectInvalid(valid.replace("trip_card=0\n",""));
         expectInvalid(valid.replace("now_playing_card=0","now_playing_card=2"));
-        String version3=valid.substring(0,valid.indexOf("now_playing_card=")).replace("format=5","format=3");
+        String version3=valid.substring(0,valid.indexOf("now_playing_card=")).replace("format=6","format=3");
         if(args.length>1)check(version3.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v3.txt")),"UTF-8")),"historical v3 fixture");
         Files.write(file.toPath(),version3.getBytes("UTF-8"));
@@ -63,7 +81,7 @@ public final class PreferencesTest {
         expectInvalid(valid.replace("road=1\n",""));
         expectInvalid(valid.replace("enabled=0","enabled=+1"));
         expectInvalid(valid+"command=reboot\n");
-        String version2=valid.substring(0,valid.indexOf("mascot=")).replace("format=5","format=2");
+        String version2=valid.substring(0,valid.indexOf("mascot=")).replace("format=6","format=2");
         if(args.length>1)check(version2.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v2.txt")),"UTF-8")),"historical v2 fixture");
         Files.write(file.toPath(),version2.getBytes("UTF-8"));
@@ -71,7 +89,7 @@ public final class PreferencesTest {
         check(preferences.error().length()==0 && preferences.snapshot().get(Setting.MASCOT)==0,"v2 mascot defaults Off");
         check(Preferences.read(file,8192).equals(version2),"v2 read never rewrites");
         expectInvalid(version2+"mascot=0\n");
-        String version1=valid.substring(0,valid.indexOf("info_default=")).replace("format=5","format=1");
+        String version1=valid.substring(0,valid.indexOf("info_default=")).replace("format=6","format=1");
         if(args.length>1)check(version1.equals(new String(Files.readAllBytes(
             Paths.get(args[1]).resolveSibling("carplay-preferences-v1.txt")),"UTF-8")),"historical v1 fixture");
         Files.write(file.toPath(),version1.getBytes("UTF-8"));
@@ -79,11 +97,11 @@ public final class PreferencesTest {
         check(preferences.error().length()==0,"complete v1 migrates");
         check(Preferences.read(file,8192).equals(version1),"reading migration never rewrites");
         for(int id=Setting.VERSION_1_COUNT;id<Setting.ALL.length;id++)
-            check(preferences.snapshot().get(id)==0,"explicit v1 default: "+Setting.ALL[id].key);
+            check(preferences.snapshot().get(id)==(id==Setting.PHONE_ETA?1:0),"explicit v1 default: "+Setting.ALL[id].key);
         expectInvalid(version1.replace("road=1\n",""));
         expectInvalid(version1+"preset=0\n");
         preferences.set(Setting.INFO_DEFAULT,1);
-        check(Preferences.read(file,8192).startsWith("format=5\n"),"next save upgrades schema");
+        check(Preferences.read(file,8192).startsWith("format=6\n"),"next save upgrades schema");
         preferences.set(Setting.DISTANCE,0);
         preferences.set(Setting.ROAD_SCROLL,1);
         preferences.set(Setting.MASCOT,lastMascot);

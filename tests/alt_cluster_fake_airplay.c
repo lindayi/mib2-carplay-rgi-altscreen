@@ -23,6 +23,15 @@ int fake_platform_init_calls;
 int fake_platform_fini_calls;
 int fake_send_calls;
 int fake_oem_ready_calls;
+int fake_ui_queue_calls;
+uint32_t fake_ui_queue_epoch;
+char fake_ui_queue_url[512];
+int altscreen_queue_ui(const char *url, uint32_t epoch) {
+    ++fake_ui_queue_calls;
+    fake_ui_queue_epoch = epoch;
+    snprintf(fake_ui_queue_url, sizeof(fake_ui_queue_url), "%s", url);
+    return 0;
+}
 uint32_t fake_ui_session_generation;
 uint32_t altscreen_ui_session_generation(void) { return fake_ui_session_generation; }
 void altscreen_oem_map_ready(int ready) {

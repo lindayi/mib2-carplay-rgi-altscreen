@@ -5,10 +5,11 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.util.Map;
 
-/** Real layout selection script plus the Java reader; no vehicle access. */
+/** Read old layouts without rewriting them; obsolete script callers fail explicitly. */
 public final class AltScreenLayoutTest {
     private static final String BASE = "maps:/car/instrumentcluster/map";
-    private static final String TOP = BASE + "?maneuverLayout=topaligned";
+    private static final String CARD="maps:/car/instrumentcluster";
+    private static final String TOP=CARD+"?showSpeedLimit=no&showCompass=user&showETA=no&maneuverLayout=topaligned";
 
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
@@ -33,8 +34,15 @@ public final class AltScreenLayoutTest {
             check(TOP.equals(AltScreenCluster.readUiUrl()), "absent preference defaults to top");
             check(!preference.exists(), "default lookup must not create or overwrite a preference");
             String[] modes = {"right", "noeta", "default", "top"};
-            String[] urls = {BASE + "?maneuverLayout=rightaligned", BASE + "?showETA=no", BASE, TOP};
+            String[] legacyUrls = {BASE+"?maneuverLayout=rightaligned",BASE+"?showETA=no",
+                BASE,BASE+"?maneuverLayout=topaligned"};
+            String[] urls = {
+                CARD+"?showSpeedLimit=no&showCompass=user&maneuverLayout=rightaligned",
+                BASE+"?showSpeedLimit=no&showCompass=user&showETA=no&maneuverLayout=",
+                BASE+"?showSpeedLimit=no",
+                CARD+"?showSpeedLimit=no&showCompass=user&maneuverLayout=topaligned"};
             for (int i = 0; i < modes.length; i++) {
+                write(preference, legacyUrls[i] + "\n");
                 ProcessBuilder builder = new ProcessBuilder("/bin/sh", args[0], modes[i]);
                 Map<String,String> env = builder.environment();
                 env.put("ALTSCREEN_CHAIN_TESTING", "1");
@@ -47,8 +55,10 @@ public final class AltScreenLayoutTest {
                     byte[] buffer = new byte[1024];
                     for (int n; (n = in.read(buffer)) >= 0;) output.write(buffer, 0, n);
                 } finally { in.close(); }
-                check(process.waitFor() == 0, modes[i] + ": " + output.toString("UTF-8"));
-                check(preference.isFile(), modes[i] + " must save an explicit preference");
+                check(process.waitFor() != 0 && output.toString("UTF-8").indexOf("FAIL: legacy GEM") >= 0,
+                    modes[i] + ": obsolete writer did not fail explicitly");
+                check(new String(Files.readAllBytes(preference.toPath()),"UTF-8").equals(legacyUrls[i]+"\n"),
+                    modes[i] + " changed the legacy preference");
                 check(urls[i].equals(AltScreenCluster.readUiUrl()), modes[i] + " reader mismatch");
                 check(urls[i].equals(AltScreenCluster.readUiUrl()), modes[i] + " must survive repeated reads");
             }

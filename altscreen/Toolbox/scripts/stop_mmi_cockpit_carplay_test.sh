@@ -15,10 +15,15 @@ DEVICE_ROOT=""
 if [ "$TESTING" = 1 ]; then
     DEVICE_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
 fi
+case "${1:-}" in
+    --apply) [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ] || exit 1 ;;
+    "") exec /bin/sh "$SCRIPTDIR/altscreen_transaction.sh" restore ;;
+    *) exit 2 ;;
+esac
 
 APP_BIN="$DEVICE_ROOT/mnt/app/root/carplay-altscreen/bin"
 APP_SELF="$APP_BIN/stop_mmi_cockpit_carplay_test.sh"
-if [ "$SCRIPTDIR" != "$APP_BIN" ] && [ -f "$APP_SELF" ] && [ -f "$APP_BIN/altscreen_chain_test.sh" ]; then
+if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ] && [ "$SCRIPTDIR" != "$APP_BIN" ] && [ -f "$APP_SELF" ] && [ -f "$APP_BIN/altscreen_chain_test.sh" ]; then
     echo "APP_RUNTIME_FORWARD action=RESTORE from=$SCRIPTDIR to=/mnt/app/root/carplay-altscreen/bin"
     if [ "$#" -gt 0 ]; then
         exec /bin/sh "$APP_SELF" "$@"
@@ -50,15 +55,15 @@ touch "$RUNTIME/state/transaction.pending" || {
     mount_app_ro >/dev/null 2>&1 || true
     echo "FAIL: cannot mark restore pending"; exit 1;
 }
-sync >/dev/null 2>&1 || true
+sync || { mount_app_ro; echo "FAIL: restore journal sync"; exit 1; }
 mount_app_ro || { echo "FAIL: cannot remount /mnt/app after restore journal"; exit 1; }
 
 strip_blocks(){
     awk '
-      $0 == "# BEGIN ALT111 MIRROR AUTOSTART" { in_old=1; next }
-      $0 == "# END ALT111 MIRROR AUTOSTART"   { in_old=0; next }
-      $0 == "# BEGIN ALT111 BASEVIDEO3 AUTOSTART" { in_new=1; next }
-      $0 == "# END ALT111 BASEVIDEO3 AUTOSTART"   { in_new=0; next }
+      $0 == "# BEGIN ALT111 MIRROR AUTOSTART" { if(in_old||in_new||old_seen++)exit 9; in_old=1; next }
+      $0 == "# END ALT111 MIRROR AUTOSTART"   { if(!in_old)exit 9; in_old=0; next }
+      $0 == "# BEGIN ALT111 BASEVIDEO3 AUTOSTART" { if(in_old||in_new||new_seen++)exit 9; in_new=1; next }
+      $0 == "# END ALT111 BASEVIDEO3 AUTOSTART"   { if(!in_new)exit 9; in_new=0; next }
       !in_old && !in_new { print }
       END { if (in_old || in_new) exit 9 }
     ' "$1"
@@ -74,7 +79,7 @@ sleep 1
 if [ -f "$ENABLED" ]; then
     mount_app_rw || { echo "FAIL: cannot mount /mnt/app to disable BaseVideo3"; exit 1; }
     rm -f "$ENABLED" || { mount_app_ro >/dev/null 2>&1 || true; echo "FAIL: cannot remove BaseVideo3 enable marker"; exit 1; }
-    sync >/dev/null 2>&1 || true
+    sync || { mount_app_ro; echo "FAIL: demand withdrawal sync"; exit 1; }
     mount_app_ro || { echo "FAIL: cannot remount /mnt/app read-only"; exit 1; }
 fi
 
@@ -83,7 +88,7 @@ for candidate in "$DEVICE_ROOT/mnt/system/etc/boot/startup.sh" "$DEVICE_ROOT/etc
     if [ -f "$candidate" ]; then STARTUP=$candidate; break; fi
 done
 if [ -n "$STARTUP" ]; then
-    CLEAN="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.startup.restore.$$"
+    CLEAN="$DEVICE_ROOT/ramdisk/MMI-Cockpit-Carplay.startup.restore.$$"
     mount_system_rw || { echo "FAIL: cannot mount /mnt/system writable"; exit 1; }
     strip_blocks "$STARTUP" > "$CLEAN" || {
         rm -f "$CLEAN"; mount_system_ro >/dev/null 2>&1 || true
@@ -120,7 +125,7 @@ if [ -n "$STARTUP" ]; then
             echo "FAIL: cannot remove stale BaseVideo3 startup transaction: $stale"; exit 1;
         }
     done
-    sync >/dev/null 2>&1 || true
+    sync || { mount_system_ro; echo "FAIL: startup restore sync"; exit 1; }
     mount_system_ro || { echo "FAIL: cannot remount /mnt/system read-only"; exit 1; }
 fi
 
@@ -130,7 +135,7 @@ rm -f "$JAR" "$JAR.basevideo3.tmp" "$JAR.basevideo3.restore.tmp" || {
     echo "FAIL: cannot remove standalone carplay_hook.jar"; exit 1; }
 [ ! -e "$JAR" ] || { mount_app_ro >/dev/null 2>&1 || true; echo "FAIL: carplay_hook.jar remains after removal"; exit 1; }
 echo "HMI_CONTROL_PLANE=REMOVED"
-sync >/dev/null 2>&1 || true
+sync || { mount_app_ro; echo "FAIL: JAR removal sync"; exit 1; }
 mount_app_ro || { echo "FAIL: cannot remount /mnt/app read-only"; exit 1; }
 
 rm -f "$STARTED" 2>/dev/null || true
@@ -141,5 +146,5 @@ RC=$?
 
 echo "BASEVIDEO3_BOOT_DEMAND=DISABLED"
 echo "DIRECT_DISPLAY_SIDECAR=STOPPED native_dmdt=DISABLED"
-echo "RESTORE=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80 reboot_required=YES"
+echo "RESTORE_APPLY=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80 reboot_required=YES"
 exit 0

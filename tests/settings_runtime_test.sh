@@ -9,10 +9,22 @@ cp "$PROJECT/tests/fixtures/carplay-preferences.txt" "$T/preferences"
 export CP_SETTINGS_FILE="$T/preferences"
 source "$T/hooks/carplay_settings.sh"
 test "$(cp_setting enabled 1)" = 0
-for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot now_playing_card trip_card speed_badge; do
+for key in mode layout distance road lanes progress text_size road_scroll background zoom zoom_speed touchpad touch_sensitivity recovery verbose info_default info_road info_return preset mascot now_playing_card trip_card speed_badge arrow_policy phone_eta; do
     cp_setting "$key" 0 >/dev/null
 done
 cp "$T/preferences" "$T/good"
+cp "$PROJECT/tests/fixtures/carplay-preferences-v5.txt" "$T/preferences"
+test "$(cp_setting phone_eta 0)" = 1
+test "$(cp_setting arrow_policy 1)" = 0
+cmp "$T/preferences" "$PROJECT/tests/fixtures/carplay-preferences-v5.txt"
+sed 's/speed_badge=0/speed_badge=2/' "$PROJECT/tests/fixtures/carplay-preferences-v5.txt" > "$T/preferences"
+if cp_setting speed_badge 0; then echo "FAIL: phone sign accepted in v5"; exit 1; fi
+sed 's/layout=0/layout=2/' "$PROJECT/tests/fixtures/carplay-preferences-v5.txt" > "$T/preferences"
+test "$(cp_setting phone_eta 2)" = 0
+sed 's/speed_badge=0/speed_badge=2/' "$T/good" > "$T/preferences"
+test "$(cp_setting speed_badge 0)" = 2
+sed '/phone_eta=/d' "$T/good" > "$T/preferences"
+if cp_setting enabled 1; then echo "FAIL: incomplete v6 accepted"; exit 1; fi
 cp "$PROJECT/tests/fixtures/carplay-preferences-v4.txt" "$T/preferences"
 test "$(cp_setting speed_badge 1)" = 0
 cmp "$T/preferences" "$PROJECT/tests/fixtures/carplay-preferences-v4.txt"
@@ -65,9 +77,24 @@ cp "$T/good" "$T/preferences"
 echo 'enabled=1' >> "$T/preferences"
 if cp_setting enabled 1; then echo "FAIL: duplicate setting accepted"; exit 1; fi
 cp "$T/good" "$T/preferences"
+for layout in 0 1 2 3 4; do
+    sed "s/layout=0/layout=$layout/" "$T/good" > "$T/preferences"
+    test "$(cp_phone_layout)" = "$layout"
+done
+rm "$T/preferences"
+export CP_LAYOUT_FILE="$T/legacy-url"
+test "$(cp_phone_layout)" = 0
+for entry in '3|' '0|?maneuverLayout=topaligned' '1|?maneuverLayout=rightaligned' '2|?showETA=no'; do
+    printf 'maps:/car/instrumentcluster/map%s\n' "${entry#*|}" > "$CP_LAYOUT_FILE"
+    test "$(cp_phone_layout)" = "${entry%%|*}"
+done
+echo 'maps:/car/instrumentcluster/map?unsupported=yes' > "$CP_LAYOUT_FILE"
+if cp_phone_layout; then echo "FAIL: unsupported legacy profile"; exit 1; fi
+cp "$T/good" "$T/preferences"
 cat > "$T/app/dio_manager" <<'DIO'
 #!/bin/sh
 printf '%s|%s|%s\n' "$$" "${LD_PRELOAD:-}" "$*" > "$TEST_DIO"
+printf '%s\n' "${ALTSCREEN_PHONE_PROFILE:-absent}" > "$TEST_DIO.profile"
 DIO
 cat > "$T/hooks/carplay_monitor.sh" <<'MONITOR'
 #!/bin/sh
@@ -80,12 +107,14 @@ export H="$T/hooks" DIODIR="$T/app" WLOG="$T/wrapper.log" OWNER_FILE="$T/owner"
 export MENU_SESSION_FILE="$T/session" MENU_VERBOSE_FILE="$T/verbose"
 export CARPLAY_PRELOAD_EXTRA=/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so
 bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" alpha beta
+grep -qx absent "$TEST_DIO.profile"
 test ! -f "$TEST_MONITOR"
 grep -q '||alpha beta$' "$TEST_DIO"
 grep -q '^enabled=0$' "$MENU_SESSION_FILE"
 grep -q '^video=0$' "$MENU_SESSION_FILE"
 sed 's/enabled=0/enabled=1/;s/mode=0/mode=2/' "$T/good" > "$T/preferences"
 bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" gamma
+grep -qx absent "$TEST_DIO.profile"
 for i in $(seq 1 100); do [ ! -f "$TEST_MONITOR" ] || break; sleep .01; done
 grep -q '^enabled=1$' "$MENU_SESSION_FILE"
 grep -q '^video=0$' "$MENU_SESSION_FILE"
@@ -94,11 +123,19 @@ if grep -q 'libcarplay_altscreen.so' "$TEST_DIO"; then echo "FAIL: Audi-map prof
 rm -f "$TEST_MONITOR"
 sed 's/enabled=0/enabled=1/;s/verbose=0/verbose=1/' "$T/good" > "$T/preferences"
 bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" delta
+grep -qx card "$TEST_DIO.profile"
 grep -q '^video=1$' "$MENU_SESSION_FILE"
 grep -q ':.*libcarplay_altscreen.so' "$TEST_DIO"
 test -f "$MENU_VERBOSE_FILE"
 for i in $(seq 1 100); do [ ! -f "$TEST_MONITOR" ] || break; sleep .01; done
 test -f "$TEST_MONITOR"
+sed 's/enabled=0/enabled=1/;s/layout=0/layout=2/' "$T/good" > "$T/preferences"
+bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" map-profile
+grep -qx map "$TEST_DIO.profile"
+rm "$T/preferences"
+bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" bad-legacy
+grep -qx absent "$TEST_DIO.profile"
+grep -q '^config_error=1$' "$MENU_SESSION_FILE"
 echo 'invalid' > "$T/preferences"
 rm -f "$TEST_MONITOR"
 bash "$PROJECT/deploy/smartphone_integrator/carplay_startup.sh" epsilon

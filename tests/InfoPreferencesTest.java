@@ -58,8 +58,8 @@ public final class InfoPreferencesTest {
             int renderer=f.renderer.writes;
             prefs.set(Setting.INFO_ROAD,1);
             long end=System.nanoTime()+2000000000L;
-            while(!"Current Street".equals(f.out.text) && System.nanoTime()<end)Thread.sleep(5);
-            check("Current Street".equals(f.out.text),"live current-road preference not published");
+            while(!f.out.text.startsWith("Current Street | ") && System.nanoTime()<end)Thread.sleep(5);
+            check(f.out.text.startsWith("Current Street | "),"live current-road preference and ETA not published: "+f.out.text);
             check(f.renderer.writes==renderer,"information text redrew maneuver");
             RgiDeliveryRecoveryTest.method(RouteGuidance.class,"requestViewAreaRefresh",int.class).invoke(f.rg,1);
             waitFor(f,0);

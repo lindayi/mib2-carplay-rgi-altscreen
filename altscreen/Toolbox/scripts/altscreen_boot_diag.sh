@@ -160,6 +160,9 @@ run_flat_plaintext() {
             else
                 flat_probe pf_rules.txt pfctl -sr
             fi
+            if [ "$flat_tick" -le 45 ]; then
+                flat_probe firewall_sources.txt /bin/sh "$ROOT/mnt/app/root/carplay-altscreen/bin/altscreen_firewall_diag.sh"
+            fi
             flat_state="${FLAT_PREFIX}_state.out"
             {
                 date
@@ -167,7 +170,7 @@ run_flat_plaintext() {
                 ls -la "$ROOT/mnt/app/root/carplay-altscreen/bin/mirror"
                 ls -la "$ROOT/mnt/app/root/carplay-altscreen/state"
                 ls -la "$VOLUME/MMI-Cockpit-Carplay/state"
-                echo "--- mmi-mirror-hmi.state"; cat "$ROOT/tmp/mmi-mirror-hmi.state"
+                echo "--- mmi-mirror-hmi.state"; cat "$ROOT/ramdisk/mmi-mirror-hmi.state"
                 echo "--- cluster_geom.cfg"; cat "$ROOT/tmp/cluster_geom.cfg"
                 echo "--- carplay_cluster.ctx"; cat "$ROOT/tmp/carplay_cluster.ctx"
                 echo "--- cluster_ui.url / cluster_shift.cfg / cluster_viewarea.cfg"; cat "$ROOT/mnt/app/root/hooks/cluster_ui.url" "$ROOT/mnt/app/root/hooks/cluster_shift.cfg" "$ROOT/mnt/app/root/hooks/cluster_viewarea.cfg"

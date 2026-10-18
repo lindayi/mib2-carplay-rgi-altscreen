@@ -97,6 +97,15 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     private final MapScaleHandler mapScaleHandler;
     private final MapScaleTimer mapScaleTimer;
     private boolean satMapProviderChanged = true;
+    /* NavigationJobs owns these fields. Project model writes never enter the
+     * stock BAP listener: its later updateAll() must still contain Audi data. */
+    private Object carplayRoadOwner, carplayDistanceOwner, carplayArrivalOwner;
+    private String nativeCurrentStreet = "";
+    private int nativeDestinationDistance = -1;
+    private boolean nativeDestinationStopover;
+    private long nativeArrivalTime, nativeRemainingTime;
+    private boolean nativeArrivalValid, nativeArrivalOffset, nativeRemainingValid;
+    private boolean nativeTimeIsRemaining;
 
     public ClusterService(
         NavigationEnv navigationenv,
@@ -261,6 +270,15 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void updateCurrentStreet(String s) {
+        nativeCurrentStreet = s;
+        if (carplayRoadOwner != null) {
+            this.combiBAPListener.setCurrentStreet(Util.isEmpty(s) ? "" : s);
+            return;
+        }
+        writeCurrentStreet(s, true);
+    }
+
+    private void writeCurrentStreet(String s, boolean publishBap) {
         this.logChannel.log(100000000, "ClusterService#updateCurrentStreet( %1 )", s);
         String s1 = s;
         String s2 = s;
@@ -274,7 +292,50 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
         this.env.getLabelModel(62).setText(s3);
         this.komoService.setCurrentStreet(s1);
-        this.combiBAPListener.setCurrentStreet(s2);
+        if (publishBap) this.combiBAPListener.setCurrentStreet(s2);
+    }
+
+    public void updateCarplayCurrentStreet(Object owner, String value) {
+        if (owner == null) throw new IllegalArgumentException("Missing lower-bar owner");
+        boolean release = Util.isEmpty(value);
+        if (release && carplayRoadOwner != owner) return;
+        if (!release) carplayRoadOwner = owner;
+        writeCurrentStreet(release ? nativeCurrentStreet : value, false);
+        if (release) carplayRoadOwner = null;
+    }
+
+    public void updateCarplayDestinationDistance(Object owner, int value) {
+        if (owner == null) throw new IllegalArgumentException("Missing lower-bar owner");
+        boolean release = value < 0;
+        if (release && carplayDistanceOwner != owner) return;
+        if (!release) carplayDistanceOwner = owner;
+        writeDistanceToDestination(release ? nativeDestinationDistance : value,
+            release && nativeDestinationStopover, false);
+        updateKOMOFollowInfo();
+        if (release) carplayDistanceOwner = null;
+    }
+
+    public void updateCarplayArrival(Object owner, long wallMillis, boolean zoneOffset) {
+        if (owner == null) throw new IllegalArgumentException("Missing lower-bar owner");
+        boolean release = wallMillis < 0L;
+        if (release && carplayArrivalOwner != owner) return;
+        if (!release) carplayArrivalOwner = owner;
+        if (release) {
+            writeArrivalTime(nativeArrivalValid, nativeArrivalTime, nativeArrivalOffset, false);
+            if (nativeTimeIsRemaining)
+                writeRemainingTravelTime(nativeRemainingValid, nativeRemainingTime, false);
+        } else {
+            writeArrivalTime(true, wallMillis, zoneOffset, false);
+        }
+        updateKOMOFollowInfo();
+        if (release) carplayArrivalOwner = null;
+    }
+
+    /** A replaced service must not clear the replacement's shared native output. */
+    public void abandonCarplayLowerBar(Object owner) {
+        if (carplayRoadOwner == owner) carplayRoadOwner = null;
+        if (carplayDistanceOwner == owner) carplayDistanceOwner = null;
+        if (carplayArrivalOwner == owner) carplayArrivalOwner = null;
     }
 
     public void updateTurnToStreet(String s, boolean flag) {
@@ -454,6 +515,18 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     protected void updateArrivalTime(boolean flag, long i, boolean flag1) {
+        nativeArrivalValid = flag;
+        nativeArrivalTime = i;
+        nativeArrivalOffset = flag1;
+        nativeTimeIsRemaining = false;
+        if (carplayArrivalOwner != null) {
+            this.combiBAPListener.setRgTimeToNextDestination(i, true, flag);
+            return;
+        }
+        writeArrivalTime(flag, i, flag1, true);
+    }
+
+    private void writeArrivalTime(boolean flag, long i, boolean flag1, boolean publishBap) {
         this.logChannel.log(100000000, "ClusterService#updateArrivalTime( %1, %2 )", flag, i);
         MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
         String s;
@@ -472,10 +545,21 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         KOMOTime komotime = KOMOService.convertTimeToKOMO(i);
         this.followInfoRIE.estimatedTimeToElement = s;
         this.komoService.setETA(j, komotime.day, komotime.hour, komotime.min, flag, flag1);
-        this.combiBAPListener.setRgTimeToNextDestination(i, true, flag);
+        if (publishBap) this.combiBAPListener.setRgTimeToNextDestination(i, true, flag);
     }
 
     protected void updateRemainingTravelTime(boolean flag, long i) {
+        nativeRemainingValid = flag;
+        nativeRemainingTime = i;
+        nativeTimeIsRemaining = true;
+        if (carplayArrivalOwner != null) {
+            this.combiBAPListener.setRgTimeToNextDestination(i, false, flag);
+            return;
+        }
+        writeRemainingTravelTime(flag, i, true);
+    }
+
+    private void writeRemainingTravelTime(boolean flag, long i, boolean publishBap) {
         this.logChannel.log(100000000, "ClusterService#RemainingTravelTime( %1, %2 )", flag, i);
         MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
         if (flag) {
@@ -489,10 +573,20 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
         KOMOTime komotime = KOMOService.convertDurationToKOMO(i);
         this.komoService.setRTT(komotime.hour, komotime.min, flag);
-        this.combiBAPListener.setRgTimeToNextDestination(i, false, flag);
+        if (publishBap) this.combiBAPListener.setRgTimeToNextDestination(i, false, flag);
     }
 
     protected void updateDistanceToDestination(int i, boolean flag) {
+        nativeDestinationDistance = i;
+        nativeDestinationStopover = flag;
+        if (carplayDistanceOwner != null) {
+            this.combiBAPListener.setRgDistanceToNextDestination(i, flag);
+            return;
+        }
+        writeDistanceToDestination(i, flag, true);
+    }
+
+    private void writeDistanceToDestination(int i, boolean flag, boolean publishBap) {
         this.logChannel.log(100000000, "ClusterService#updateDistanceToDestination( %1 )", i);
         long j = -1L;
         int k = -1;
@@ -519,7 +613,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
         this.followInfoRIE.distanceToElement = s;
         this.komoService.setDistanceToDestination(j, k, flag1);
-        this.combiBAPListener.setRgDistanceToNextDestination(i, flag);
+        if (publishBap) this.combiBAPListener.setRgDistanceToNextDestination(i, flag);
     }
 
     public void updateSoPosPosition(PosPosition posposition) {

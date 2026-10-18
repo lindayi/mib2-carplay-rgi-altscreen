@@ -34,7 +34,8 @@ public final class RgiDeliveryRecoveryTest {
     }
     static class Renderer extends RendererServer {
         volatile int failManeuvers,attempts,writes;
-        int failProgress,angle,disconnects,progressWrites,lastLevel,lastMode,lastProgress;
+        int failProgress,angle,disconnects,progressWrites,lastLevel,lastMode,lastProgress,icon;
+        String lastDistance,lastRoad;
         boolean lanes,ready=true;
         public boolean isReady(){return ready;}
         public boolean isFrameReady(){return ready;}
@@ -42,7 +43,7 @@ public final class RgiDeliveryRecoveryTest {
         public boolean everConnected(){return true;}
         public void disconnectClient(){disconnects++;}
         public boolean sendVisibleArea(int x,int y,int w,int h){return true;}
-        public boolean sendRouteLabels(String distance,String road){return true;}
+        public boolean sendRouteLabels(String distance,String road){lastDistance=distance;lastRoad=road;return true;}
         public boolean sendDisplayOptions(){return true;}
         boolean sendLaneGuidance(LaneGuidanceSnapshot s){lanes=s.showing && s.count>0;return true;}
         public boolean sendProgress(int level,int mode,int state){
@@ -51,7 +52,7 @@ public final class RgiDeliveryRecoveryTest {
         }
         public boolean sendBapProgressManeuver(int icon,int dir,int exit,int side,int[] roads,
                 int level,int mode,int perspective,boolean refresh,boolean snap,int progress) {
-            attempts++;if(failManeuvers-->0)return false;writes++;angle=exit;
+            attempts++;if(failManeuvers-->0)return false;writes++;angle=exit;this.icon=icon;
             lastLevel=level;lastMode=mode;lastProgress=progress;return true;
         }
     }
@@ -92,6 +93,51 @@ public final class RgiDeliveryRecoveryTest {
         check(f.replay() && f.confirmed(),"failed cached retry lost presentation");
         check(!f.replay() && !f.hud.lanes && !f.renderer.lanes && f.state.dirtyMask==0,"shared hide did not converge");
         check(f.renderer.writes==writes,"retry replayed an already accepted transition");
+    }
+    static void approachPolicyAndCountless()throws Exception {
+        java.nio.file.Path root=java.nio.file.Files.createTempDirectory("approach-policy-");
+        Class<com.luka.carplay.settings.Preferences> type=com.luka.carplay.settings.Preferences.class;
+        Constructor<com.luka.carplay.settings.Preferences> ctor=type.getDeclaredConstructor(java.io.File.class,java.io.File.class);
+        ctor.setAccessible(true);
+        com.luka.carplay.settings.Preferences prefs=ctor.newInstance(root.resolve("preferences").toFile(),root.resolve("legacy").toFile());
+        Field singleton=type.getDeclaredField("instance");singleton.setAccessible(true);
+        Object old=singleton.get(null);singleton.set(null,prefs);
+        Fixture f=null;
+        com.luka.carplay.settings.Preferences.Listener listener=null;
+        try {
+            f=new Fixture();
+            listener=(com.luka.carplay.settings.Preferences.Listener)get(f.rg,"infoPreferencesListener");
+            prefs.addListener(listener);
+            f.feed("maneuver_count:n:0\nmaneuver_list:s:0\nm0_junction_type:n:-1\nm0_after_road:s:Next Road\ndist_maneuver_m:n:150\n");
+            check(f.hud.direction==ManeuverMapper.DIR_LEFT && f.renderer.icon==RendererMapper.ICON_TURN,
+                "count-zero typed turn lost HUD/renderer output");
+            check("Next Road".equals(f.renderer.lastRoad) && f.renderer.lastDistance!=null
+                && f.renderer.lastDistance.length()>0 && f.renderer.lastMode==1 && f.renderer.lastLevel>0,
+                "count-zero maneuver lost footer/progress: distance="+f.renderer.lastDistance
+                    +" road="+f.renderer.lastRoad+" mode="+f.renderer.lastMode+" level="+f.renderer.lastLevel);
+            f.feed("dist_maneuver_m:n:500\n");
+            check(f.renderer.icon==RendererMapper.ICON_TURN,"always-real default lost far turn");
+            set(f.rg,"presentationDrivePending",false);
+            prefs.set(com.luka.carplay.settings.Setting.ARROW_POLICY,1);
+            check(f.pending(),"live arrow policy did not wake cached presentation");
+            check(!f.replay() && f.renderer.icon==RendererMapper.ICON_APPROACH
+                && f.hud.direction==ManeuverMapper.DIR_STRAIGHT,"live upstream policy diverged across HUD/renderer");
+            f.feed("dist_maneuver_m:n:350\n");
+            check(f.renderer.icon==RendererMapper.ICON_TURN && f.hud.direction==ManeuverMapper.DIR_LEFT,"350m boundary");
+            f.feed("m0_distance:n:2000\ndist_maneuver_m:n:351\n");
+            check(f.renderer.icon==RendererMapper.ICON_APPROACH,"2000m step remains city policy");
+            f.feed("m0_distance:n:2001\ndist_maneuver_m:n:1000\n");
+            check(f.renderer.icon==RendererMapper.ICON_TURN,"long-step 1000m boundary");
+            f.feed("dist_maneuver_m:n:1001\n");
+            check(f.renderer.icon==RendererMapper.ICON_APPROACH,"long-step far approach");
+            f.feed("m0_type:n:10\ndist_maneuver_m:n:0\n");
+            check(f.renderer.icon!=RendererMapper.ICON_APPROACH,"arrival must remain a real maneuver");
+        } finally {
+            if(listener!=null)prefs.removeListener(listener);
+            if(f!=null)f.bridge.onShutdown();
+            singleton.set(null,old);
+            java.nio.file.Files.deleteIfExists(root.resolve("preferences"));java.nio.file.Files.delete(root);
+        }
     }
     static void failedManeuverAndSupersession()throws Exception {
         Fixture f=new Fixture();f.renderer.failManeuvers=1;int progressWrites=f.renderer.progressWrites;
@@ -177,6 +223,7 @@ public final class RgiDeliveryRecoveryTest {
     }
     public static void main(String[] args)throws Exception {
         Log.setLevel(-1);failedHudHide();failedManeuverAndSupersession();blinkPhase();workerRetry();generationTransition();sourceTimeAge();
+        approachPolicyAndCountless();
         System.out.println("RgiDeliveryRecoveryTest: shared HUD/renderer retry, latest state, no duplicate travel/flicker, backpressure, generation and source-time age PASS");
     }
 }

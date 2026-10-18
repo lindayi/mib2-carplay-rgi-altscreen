@@ -9,10 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 extern int fake_live_objects, fake_platform_init_calls, fake_platform_fini_calls, fake_send_calls;
 extern int fake_oem_ready_calls;
 extern uint32_t fake_ui_session_generation;
+extern int fake_ui_queue_calls;
+extern uint32_t fake_ui_queue_epoch;
+extern char fake_ui_queue_url[512];
 extern void* fake_last_session;
 extern char fake_last_request[1024];
 
@@ -26,11 +30,15 @@ hook_result_t bus_on(uint16_t type, bus_handler_t h, void* ctx) { (void)ctx; han
 void bus_off(uint16_t type) { handlers[type] = NULL; }
 static int session_events;
 static uint32_t last_session_epoch;
+static uint32_t last_receiver_pid;
 hook_result_t bus_send(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len) {
-    if (type != EVT_ALT_SESSION || flags != (BUS_FLAG_BINARY | BUS_FLAG_STICKY) || len != 4)
+    if (type != EVT_ALT_SESSION || flags != (BUS_FLAG_BINARY | BUS_FLAG_STICKY) || len != 8)
         abort();
     last_session_epoch = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16)
         | ((uint32_t)payload[2] << 8) | payload[3];
+    last_receiver_pid = ((uint32_t)payload[4] << 24) | ((uint32_t)payload[5] << 16)
+        | ((uint32_t)payload[6] << 8) | payload[7];
+    if (last_receiver_pid != (uint32_t)getpid()) abort();
     session_events++;
     return HOOK_OK;
 }
@@ -98,16 +106,20 @@ int main(void) {
     deliver(CMD_ALT_ZOOM, "", 0);
     CHECK(fake_send_calls == 7, "empty payload ignored");
 
-    /* showUI with a URL. */
+    /* The bus passes the unchanged URL into the source-native queue. It must
+     * never issue a second direct AirPlay showUI. */
     const char* url = "maps:/car/instrumentcluster/map?maneuverLayout=topaligned";
     deliver(CMD_ALT_UICTX, url, (uint32_t)strlen(url));
-    snprintf(expect, sizeof(expect), "{type=showUI,params={uuid=%s,url=%s}}", uuid, url);
-    CHECK(fake_send_calls == 8, "showUI sent");
-    CHECK(strcmp(fake_last_request, expect) == 0, "showUI request");
+    CHECK(fake_send_calls == 7 && fake_ui_queue_calls == 1, "native UI queue is the only UI sender");
+    CHECK(strcmp(fake_ui_queue_url, url) == 0 && fake_ui_queue_epoch == fake_ui_session_generation,
+          "raw URL and current native epoch forwarded");
     char big[600];
     memset(big, 'a', sizeof(big));
     deliver(CMD_ALT_UICTX, big, sizeof(big));
-    CHECK(fake_send_calls == 8, "oversized URL rejected");
+    CHECK(fake_send_calls == 7 && fake_ui_queue_calls == 1, "oversized URL rejected");
+    const char embedded[] = "maps:/car/instrumentcluster\0?hidden=1";
+    deliver(CMD_ALT_UICTX, embedded, sizeof(embedded)-1);
+    CHECK(fake_ui_queue_calls == 1, "embedded NUL rejected before native queue");
 
     /* A newer session replaces the old one; finalizing the old one keeps it. */
     AirPlayReceiverSessionPlatformInitialize(&session_b);
@@ -124,6 +136,7 @@ int main(void) {
     zoom(1);
     deliver(CMD_ALT_UICTX, url, (uint32_t)strlen(url));
     CHECK(fake_send_calls == before, "no command after finalize");
+    CHECK(fake_ui_queue_calls == 1, "no queued UI after finalize");
 
     CHECK(fake_live_objects == 0, "every CF object released");
     alt_cluster_module_def.on_shutdown();
@@ -131,6 +144,6 @@ int main(void) {
     CHECK(handlers[CMD_OEM_MAP_READY] == NULL, "OEM readiness handler removed");
 
     if (failures) { printf("alt_cluster_test: %d FAILED\n", failures); return 1; }
-    printf("alt_cluster_test: session tracking, zoom/showUI dictionaries, burst cap, finalize gate, no leaks PASS\n");
+    printf("alt_cluster_test: session tracking, native UI queue bridge, zoom dictionaries, finalize gate PASS\n");
     return 0;
 }

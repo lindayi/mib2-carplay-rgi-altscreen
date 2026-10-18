@@ -6,16 +6,17 @@ public final class Setting {
         PROGRESS=6, TEXT_SIZE=7, ROAD_SCROLL=8, BACKGROUND=9, ZOOM=10, ZOOM_SPEED=11,
         TOUCHPAD=12, TOUCH_SENSITIVITY=13, RECOVERY=14, VERBOSE=15,
         INFO_DEFAULT=16, INFO_ROAD=17, INFO_RETURN=18, PRESET=19, MASCOT=20,
-        NOW_PLAYING_CARD=21, TRIP_CARD=22, SPEED_BADGE=23;
+        NOW_PLAYING_CARD=21, TRIP_CARD=22, SPEED_BADGE=23, ARROW_POLICY=24, PHONE_ETA=25;
     public static final int VERSION_1_COUNT=16;
     public static final int VERSION_2_COUNT=20;
     public static final int VERSION_3_COUNT=21;
     public static final int VERSION_4_COUNT=23;
+    public static final int VERSION_5_COUNT=24;
     private static final String[] SWITCH={"Off","On"};
     public static final Setting[] ALL={
         new Setting("enabled","Enabled",SWITCH,1,true),
         new Setting("mode","Cockpit presentation",new String[]{"CarPlay map + guidance","CarPlay map only","Audi map + guidance"},0,false),
-        new Setting("layout","CarPlay map layout",new String[]{"Maneuver card on top","Maneuver card on right","No ETA","Original AltScreen"},0,true),
+        new Setting("layout","CarPlay map layout",new String[]{"Maneuver card on top","Maneuver card on right","Map only","Original AltScreen","Maneuver card on left"},0,true),
         new Setting("distance","Overlay distance",SWITCH,1,false),
         new Setting("road","Overlay next road / exit",SWITCH,1,false),
         new Setting("lanes","Overlay lane guidance",SWITCH,1,false),
@@ -36,7 +37,9 @@ public final class Setting {
         new Setting("mascot","Map mascot",MascotCatalog.CHOICES,0,false),
         new Setting("now_playing_card","Now Playing map card",SWITCH,0,false),
         new Setting("trip_card","Trip progress map card",SWITCH,0,false),
-        new Setting("speed_badge","Speed / limit badge (experimental)",SWITCH,0,false)
+        new Setting("speed_badge","Speed-limit display",new String[]{"Off","Our camera-first badge","Phone sign"},0,true),
+        new Setting("arrow_policy","Maneuver arrow timing",new String[]{"Always show maneuver","Upstream approach mode"},0,false),
+        new Setting("phone_eta","Phone-map arrival time",new String[]{"Hide","App default"},0,true)
     };
     public final String key, label;
     public final String[] choices;

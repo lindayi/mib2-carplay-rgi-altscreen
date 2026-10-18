@@ -21,8 +21,8 @@ VOLUME=""
 if [ "$TESTING" = 1 ]; then
     ROOT=${ALTSCREEN_CHAIN_ROOT:-}
     VOLUME=${ALTSCREEN_CHAIN_VOLUME:-}
-    case "$ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT" >&2; exit 2 ;; esac
-    case "$VOLUME" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_VOLUME" >&2; exit 2 ;; esac
+    case "$ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT" >&2; exit 2 ;; esac
+    case "$VOLUME" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_VOLUME" >&2; exit 2 ;; esac
 else
     VOLUME=${ALTSCREEN_SD_VOLUME:-}
     if [ -n "$VOLUME" ]; then
@@ -41,7 +41,7 @@ else
 fi
 
 STATE="$VOLUME/MMI-Cockpit-Carplay/state"
-TEMP_PREFIX="$ROOT/tmp/MMI-Cockpit-Carplay.diag"
+TEMP_PREFIX="$ROOT/ramdisk/MMI-Cockpit-Carplay.diag"
 BOOT_BACKUP="$VOLUME/MMI-Cockpit-Carplay/backup/boot-diagnostics"
 ENABLED="$ROOT/mnt/app/root/carplay-altscreen/state/diagnostics.enabled"
 DEVICE_SCRIPTS="$ROOT/mnt/app/root/carplay-altscreen/bin"

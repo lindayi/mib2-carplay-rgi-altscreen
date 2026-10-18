@@ -11,6 +11,7 @@ DIO_PID=$$
 MONITOR_PID=
 MENU_SESSION_FILE=${MENU_SESSION_FILE:-/ramdisk/carplay_menu_session}
 MENU_VERBOSE_FILE=${MENU_VERBOSE_FILE:-/tmp/carplay_menu_verbose}
+unset ALTSCREEN_PHONE_PROFILE
 
 # A disabled next session executes the original receiver without our preloads.
 # The MMI menu and its saved preferences remain installed.
@@ -36,16 +37,38 @@ echo "$DIO_PID" > "$OWNER_STAGE" && mv "$OWNER_STAGE" "$OWNER_FILE" || {
 }
 [ "$MENU_ERROR" = 0 ] || MENU_ENABLED=0
 MENU_VIDEO=0
+MENU_LAYOUT=-1;MENU_PHONE_SIGN=-1;MENU_PHONE_ETA=-1
 [ "$MENU_ENABLED" != 1 ] || [ "$MENU_MODE" = 2 ] || MENU_VIDEO=1
-printf 'pid=%s\nenabled=%s\nvideo=%s\nverbose=%s\nconfig_error=%s\n' \
-    "$$" "$MENU_ENABLED" "$MENU_VIDEO" "$MENU_VERBOSE" "$MENU_ERROR" > "$MENU_STAGE" &&
+if [ "$MENU_VIDEO" = 1 ]; then
+    MENU_SELECTION=$(cp_phone_selection) || { MENU_ENABLED=0;MENU_VIDEO=0;MENU_ERROR=1; }
+    if [ "$MENU_ERROR" = 0 ]; then
+        MENU_LAYOUT=${MENU_SELECTION%% *}
+        MENU_REMAINDER=${MENU_SELECTION#* }
+        MENU_PHONE_SIGN=${MENU_REMAINDER%% *}
+        MENU_PHONE_ETA=${MENU_REMAINDER#* }
+        case "$MENU_LAYOUT" in
+            0|1|4) ALTSCREEN_PHONE_PROFILE=card ;;
+            2|3) ALTSCREEN_PHONE_PROFILE=map ;;
+            *) MENU_ENABLED=0;MENU_VIDEO=0;MENU_ERROR=1
+               echo "[startup] invalid phone profile; stock receiver only" >> "$WLOG" ;;
+        esac
+        export ALTSCREEN_PHONE_PROFILE
+    fi
+fi
+if [ "$MENU_VIDEO" != 1 ]; then
+    MENU_LAYOUT=-1;MENU_PHONE_SIGN=-1;MENU_PHONE_ETA=-1
+    unset ALTSCREEN_PHONE_PROFILE
+fi
+printf 'pid=%s\nenabled=%s\nvideo=%s\nverbose=%s\nconfig_error=%s\nphone_layout=%s\nphone_sign=%s\nphone_eta=%s\n' \
+    "$$" "$MENU_ENABLED" "$MENU_VIDEO" "$MENU_VERBOSE" "$MENU_ERROR" \
+    "$MENU_LAYOUT" "$MENU_PHONE_SIGN" "$MENU_PHONE_ETA" > "$MENU_STAGE" &&
     mv -f "$MENU_STAGE" "$MENU_SESSION_FILE" || {
         echo "[startup] cannot publish menu session; stock receiver only" >> "$WLOG"
         MENU_ENABLED=0
     }
 if [ "$MENU_ENABLED" != 1 ]; then
     echo "[startup] AltScreen disabled for this session; no project preloads or monitor" >> "$WLOG"
-    unset LD_PRELOAD CARPLAY_PRELOAD_EXTRA
+    unset LD_PRELOAD CARPLAY_PRELOAD_EXTRA ALTSCREEN_PHONE_PROFILE
     exec "$DIODIR/dio_manager" "$@"
     echo "[startup] stock receiver exec failed" >> "$WLOG"
     exit 127

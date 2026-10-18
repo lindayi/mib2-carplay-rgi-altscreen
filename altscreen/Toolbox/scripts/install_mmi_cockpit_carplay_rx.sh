@@ -19,7 +19,7 @@ if [ "$TESTING" = 1 ]; then
     VOLUME=${ALTSCREEN_CHAIN_VOLUME:-}
     DEVICE_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
     [ -n "$VOLUME" ] || { echo "FAIL: testing volume missing"; exit 1; }
-    case "$DEVICE_ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
+    case "$DEVICE_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
 else
     for candidate in /net/mmx/fs/sda0 /net/mmx/fs/sda1 /net/mmx/fs/sdb0 /net/mmx/fs/sdb1 /fs/sda0 /fs/sda1 /fs/sdb0 /fs/sdb1; do
         if [ -s "$candidate/Toolbox/carplay_alt_screen/universal/libcarplay_altscreen.so" ] &&
@@ -94,6 +94,18 @@ jar_valid "$JAR_SOURCE" || {
     exit 1
 }
 
+case "${1:-}" in
+    --preflight)
+        ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$CONTROLLER" install-preflight || exit 1
+        echo "INSTALL_PREFLIGHT=PASS production_changed=NO"
+        exit 0 ;;
+    --apply)
+        [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ] || { echo "FAIL: transaction wrapper required"; exit 1; } ;;
+    "")
+        exec /bin/sh "$SCRIPTDIR/altscreen_transaction.sh" install ;;
+    *) echo "FAIL: unsupported installer argument"; exit 2 ;;
+esac
+
 echo "PACKAGE_MODE=SOURCE_BUILT_PRIVATE111_V38 vehicle_validation=REQUIRED"
 echo "NATIVE_SOURCE=private111_ScreenStreamProcessData h264_shm=/carplay111_h264"
 echo "DECODER_BACKEND=stock_omx_screen_linearized_shm decoded_shm=/carplay111_decoded"
@@ -104,13 +116,20 @@ echo "WINDOW58_READBACK=DISABLED"
 echo "DIRECT_DISPLAY_SIDECAR=INCLUDED"
 echo "RGI98_NATIVE_RENDERER=INCLUDED companion=mib2q-carplay-rgi"
 
-ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$CONTROLLER" install "${1:-}"
+ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$CONTROLLER" install
 CHAIN_RC=$?
 [ "$CHAIN_RC" -eq 0 ] || exit "$CHAIN_RC"
 
 APP_RW=0
 TMP="$JAR_TARGET.basevideo3.tmp"
 rollback(){
+    # The outer upstream transaction owns the pre-upgrade snapshot. Never
+    # replace an earlier working installation with the original stock baseline.
+    if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ]; then
+        [ "$APP_RW" != 1 ] || mount_app_ro || true
+        APP_RW=0
+        return
+    fi
     echo "WARN: Java80 deployment failed; removing deployed JAR and restoring native state"
     if [ "$APP_RW" != 1 ]; then
         if mount_app_rw >/dev/null 2>&1; then APP_RW=1; fi
@@ -152,5 +171,9 @@ echo "HMI_CONTRACT=RGI_SCREEN ctx81=98,101,102,3 ctx80=98,101,102,33 basevideo=3
 # Route guidance native half (hook + maneuver renderer + supervisor), wired into the
 # carplay child next to the AltScreen preload.
 ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$RGI_COMPANION" install || fail "RGI companion install failed"
-echo "INSTALL=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80+RGI reboot_required=YES"
+# Configure the next boot without launching a new mirror against the still-old
+# resident HMI. Installation is complete after one documented full MMI reboot.
+ALTSCREEN_INSTALL_BOOT_ONLY=1 /bin/sh "$SCRIPTDIR/start_mmi_cockpit_carplay_rx_test.sh" --boot-only ||
+    fail "integrated boot arming failed"
+echo "INSTALL_APPLY=PASS integrated=AltScreen+H264Tap+DecoderTap+Displayable3+Java80+RGI reboot_required=YES"
 exit 0

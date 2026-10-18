@@ -19,6 +19,8 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/CurrentPositionDeliveryTest.java" \
+    "$PROJECT_DIR/tests/LowerBarOnlyTest.java" \
+    "$PROJECT_DIR/tests/LowerBarKomoTest.java" \
     "$PROJECT_DIR/tests/RouteInfoTimeoutTest.java" \
     "$PROJECT_DIR/tests/InfoPreferencesTest.java" \
     "$PROJECT_DIR/tests/DestinationTimeZoneTest.java" \
@@ -76,6 +78,8 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.CurrentPositionDeliveryTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LowerBarOnlyTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LowerBarKomoTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteInfoTimeoutTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.InfoPreferencesTest
 "$JDK_DIR/bin/java" -Xverify:none \

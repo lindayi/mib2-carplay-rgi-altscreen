@@ -164,4 +164,4 @@ if [ -n "${SD:-}" ]; then
     sync
     (cd "$SD" && $SHA -c SHA256SUMS-SD.txt >/dev/null) && echo "  card verified against SHA256SUMS-SD.txt"
 fi
-echo "Done. Next on the car: Toolbox -> Update Toolbox, then MMI-Cockpit-Carplay -> INSTALL, reboot, START, reboot."
+echo "Done. After explicit SD preparation: Toolbox -> Update Toolbox, then MMI-Cockpit-Carplay -> INSTALL, wait for PASS, full MMI reboot."

@@ -5,6 +5,21 @@
 #include <time.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+/* Only the launcher's append-mode private file is owned here; never pipes or TTYs. */
+static inline int bound_private_output(void) {
+    struct stat st;
+    int flags;
+    if(fstat(STDERR_FILENO,&st)<0)return -1;
+    if(!S_ISREG(st.st_mode))return 0;
+    flags=fcntl(STDERR_FILENO,F_GETFL);
+    if(flags<0)return -1;
+    if(!(flags&O_APPEND) || st.st_size<1048576)return 0;
+    if(fflush(stderr)!=0 || ftruncate(STDERR_FILENO,0)!=0)return -1;
+    return fputs("PRIVATE_LOG_RESET limit=1048576 mode=same_inode\n",stderr)<0?-1:0;
+}
 
 static inline const char *log_stamp(void) {
     static char buf[16];

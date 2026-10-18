@@ -54,18 +54,34 @@ Do not turn this into a raw conversation log or store credentials/private captur
   `mib2-altscreen-native:local`. Staging verifies both binaries and the source
   manifest from that same compilation snapshot. No old FPS binary patch,
   logo/watermark or Window58 bridge is deployed.
-- Preserve one UI/zoom/context/placement owner. Native UI policy is disabled;
-  Java still owns contexts and physical placement. Startup waits for both OEM
-  readiness and `EVT_ALT_SESSION` (u32 BE epoch, zero unavailable). Send the cached
-  URL before first video, coalesce that video edge, and never timer-resend success.
+- Run native host fixtures through `altscreen_native/tests/run_docker.sh` on
+  Windows. Concurrent rename/read fixtures need its Linux volume, not the host
+  bind mount. Seed initial HMI geometry before starting the fixture worker;
+  preserve runtime PID/epoch/lease checks when testing later updates.
+- Preserve one UI/zoom/context/placement owner. The corrected source uses one
+  native UI queue, with Java selecting content, contexts and physical placement.
+  `EVT_ALT_SESSION` is exactly eight BE bytes: epoch then receiver PID. Startup
+  also needs OEM readiness and the matching exec-time receiver selection.
+  Replay native identity to late observers without blocking registration on the
+  bus dispatch lock; clear replay on receiver replacement. Send the cached URL
+  before first video, coalesce that video edge, and never timer-resend success.
 - A single owner is not proof of feature parity. AirPlay `updateViewArea` selects
   an advertised FULL/SMALL safe area; `showUI` selects phone content, and Java
   `DisplayManager.setPosition` moves the output plane. They are not substitutes.
   The audit of `490dce9` found native view-area selection disabled without a Java
   replacement. Verify replacement wire commands, not only blocked native calls.
 - V3.8's phone maneuver card uses `/car/instrumentcluster`, not the legacy `/map`
-  URL, plus a wider FULL safe area. Its native card profile is disabled here;
-  old top/right preferences do not establish equivalent card behavior.
+  URL, plus a wider FULL safe area. The wrapper selects map/card before exec and
+  records layout/sign/ETA from one preference parse. Java must use that PID-bound
+  selection, not preferences edited after negotiation. The old five-field receiver
+  record remains readable for status, but cannot prove a negotiated phone profile.
+  Accepted geometry is published on `/ramdisk/mmi-mirror-hmi.state`, with epoch,
+  PID and a 1500 ms realtime lease. Fallback geometry is not accepted stock state.
+  Never place HMI publication behind video readiness: that creates a startup cycle.
+  Map Sport uses stock -476; the recognized card profile uses -445. Legacy shift
+  and safe-area files remain untouched but inactive. GEM no longer writes settings;
+  old script entry points fail explicitly. Normal-menu Reset changes preferences,
+  not retained legacy files.
 - Keep Fct19 lower-bar text, Fct22 destination arrival, the small maneuver
   distance/next-road footer, and passive Trip cards distinct. V3.8 appends ETA
   to Fct19 road text but still retains a Road/Trip toggle. That suffix is absent
@@ -74,14 +90,29 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - The deployed RGI is still the local Luka/Allemon-derived stack with selective
   ports, not wholesale V3.8 RGI. Top-upstream paths/packages differ and its pin
   is not a merged ancestor. Do not call it latest Luka after fetching newer refs.
-- The deeper audit found missing count-zero/valid-list and absent-junction fixes,
+- The deeper audit of `490dce9` found missing count-zero/valid-list and absent-junction fixes,
   Java bus/renderer dead-worker recovery, and 64-bit renderer elapsed arithmetic.
-  It also found disabled stopUI and no-frame recovery. The current candidate is
-  held for correction; no new SD/vehicle validation is implied.
+  It also found disabled stopUI and no-frame recovery. Corrected source now covers
+  those gaps. The old `490dce9` package remains held; a later build is a separate
+  artifact and does not imply an SD update or vehicle validation.
 - Upstream context 81 is a map-preserving refresh context; local 81 is the active
   CarPlay composition. Do not transplant the context fallback numerically.
-  `LowerBarKomo` updates OEM models/KOMO and also invokes BAP-listener setters:
-  adapt that fan-out through the existing gate rather than calling it redundant.
+  Local transient context 82 is `{101,102,3}`: retain video/backings, omit 98,
+  verify readback, then restore verified 81. Fall back to 72 only if refresh fails.
+  The one Screen worker confirms a renderer binding after FRAME_READY and a real
+  context readback; socket peer changes need a new binding even if the worker
+  missed the brief unready state. Context tickets must not survive reconnect.
+  Lower-bar-only mode owns Fct19/20, not renderer, contexts, native navigation or
+  KOMO/models. Its Road/Trip input is gated by the active RGI listener, not by
+  custom-renderer context ownership.
+  Full-mode `LowerBarKomo` coalesces onto NavigationJobs. The ClusterService
+  adapter writes models/KOMO without mutating stock BAP listener fields, so later
+  `updateAll()` cannot cache project values as native. Native callbacks keep the
+  latest independent samples; release restores those samples, including time mode.
+  Track ownership before a setter can partially fail; clear it only after the
+  setter/flush succeeds. Old failed clears cannot erase newer owners, and obsolete
+  services cannot clear a replacement's shared output. Never hold the pending-work
+  monitor across model/DSI calls: route callbacks and teardown must remain free.
   Upstream `ElapsedClock` filters backward wall jumps, not forward jumps; it is
   not a true monotonic clock or a drop-in cross-process lease timestamp.
 - Shared native module `on_tick` callbacks use one framework dispatcher. Drain
@@ -98,6 +129,18 @@ Do not turn this into a raw conversation log or store credentials/private captur
   every module on its maintenance tick.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
+- Corrected INSTALL includes boot-only START arming inside a unit-bound,
+  checksummed transaction. Keep runtime boot-inert until commit/activation.
+  Preserve pre-operation snapshots separately from original stock backups;
+  failed rollback keeps recovery evidence. Final tests must use
+  `INSTALLER_PACKAGE_MODE=staged` and explicit `SD_DIR`, not source overlays.
+  `INSTALLER_CASES=all` includes the existing preference-aware mirror suite.
+  The local Bash fixture is not QNX pdksh or actual ARM execution.
+- Rescue requires the matching SD and explicit arguments. Installed helper:
+  `/mnt/app/root/carplay-altscreen/bin/altscreen_rescue.sh recover`, or
+  `restore-original --confirm-stock-rescue`. Successful stock rescue removes
+  that directory; run `undo --confirm-pre-rescue` from the matching SD helper.
+  Undo restores pre-rescue state, not necessarily a working installation.
 - This is a host-verified candidate, not a vehicle result or an SD deployment.
   See `docs/upstream-integration.md` for retained policies, exclusions and trials.
 
@@ -479,11 +522,13 @@ The original AltScreen preset explicitly stores the base `/map` URL.
 - Preferences: `/mnt/persist/var/app/carplay_altscreen/preferences`, strict complete
   versioned schema shared by `Preferences.java` and `carplay_settings.sh`.
   Save atomically with sync; invalid data takes the safe disabled path.
-- New saves use format 5 (24 settings); accept complete formats 1 (16 settings),
-  2 (20 settings), 3 (21 settings) and 4 (23 settings) with explicit new defaults,
-  including speed badge Off for formats 1-4, cards Off for formats 1-3
-  and mascot Off when absent, but never
-  mixed/incomplete schemas. Reads do not migrate
+- New saves use format 6 (26 settings); accept complete formats 1 (16 settings),
+  2 (20 settings), 3 (21 settings), 4 (23 settings) and 5 (24 settings), with their
+  original value bounds. Format 5 retains the badge choice as Off/our badge.
+  Older files default the badge Off for formats 1-4, cards Off for formats 1-3
+  and mascot Off when absent. Formats 1-5 retain always-real arrows and derive
+  phone ETA from the old layout: Hide for layout 2, App default otherwise.
+  Never accept mixed/incomplete schemas. Reads do not migrate
   files on disk. Presets compute effective values without overwriting Custom;
   an individual appearance edit materializes the active preset into new Custom.
 - The lower VC information bar is FctID 19, not the small renderer footer. Its
@@ -889,9 +934,11 @@ The `/e/...` paths above are Git Bash paths; host PowerShell paths use `E:\...`.
   rule takes precedence over source cleanup.
 - Verify every copied file against the source, every untouched file against the
   pre-update manifest, and the deployed `SHA256SUMS-SD.txt`.
-- Existing Toolbox upgrade: parked, stable power, iPhone disconnected ->
-  **Update Toolbox -> INSTALL -> full MMI reboot -> START -> full MMI reboot**.
-  Reconnect afterward. Stop on FAIL; never bypass firmware checks.
+- Corrected source-built Toolbox upgrade: parked, stable power, iPhone disconnected ->
+  **Update Toolbox -> INSTALL -> wait for PASS -> one full MMI reboot**.
+  INSTALL now includes boot-only START arming inside the transaction. Reconnect
+  afterward. Stop on FAIL; never bypass firmware checks. This sequence is
+  host-tested, not vehicle-confirmed; older packages retain their own instructions.
 - Do not use the red software-update menu for this existing-Toolbox overlay upgrade.
   "RESTORE ORIGINAL" restores stock configuration; it is not a downgrade to the
   previous AltScreen release.

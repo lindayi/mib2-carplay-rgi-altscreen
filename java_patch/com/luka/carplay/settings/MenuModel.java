@@ -46,12 +46,14 @@ public final class MenuModel {
     private static String help(int id) {
         if(id==Setting.ENABLED)return "Off releases cockpit features now; the extra stream stops on the next CarPlay session.";
         if(id==Setting.MODE)return "Applies live where possible. Switching from an Audi-map receiver session needs reconnect.";
-        if(id==Setting.LAYOUT)return "Request the phone's cluster-map layout. Reconnect CarPlay to apply; no MMI reboot.";
+        if(id==Setting.LAYOUT)return "Card position applies live. Changing between card, map-only and original layouts needs CarPlay reconnect.";
+        if(id==Setting.PHONE_ETA)return "Request arrival time in the phone's map. App default leaves the choice to the app. Reconnect to apply.";
+        if(id==Setting.ARROW_POLICY)return "Always shows the real maneuver. Approach mode uses upstream distance thresholds; arrival stays visible.";
         if(id==Setting.PRESET)return "Custom is retained. Editing a preset creates a new Custom configuration.";
         if(id==Setting.MASCOT)return "Animation on the CarPlay cluster map only. The VC menu previews it; select to apply live.";
         if(id==Setting.NOW_PLAYING_CARD)return "Show phone media on a fixed translucent left map card. Applies live; Audi dials may cover it.";
         if(id==Setting.TRIP_CARD)return "Show ETA, remaining time/distance and estimated progress since this connection first observed the route. Rerouting can move the bar backward.";
-        if(id==Setting.SPEED_BADGE)return "Experimental: camera-first limit, map fallback. Red above either displayed limit; not a legal-limit guarantee. Applies live.";
+        if(id==Setting.SPEED_BADGE)return "Our badge uses camera then Audi-map limits. Phone sign uses the app's own pixels and needs reconnect. Neither guarantees the legal limit.";
         if(id==Setting.DISTANCE)return "Show distance to the next maneuver in the small guidance overlay.";
         if(id==Setting.ROAD)return "Show the next road or exit in the guidance overlay, not the current road.";
         if(id==Setting.LANES)return "Show the phone's available lane guidance beside the maneuver.";
@@ -99,6 +101,8 @@ public final class MenuModel {
         if(page.startsWith("choice:")) {
             int id=Integer.parseInt(page.substring(7));
             if(id==Setting.MODE)return "root";
+            if(id==Setting.PHONE_ETA)return "presentation";
+            if(id==Setting.ARROW_POLICY)return "guidance";
             if(id==Setting.NOW_PLAYING_CARD || id==Setting.TRIP_CARD || id==Setting.SPEED_BADGE)return "cards";
             if(id==Setting.PRESET || id==Setting.MASCOT)return "appearance";
             if(id>=Setting.INFO_DEFAULT)return "information";
@@ -134,12 +138,12 @@ public final class MenuModel {
             item(rows,"Status & diagnostics","diagnostics");
             item(rows,"Recovery","recovery");
             item(rows,"Reset display/control preferences","confirm:reset");
-        } else if(page.equals("presentation"))settings(rows,new int[]{Setting.LAYOUT},prefs);
+        } else if(page.equals("presentation"))settings(rows,new int[]{Setting.LAYOUT,Setting.PHONE_ETA},prefs);
         else if(page.equals("cards"))settings(rows,new int[]{Setting.NOW_PLAYING_CARD,Setting.TRIP_CARD,Setting.SPEED_BADGE},prefs);
         else if(page.equals("information")) {
             settings(rows,new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},prefs);
         }
-        else if(page.equals("guidance"))settings(rows,new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS},prefs);
+        else if(page.equals("guidance"))settings(rows,new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS,Setting.ARROW_POLICY},prefs);
         else if(page.equals("appearance")) {
             settings(rows,new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND,Setting.MASCOT},prefs);
         }

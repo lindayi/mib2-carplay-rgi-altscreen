@@ -185,6 +185,9 @@ static CFTypeRef find_cluster(CFTypeRef displays) {
 void alt_viewarea_apply(CFTypeRef displays) {
     alt_rect_t view, safe;
     int have_safe;
+    /* Source AltScreen owns both declared profiles and live viewArea indexes.
+     * Legacy geometry files must not rewrite only its FULL rectangle. */
+    if (dlsym(RTLD_DEFAULT, "altscreen_queue_ui")) return;
     if (!displays || !resolve() || !is(displays, g.array_type)) return;
     CFTypeRef cluster = find_cluster(displays);
     if (!cluster) return;                                    /* not a displays array with ours */

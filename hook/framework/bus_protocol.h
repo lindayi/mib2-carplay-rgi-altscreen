@@ -79,7 +79,8 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<source-u32> png_crc:n:<png-u32> path:s:<path> */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
-#define EVT_ALT_SESSION         0x0031  /* sticky binary: u32 BE usable AirPlay epoch; 0=unavailable */
+#define EVT_ALT_SESSION         0x0031  /* sticky binary: u32 BE epoch (0=unavailable), u32 BE receiver PID */
+#define ALT_SESSION_PAYLOAD_SIZE 8
 #define EVT_TEL_LISTS           0x0040
 #define EVT_TEL_COMM            0x0041
 

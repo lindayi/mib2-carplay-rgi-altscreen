@@ -37,8 +37,8 @@ p(){ printf '%s%s\n' "$FIXED_ROOT" "$1"; }
 if [ "$TESTING" = 1 ]; then
     FIXED_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
     VOLUME=${ALTSCREEN_CHAIN_VOLUME:-}
-    case "$FIXED_ROOT" in /tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_ROOT" ;; esac
-    case "$VOLUME" in /tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_VOLUME" ;; esac
+    case "$FIXED_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_ROOT" ;; esac
+    case "$VOLUME" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_VOLUME" ;; esac
     mount_rw(){ :; }
     mount_ro(){ :; }
 else
@@ -315,14 +315,122 @@ finish_mounts(){
     return "$rc"
 }
 
+current_train(){
+    train=""
+    for rel in /net/rcc/dev/shmem/version.txt /dev/shmem/version.txt /net/mmx/dev/shmem/version.txt; do
+        [ -r "$(p "$rel")" ] || continue
+        train=$(sed -n 's/.*\(MHI2Q_[A-Za-z0-9_]*\).*/\1/p' "$(p "$rel")" | head -n 1)
+        [ -z "$train" ] || break
+    done
+    [ "$train" = MHI2Q_US_AUG22_P5145 ] || {
+        say "FAIL: requires MHI2Q_US_AUG22_P5145 (MU1316); found ${train:-UNKNOWN}"; return 1;
+    }
+    printf '%s\n' "$train"
+}
+current_vehicle_key(){
+    if [ "$TESTING" = 1 ] && [ -s "$(p /dev/shmem/test-unit-id)" ]; then
+        cksum < "$(p /dev/shmem/test-unit-id)"
+        return
+    fi
+    value=""
+    if command -v pidin >/dev/null 2>&1; then
+        value=$(pidin ar 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i ~ /^-DmyAudi[.]VIN=/) {sub(/^-DmyAudi[.]VIN=/,"",$i); if(length($i)==17 && $i !~ /[^A-Z0-9]/) {print $i;exit}}}')
+    fi
+    if [ -n "$value" ]; then printf '%s' "$value" | cksum
+    else printf '%s\n' UNAVAILABLE; fi
+}
+native_paths(){
+    if [ -f "$COMPLETE_MARKER" ]; then
+        verify_backup || return 1
+        while IFS= read -r rel; do
+            case "$rel" in *.json) ;; *) printf '%s\n' "$rel" ;; esac
+        done < "$BACKUP_MANIFEST"
+        return
+    fi
+    dio=$(locate_first "$LIVE_DIO_CANDIDATES") || return 1
+    nme=$(locate_first "$LIVE_NME_CANDIDATES") || return 1
+    printf '%s\n' "$dio" "$LIVE_LIBAIRPLAY" "$nme"
+}
+pristine_precheck(){
+    current_train >/dev/null || return 1
+    if [ -f "$COMPLETE_MARKER" ]; then verify_backup_identity; return; fi
+    [ ! -e "$BACKUP_DIR" ] && [ ! -e "$INSTALLED_MARKER" ] || {
+        say "FAIL: incomplete original backup or installed state without originals"; return 1;
+    }
+    if grep -Eq 'libcarplay_(altscreen|rgi_meta|hook)|libcp_mirror|libairplax|/root/lib-target/|/root/carplay-altscreen/' "$(p "$LIVE_JSON_SI")" ||
+        grep -Eq '"0x520[0-4]"' "$(p "$LIVE_JSON_DIO")"; then
+        say "FAIL: project configuration remains without trusted original backup"; return 1
+    fi
+}
+verify_backup_identity() (
+    verify_backup || return 1
+    current_train >/dev/null || return 1
+    binding="$BACKUP_DIR"
+    if [ -e "$BACKUP_ROOT/device-identity" ]; then
+        binding="$BACKUP_ROOT/device-identity"
+        [ -f "$binding/COMPLETE" ] || return 1
+    fi
+    if [ -f "$binding/identity.cksum" ]; then
+        [ "$(cat "$binding/firmware_train.txt" "$binding/vehicle_key.txt" | cksum)" = "$(cat "$binding/identity.cksum")" ] || return 1
+        [ "$(cat "$binding/firmware_train.txt")" = "$(current_train)" ] || return 1
+        saved=$(cat "$binding/vehicle_key.txt"); live=$(current_vehicle_key) || return 1
+        [ "$saved" = UNAVAILABLE ] || [ "$saved" = "$live" ] || {
+            say "FAIL: original backup unit identity mismatch or unavailable"; return 1;
+        }
+    elif [ "${ALTSCREEN_RESCUE:-0}" = 1 ]; then
+        say "FAIL: rescue requires firmware/unit-bound original backup"; return 1
+    fi
+    if [ "${ALTSCREEN_RESCUE:-0}" = 1 ]; then
+        [ "$(cat "$binding/vehicle_key.txt")" != UNAVAILABLE ] || {
+            say "FAIL: rescue requires an available recorded unit identity"; return 1;
+        }
+        return 0
+    fi
+    while IFS= read -r rel; do
+        case "$rel" in *.json) continue ;; esac
+        same_bytes "$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')" "$(p "$rel")" || {
+            say "FAIL: stock binary differs; use guarded manual rescue"; return 1;
+        }
+    done < "$BACKUP_MANIFEST"
+)
+bind_verified_backup() (
+    # A legacy original set can gain a separate unit witness only after all
+    # three live OEM binaries have matched it. Never bless damaged bytes from
+    # a rescue invocation, or rewrite any historical original backup member.
+    [ "${ALTSCREEN_RESCUE:-0}" != 1 ] || return 1
+    verify_backup_identity || return 1
+    [ ! -e "$BACKUP_ROOT/device-identity" ] || return 0
+    key=$(current_vehicle_key) || return 1
+    [ "$key" != UNAVAILABLE ] || return 0
+    if [ -f "$BACKUP_DIR/identity.cksum" ] &&
+        [ "$(cat "$BACKUP_DIR/vehicle_key.txt")" != UNAVAILABLE ]; then return 0; fi
+    stage="$STAGING_ROOT/device-identity.$$"
+    [ ! -e "$stage" ] && ensure_dirs "$stage" || return 1
+    current_train > "$stage/firmware_train.txt" &&
+        printf '%s\n' "$key" > "$stage/vehicle_key.txt" &&
+        cat "$stage/firmware_train.txt" "$stage/vehicle_key.txt" | cksum > "$stage/identity.cksum" || return 1
+    touch "$stage/COMPLETE" && sync &&
+        mv "$stage" "$BACKUP_ROOT/device-identity" && sync || return 1
+    say "BACKUP_IDENTITY=BOUND legacy_original_bytes=UNCHANGED"
+)
+
 verify_backup() (
     [ -f "$COMPLETE_MARKER" ] && [ -f "$BACKUP_MANIFEST" ] && [ -f "$BACKUP_DIR/overlay_present.txt" ] && [ -f "$BACKUP_DIR/overlay_dir.txt" ] || return 1
-    count=0
+    count=0; roles=" "
     while IFS= read -r rel; do
         case "$rel" in
           /eso/bin/apps/dio_manager|/mnt/app/eso/bin/apps/dio_manager|/eso/lib/libairplay.so|/armle/usr/lib/libNmeBaseClasses.so|/mnt/app/armle/usr/lib/libNmeBaseClasses.so|/eso/lib/libNmeBaseClasses.so|/mnt/system/etc/eso/production/smartphone_integrator.json|/mnt/system/etc/eso/production/dio_manager.json) ;;
           *) return 1 ;;
         esac
+        case "$rel" in
+            */dio_manager) role=dio ;;
+            */libairplay.so) role=airplay ;;
+            */libNmeBaseClasses.so) role=nme ;;
+            */smartphone_integrator.json) role=si ;;
+            */dio_manager.json) role=json ;;
+        esac
+        case "$roles" in *" $role "*) return 1 ;; esac
+        roles="$roles$role "
         member="$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')"
         [ -s "$member" ] && [ -f "$member.cksum" ] && [ "$(cksum < "$member")" = "$(cat "$member.cksum")" ] || return 1
         count=$((count+1))
@@ -338,10 +446,17 @@ verify_backup() (
 )
 
 backup_originals() (
-    if [ -f "$COMPLETE_MARKER" ]; then verify_backup || return 1; say "BACKUP=EXISTING kept"; return 0; fi
+    if [ -f "$COMPLETE_MARKER" ]; then
+        verify_backup_identity && bind_verified_backup || return 1
+        say "BACKUP=EXISTING kept"; return 0
+    fi
+    pristine_precheck || return 1
     stage="$STAGING_ROOT/universal-original.$$"
     [ ! -e "$BACKUP_DIR" ] || { say "FAIL: incomplete original backup exists"; return 1; }
     ensure_dirs "$stage/files" || return 1
+    current_train > "$stage/firmware_train.txt" &&
+        current_vehicle_key > "$stage/vehicle_key.txt" &&
+        cat "$stage/firmware_train.txt" "$stage/vehicle_key.txt" | cksum > "$stage/identity.cksum" || return 1
     : > "$stage/manifest.txt"; : > "$stage/overlay_present.txt"
     dio_rel=$(locate_first "$LIVE_DIO_CANDIDATES") || return 1
     nme_rel=$(locate_first "$LIVE_NME_CANDIDATES") || return 1
@@ -460,9 +575,12 @@ restore_universal_hook() (
     [ "$hook_rel" = "$UNIVERSAL_REL" ] || rm -f "$UNIVERSAL_DST" 2>/dev/null || return 1
 )
 restore_originals() (
-    verify_backup || return 1
+    verify_backup_identity || return 1
     while IFS= read -r rel; do
         [ -n "$rel" ] || continue
+        # Normal restore never rewrites OEM binaries. Rescue may repair them,
+        # only with a unit-bound backup and complete reversible transaction.
+        case "$rel" in *.json) ;; *) [ "${ALTSCREEN_RESCUE:-0}" = 1 ] || continue ;; esac
         src="$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')"; dst=$(p "$rel"); mode=755
         case "$rel" in *.json) mode=644 ;; esac
         stage_and_publish "$src" "$dst" "$mode" || return 1
@@ -531,13 +649,18 @@ cmd_install(){
     fi
     if [ "${goto_fail:-0}" != 1 ]; then install_static_firewall_rules || goto_fail=1; fi
     if [ "${goto_fail:-0}" = 1 ]; then
-        say "FAIL: universal deployment failed; restoring originals"
-        restore_originals || say "WARN: rollback restore failed"
+        say "FAIL: universal deployment failed"
+        if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ]; then
+            restore_originals || say "WARN: rollback restore failed"
+        fi
         finish_mounts || true; LIVE_DIRTY=0; lock_release; return 1
     fi
-    touch "$INSTALLED_MARKER" || { restore_originals; finish_mounts || true; LIVE_DIRTY=0; lock_release; return 1; }
-    echo UNIVERSAL > "$STATE_DIR/firmware_profile.txt" || { restore_originals; finish_mounts || true; LIVE_DIRTY=0; lock_release; return 1; }
-    rm -f "$STATE_DIR/RESTORE_PENDING_REBOOT" || { restore_originals; finish_mounts || true; LIVE_DIRTY=0; lock_release; return 1; }
+    touch "$INSTALLED_MARKER" &&
+        echo UNIVERSAL > "$STATE_DIR/firmware_profile.txt" &&
+        rm -f "$STATE_DIR/RESTORE_PENDING_REBOOT" || {
+        [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ] || restore_originals
+        finish_mounts || true; LIVE_DIRTY=0; lock_release; return 1;
+    }
     finish_mounts || { lock_release; return 1; }
     LIVE_DIRTY=0
     say "FIRMWARE_PROFILE=UNIVERSAL source=aug22_unified_policy stock_reuse=YES"
@@ -554,7 +677,10 @@ cmd_start(){
         return 1
     fi
     [ -f "$INSTALLED_MARKER" ] || { say "FAIL: INSTALL must run before START"; lock_release; return 1; }
-    [ ! -e "$RUNTIME_STATE_DIR/transaction.pending" ] || { say "FAIL: incomplete INSTALL or RESTORE"; lock_release; return 1; }
+    if [ -e "$RUNTIME_STATE_DIR/transaction.pending" ] &&
+        [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}:${ALTSCREEN_INSTALL_BOOT_ONLY:-0}" != 1:1 ]; then
+        say "FAIL: incomplete INSTALL or RESTORE"; lock_release; return 1;
+    fi
     verify_backup || { say "FAIL: original backup damaged"; lock_release; return 1; }
     verify_firewall_backup || { say "FAIL: firewall backup damaged"; lock_release; return 1; }
     verify_firewall_variant_backup || { say "FAIL: firewall variant backup damaged"; lock_release; return 1; }
@@ -602,7 +728,7 @@ cmd_start(){
 
 cmd_restore(){
     lock_acquire
-    verify_backup || { say "FAIL: original backup unavailable or damaged"; lock_release; return 1; }
+    verify_backup_identity || { say "FAIL: original backup unavailable, wrong unit or damaged"; lock_release; return 1; }
     verify_universal_backup || { say "FAIL: universal hook backup unavailable or damaged"; lock_release; return 1; }
     mount_rw "$(p /mnt/app)" || { lock_release; return 1; }; MR_APP=1
     mount_rw "$(p /mnt/system)" || { finish_mounts; lock_release; return 1; }; MR_SYS=1
@@ -617,10 +743,35 @@ cmd_restore(){
 }
 
 cmd_restore_preflight(){
-    verify_backup || { say "FAIL: original backup unavailable or damaged"; return 1; }
+    verify_backup_identity || { say "FAIL: original backup unavailable, wrong unit or damaged"; return 1; }
     verify_universal_backup || { say "FAIL: universal hook backup unavailable or damaged"; return 1; }
     verify_firewall_backup || { say "FAIL: firewall backup unavailable or damaged"; return 1; }
+    [ ! -e "$FIREWALL_VARIANT_BACKUP_DIR" ] || verify_firewall_variant_backup || return 1
     say "RESTORE_PREFLIGHT=PASS profile=UNIVERSAL"
+}
+
+cmd_verify_installed(){
+    cmd_restore_preflight || return 1
+    for f in "$(p "$LIVE_PF_CONF")" "$(dirname -- "$(p "$LIVE_PF_CONF")")"/pf.*.conf; do
+        [ -f "$f" ] || continue
+        awk -v rule="$FIREWALL_STATIC_RULE" '
+          $0==rule {opened=1}
+          /^[ \t]*block[ \t]+((drop|return)[ \t]+)?in[ \t]+(quick[ \t]+)?on[ \t]+carplay0[ \t]+all[ \t]*$/ {if(!opened)exit 1}
+        ' "$f" || return 1
+    done
+}
+cmd_verify_restored(){
+    verify_backup_identity || return 1
+    while IFS= read -r rel; do
+        same_bytes "$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')" "$(p "$rel")" || return 1
+    done < "$BACKUP_MANIFEST"
+    same_bytes "$FIREWALL_BACKUP_FILE" "$(p "$LIVE_PF_CONF")" || return 1
+    if [ -e "$FIREWALL_VARIANT_BACKUP_DIR" ]; then
+        verify_firewall_variant_backup || return 1
+        while IFS= read -r name; do
+            same_bytes "$FIREWALL_VARIANT_BACKUP_DIR/$name" "$(dirname -- "$(p "$LIVE_PF_CONF")")/$name" || return 1
+        done < "$FIREWALL_VARIANT_BACKUP_DIR/list"
+    fi
 }
 
 cmd_disarm(){
@@ -685,12 +836,22 @@ cmd_collect(){
 }
 
 CMD=${1:-}
+case "$CMD" in install|start|restore|disarm|restore-preflight|rescue-preflight|verify-install|verify-restored)
+    current_train >/dev/null || exit 1 ;;
+esac
 case "$CMD" in
   install) cmd_install ;;
   start) cmd_start ;;
   status) cmd_status ;;
   restore) cmd_restore ;;
   restore-preflight) cmd_restore_preflight ;;
+  rescue-preflight) ALTSCREEN_RESCUE=1; export ALTSCREEN_RESCUE; cmd_restore_preflight ;;
+  firmware-train) current_train ;;
+  vehicle-key) current_vehicle_key ;;
+  native-paths) native_paths ;;
+  install-preflight) pristine_precheck ;;
+  verify-install) cmd_verify_installed ;;
+  verify-restored) cmd_verify_restored ;;
   disarm) cmd_disarm ;;
   collect) cmd_collect ;;
   *) echo "usage: $PROG {install|start|status|restore|restore-preflight|disarm|collect}" >&2; exit 2 ;;

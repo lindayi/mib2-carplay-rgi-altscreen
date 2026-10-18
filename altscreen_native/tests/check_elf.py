@@ -42,8 +42,11 @@ for name in ("libcarplay_altscreen.so", "carplay-alt111-mirror-display"):
                   if re.search(r"\bGLOBAL\s+DEFAULT\b", line) and " UND " not in line}
         assert actual == expected, (actual - expected, expected - actual)
         forbidden = [token for token in
-                     (b"changeMapZoomLevel", b"maneuverLayout=", b"mmi-mirror-wheel-zoom.events",
-                      b"mmi-mirror-hmi.state") if token in path.read_bytes()]
-        assert not forbidden, ("Competing native UI writer survived optimization", forbidden)
+                     (b"changeMapZoomLevel", b"mmi-mirror-wheel-zoom.events",
+                      b"cluster-card-layout.txt", b"card.enabled") if token in path.read_bytes()]
+        assert not forbidden, ("Competing native preference/zoom owner survived optimization", forbidden)
+        for token in (b"showUI", b"stopUI", b"updateViewArea",
+                      b"ALTSCREEN_PHONE_PROFILE", b"/ramdisk/mmi-mirror-hmi.state"):
+            assert token in path.read_bytes(), ("Missing native UI contract", token)
     print(f"{name}: ARM EABI5/softfp, exports/runtime dependencies checked: {','.join(needed)}")
 print("ALTSCREEN_ELF_CHECKS=PASS")

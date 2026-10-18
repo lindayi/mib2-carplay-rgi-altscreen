@@ -37,6 +37,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /* State */
     private BAPBridge bap;
+    private final boolean textOnly;
     private volatile boolean running;
     private boolean rgActive = false;
     /* Separate from rgActive: route intent/BAP ownership may already be active while stock
@@ -59,7 +60,7 @@ public class RouteGuidance implements CarplayBus.Listener {
     /* Guarded by presentationLock. View always writes phase 0; the steering-
      * wheel encoder press toggles it. The worker is the sole BAP publisher. */
     private int desiredInfoPhase;
-    private int defaultInfoPhase, infoRoad;
+    private int defaultInfoPhase, infoRoad, arrowPolicy;
     private boolean keepInfoSelection;
     private long infoReturnDeadline;
     private int presentationGeneration;
@@ -146,9 +147,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int visibleInApp = -1;
         public int sourceSupportsRg = -1;
         public int laneGuidanceShowing = -1;
-        public int laneGuidanceTotal = -1;
         public int laneGuidanceIndex = -1;
-        public int laneGuidanceSlot = -1;
 
         /* Distance to destination */
         public int distDestM = -1;
@@ -188,22 +187,9 @@ public class RouteGuidance implements CarplayBus.Listener {
          * MHI3 dio_manager uses sentinel 1000 when the field is missing.
          */
         public int[] mExitAngle = new int[MAX_MANEUVERS];
-        public int[] mLinkedLaneGuidanceIndex = new int[MAX_MANEUVERS];
-        public int[] mLinkedLaneGuidanceSlot = new int[MAX_MANEUVERS];
         /* Slot version: bumps in C hook when a different iOS maneuver is assigned to a slot.
          * Detects maneuver transitions even when type/angles are identical. */
         public int[] mVer = new int[MAX_MANEUVERS];
-
-        public int[][] mLanePositions = new int[MAX_MANEUVERS][];
-        public int[] mLaneCount = new int[MAX_MANEUVERS];
-        public int[][] mLaneDirections = new int[MAX_MANEUVERS][];
-        public int[][] mLaneStatus = new int[MAX_MANEUVERS][];
-        /*
-         * Per-lane angle vectors from 0x5204 lane informations.
-         * Format on the bus: lane0 comma-list, lanes separated by '|'
-         * Example: "1000|40,20|"
-         */
-        public int[][][] mLaneAngles = new int[MAX_MANEUVERS][][];
 
         /*
          * Lane-guidance cache keyed by iOS composedGuidanceEventIndex.
@@ -241,9 +227,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             visibleInApp = -1;
             sourceSupportsRg = -1;
             laneGuidanceShowing = -1;
-            laneGuidanceTotal = -1;
             laneGuidanceIndex = -1;
-            laneGuidanceSlot = -1;
             clearAllManeuverSlots();
             clearDirty();
         }
@@ -280,13 +264,6 @@ public class RouteGuidance implements CarplayBus.Listener {
             mJunctionAngles[i] = null;
             mExitAngle[i] = 1000;
             mVer[i] = -1;
-            mLinkedLaneGuidanceIndex[i] = -1;
-            mLinkedLaneGuidanceSlot[i] = -1;
-            mLanePositions[i] = null;
-            mLaneCount[i] = -1;
-            mLaneDirections[i] = null;
-            mLaneStatus[i] = null;
-            mLaneAngles[i] = null;
         }
 
         public void clearDirty() {
@@ -329,9 +306,13 @@ public class RouteGuidance implements CarplayBus.Listener {
     /**
      * Initialize with BAP service.
      */
+    public RouteGuidance(){this(false);}
+    public RouteGuidance(boolean lowerBarTextOnly){textOnly=lowerBarTextOnly;}
+    public boolean isTextOnly(){return textOnly;}
+
     public boolean init(Object naviService) {
         bap = new BAPBridge();
-        if (!bap.init(naviService)) {
+        if (!bap.init(naviService,textOnly)) {
             Log.e(TAG, "BAPBridge init failed");
             bap = null;
             return false;
@@ -339,7 +320,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         bap.setPresentationListener(bapPresentationListener);
         com.luka.carplay.core.ScreenModule.setViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.ScreenModule.setInfoModeListener(infoModeListener);
-        com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
+        if(!textOnly)com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
 
         Log.i(TAG, "Initialized");
         return true;
@@ -362,7 +343,7 @@ public class RouteGuidance implements CarplayBus.Listener {
          * stale RouteGuidance instance. Re-register both session inputs here. */
         com.luka.carplay.core.ScreenModule.setViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.ScreenModule.setInfoModeListener(infoModeListener);
-        com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
+        if(!textOnly)com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
         if (bap != null) bap.setPresentationListener(bapPresentationListener);
         Preferences.get().addListener(infoPreferencesListener);
         final int generation;
@@ -370,6 +351,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             Preferences.Snapshot preferences = Preferences.get().snapshot();
             defaultInfoPhase = preferences.get(Setting.INFO_DEFAULT);
             infoRoad = preferences.get(Setting.INFO_ROAD);
+            arrowPolicy=preferences.get(Setting.ARROW_POLICY);
             keepInfoSelection = preferences.on(Setting.INFO_RETURN);
             generation = ++presentationGeneration;
             presentationWake = false;
@@ -380,7 +362,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             infoReturnDeadline = 0L;
             startPresentationWorkerLocked(generation);
         }
-        com.luka.carplay.core.ScreenModule.setNavActive(false);
+        if(!textOnly)com.luka.carplay.core.ScreenModule.setNavActive(false);
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_RGD_UPDATE, this);
@@ -422,7 +404,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationConfirmed = false;
             hasRouteUpdate = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);
+            if(!textOnly)com.luka.carplay.core.ScreenModule.releaseGuidance();
             if (bap != null) {
                 bap.onStop();
                 bap.onShutdown();
@@ -447,6 +429,7 @@ public class RouteGuidance implements CarplayBus.Listener {
     /** Existing lifecycle worker owns retries; no extra timer and no settings reset. */
     public synchronized void refreshServiceBindings() {
         if (!running) return;
+        CarplayBus.getInstance().start();
         if (bap != null) bap.refreshClusterAccess();
         synchronized (presentationLock) {
             long now = System.currentTimeMillis();
@@ -529,7 +512,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             rgActive = false;
             presentationConfirmed = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);  /* hide layers (stock ctx 74) */
+            if(!textOnly)com.luka.carplay.core.ScreenModule.setNavActive(false);  /* hide layers (stock ctx 74) */
             hasRouteUpdate = false;
             state.reset();
             return;
@@ -609,7 +592,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * for the text hold and position scroll, but no longer gates the context. */
                 presentationConfirmed = false;
                 rgActive = bap != null && bap.onStart();
-                com.luka.carplay.core.ScreenModule.setNavActive(rgActive);
+                if(!textOnly)com.luka.carplay.core.ScreenModule.setNavActive(rgActive);
                 if (!rgActive) {
                     if (!bapStartPendingLogged) {
                         Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 74");
@@ -631,7 +614,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 rgActive = false;
                 presentationConfirmed = false;
                 /* RGI off -> hide the CarPlay cluster layers (stock ctx 74). */
-                com.luka.carplay.core.ScreenModule.setNavActive(false);
+                if(!textOnly)com.luka.carplay.core.ScreenModule.setNavActive(false);
             }
         }
 
@@ -654,7 +637,8 @@ public class RouteGuidance implements CarplayBus.Listener {
             if (confirmed != presentationConfirmed) {
                 presentationConfirmed = confirmed;
                 if (confirmed) {
-                    Log.i(TAG, "RG presentation CONFIRMED: BAP snapshot published + popup frame ready");
+                    Log.i(TAG, textOnly?"Lower-bar text CONFIRMED: FctID 19 published"
+                        :"RG presentation CONFIRMED: BAP snapshot published + popup frame ready");
                 } else {
                     Log.w(TAG, "RG presentation lost: keeping route state and ctx 80");
                 }
@@ -699,13 +683,18 @@ public class RouteGuidance implements CarplayBus.Listener {
             int nextDefault = preferences.get(Setting.INFO_DEFAULT);
             int nextRoad = preferences.get(Setting.INFO_ROAD);
             boolean keep = preferences.on(Setting.INFO_RETURN);
-            if (nextDefault == defaultInfoPhase && nextRoad == infoRoad && keep == keepInfoSelection) return;
+            int nextArrow=preferences.get(Setting.ARROW_POLICY);
+            boolean infoChanged=nextDefault!=defaultInfoPhase || nextRoad!=infoRoad || keep!=keepInfoSelection;
+            boolean arrowChanged=!textOnly && nextArrow!=arrowPolicy;
+            if(!infoChanged && !arrowChanged)return;
             if (nextDefault != defaultInfoPhase) desiredInfoPhase = nextDefault;
             if (nextDefault != defaultInfoPhase || keep != keepInfoSelection) infoReturnDeadline = 0L;
             defaultInfoPhase = nextDefault;
             infoRoad = nextRoad;
             keepInfoSelection = keep;
-            infoPresentationRefreshPending = true;
+            arrowPolicy=nextArrow;
+            if(infoChanged)infoPresentationRefreshPending = true;
+            if(arrowChanged)presentationDrivePending=true;
             presentationWake = true;
             presentationLock.notifyAll();
         }
@@ -877,7 +866,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (!rgActive) {
             rgActive = bap.onStart();
             if (!rgActive) return true;
-            com.luka.carplay.core.ScreenModule.setNavActive(true);
+            if(!textOnly)com.luka.carplay.core.ScreenModule.setNavActive(true);
         }
 
         // FRAME_READY can win the race with the worker's first wake. Rebase
@@ -933,8 +922,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.destination = null;
                 state.laneGuidanceShowing = -1;
                 state.laneGuidanceIndex = -1;
-                state.laneGuidanceSlot = -1;
-                state.laneGuidanceTotal = -1;
                 state.markAllDirtyForReplay();
             }
         }
@@ -996,9 +983,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.markDirty(State.DIRTY_MANEUVER_LIST);
                     state.clearAllManeuverSlots();
                     state.laneGuidanceShowing = -1;
-                    state.laneGuidanceTotal = -1;
                     state.laneGuidanceIndex = -1;
-                    state.laneGuidanceSlot = -1;
                     state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 }
             }
@@ -1031,9 +1016,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.maneuverOrder = null;
                 state.markDirty(State.DIRTY_MANEUVER_LIST);
                 state.laneGuidanceShowing = -1;
-                state.laneGuidanceTotal = -1;
                 state.laneGuidanceIndex = -1;
-                state.laneGuidanceSlot = -1;
                 state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 /* Per-slot data (mType, mTurnAngle, etc.) is NOT cleared here.
                  * It is preserved so that when count>0 returns, BAPBridge can
@@ -1124,24 +1107,10 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.markDirty(State.DIRTY_LANE_GUIDANCE);
             }
         }
-        if (d.has("lane_guidance_total")) {
-            int v = d.num("lane_guidance_total", -1);
-            if (v != state.laneGuidanceTotal) {
-                state.laneGuidanceTotal = v;
-                state.markDirty(State.DIRTY_LANE_GUIDANCE);
-            }
-        }
         if (d.has("lane_guidance_index")) {
             int v = d.num("lane_guidance_index", -1);
             if (v != state.laneGuidanceIndex) {
                 state.laneGuidanceIndex = v;
-                state.markDirty(State.DIRTY_LANE_GUIDANCE);
-            }
-        }
-        if (d.has("lane_guidance_slot")) {
-            int v = d.num("lane_guidance_slot", -1);
-            if (v != state.laneGuidanceSlot) {
-                state.laneGuidanceSlot = v;
                 state.markDirty(State.DIRTY_LANE_GUIDANCE);
             }
         }
@@ -1274,7 +1243,7 @@ public class RouteGuidance implements CarplayBus.Listener {
              * update yet, or the maneuver list is explicitly empty (canProcessManeuverIndex is
              * index-independent — it's a global "accept maneuver data right now?" check).
              * Gate on the predicate ALONE: the old key-list form omitted z_level/exit_info/
-             * exit_angle/lane_count/lane_positions/lane_directions/lane_status/linked_lane_guidance_*,
+             * exit_angle,
              * so a delta carrying only those keys bypassed the gate and polluted a rejected slot
              * (audit #7).  Predicate-only is also future-proof — new keys are gated automatically. */
             if (!canProcessManeuverIndex(i)) {
@@ -1389,55 +1358,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.mTurnAngle[i] = v;
                     state.mTurnAnglePresent[i] = true;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
-                }
-            }
-            if (d.has(p + "lane_count")) {
-                int v = d.num(p + "lane_count", -1);
-                if (v != state.mLaneCount[i]) {
-                    state.mLaneCount[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "linked_lane_guidance_index")) {
-                int v = d.num(p + "linked_lane_guidance_index", -1);
-                if (v != state.mLinkedLaneGuidanceIndex[i]) {
-                    state.mLinkedLaneGuidanceIndex[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "linked_lane_guidance_slot")) {
-                int v = d.num(p + "linked_lane_guidance_slot", -1);
-                if (v != state.mLinkedLaneGuidanceSlot[i]) {
-                    state.mLinkedLaneGuidanceSlot[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_positions")) {
-                int[] v = d.intList(p + "lane_positions");
-                if (!intArrayEq(state.mLanePositions[i], v)) {
-                    state.mLanePositions[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_directions")) {
-                int[] v = d.intList(p + "lane_directions");
-                if (!intArrayEq(state.mLaneDirections[i], v)) {
-                    state.mLaneDirections[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_status")) {
-                int[] v = d.intList(p + "lane_status");
-                if (!intArrayEq(state.mLaneStatus[i], v)) {
-                    state.mLaneStatus[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
-                }
-            }
-            if (d.has(p + "lane_angles")) {
-                int[][] v = parseLaneAnglesMatrix(d.str(p + "lane_angles", null));
-                if (!intMatrixEq(state.mLaneAngles[i], v)) {
-                    state.mLaneAngles[i] = v;
-                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
                 }
             }
         }

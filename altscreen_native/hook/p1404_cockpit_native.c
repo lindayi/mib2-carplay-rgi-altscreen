@@ -28,6 +28,7 @@
 #include "p1404_control_fence.h"
 #include "private111_direct_tap.h"
 #include "p1404_stream_recovery.h"
+#include "local_ui_contract.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -147,6 +148,7 @@ struct native_slot {
     uint32_t view_area_frame_generation;
     uint32_t view_area_frame_count;
     unsigned ui_remote_failures, keyframe_remote_failures, view_area_remote_failures;
+    unsigned keyframe_attempts, view_area_attempts;
     int ui_event_state;       /* 0=needed, 1=inflight, 2=accepted, 3=timed-out */
     int keyframe_event_state; /* 0=needed, 1=inflight, 2=accepted, 3=timed-out */
     int view_area_event_state;/* 0=needed, 1=inflight, 2=acknowledged */
@@ -161,36 +163,9 @@ struct native_slot {
     uint64_t phone_card_retry_at;
     uint32_t ui_inflight_seq;      /* fences a late ACK of an older showUI */
     int ui_refresh_pending;        /* suggestUI changed the phone's offer */
+    uint32_t accepted_ui_revision; /* actual tracked receiver completion */
     unsigned suggested_ui_mask;
 };
-
-#define NATIVE_CARD_SWITCH_QUIET_US 100000u
-
-static int native_phone_card_retarget_locked(struct native_slot *slot,
-                                             int mode, uint32_t now_us) {
-    if (mode < 0 || mode > 3 || slot->phone_card_mode_target == mode) return 0;
-    slot->phone_card_mode_target = mode;
-    slot->phone_card_changed_us = now_us;
-    return 1;
-}
-
-static int native_phone_card_refresh_due_locked(const struct native_slot *slot,
-                                                uint32_t now_us) {
-    return slot->phone_card_mode_target >= 0 &&
-           slot->phone_card_mode_applied >= 0 &&
-           slot->phone_card_mode_target != slot->phone_card_mode_applied &&
-           (uint32_t)(now_us - slot->phone_card_changed_us) >= NATIVE_CARD_SWITCH_QUIET_US;
-}
-
-static void native_phone_card_accept_locked(struct native_slot *slot, int mode) {
-    if (mode < 0 || mode > 3) return;
-    if (slot->phone_card_mode_applied != mode) {
-        /* Switching /instrumentcluster <-> /map may reset the phone's
-         * viewArea. Reassert the desired index after the acknowledged switch. */
-        slot->view_area_applied = -1;
-    }
-    slot->phone_card_mode_applied = mode;
-}
 
 struct native_thread_job {
     struct native_slot *slot;
@@ -698,46 +673,13 @@ static int native_measured_view_area_canvas(uint32_t width,
 }
 
 static int native_read_view_area_target(void) {
-    FILE *f;
-    char line[192];
     char layout[128];
-    int target = -1;
-    int have_layout = 0;
+    char view[16];
+    int dx, dy;
 
-    layout[0] = 0;
-    f = fopen("/tmp/mmi-mirror-hmi.state", "r");
-    if (!f) return -1;
+    if (!alt_local_hmi(view, sizeof(view), layout, sizeof(layout), &dx, &dy)) return -1;
+    return !strcmp(view, "FULL") ? 0 : 1;
 
-    while (fgets(line, sizeof(line), f)) {
-        if (!strncmp(line, "view=FULL", 9u)) {
-            target = 0;
-        } else if (!strncmp(line, "view=SMALL", 10u)) {
-            target = 1;
-        } else if (!strncmp(line, "layout_name=", 12u)) {
-            size_t n;
-            strncpy(layout, line + 12u, sizeof(layout) - 1u);
-            layout[sizeof(layout) - 1u] = 0;
-            n = strlen(layout);
-            while (n && (layout[n - 1u] == '\n' ||
-                         layout[n - 1u] == '\r' ||
-                         layout[n - 1u] == ' ' ||
-                         layout[n - 1u] == '\t'))
-                layout[--n] = 0;
-            have_layout = 1;
-        }
-    }
-    fclose(f);
-
-    /*
-     * /info predeclares two viewAreas on measured B9/Q7 canvases.
-     * Q7 log evidence has the same FULL 370/700 and SMALL 490/460 bounds.
-     * Never send index 1 merely because a stale/foreign HMI state says SMALL:
-     * on an unknown layout the display may have advertised only one viewArea.
-     */
-    if (!have_layout || (!strstr(layout, "LayoutMIB2HighB9") &&
-                         !strstr(layout, "LayoutMIB2HighQ7")))
-        return -1;
-    return target;
 }
 
 /*
@@ -757,6 +699,9 @@ static int native_read_cluster_owned_for_zoom(void) {
     int cluster_owned = 0;
     int composite_applied = 0;
     int context = -1;
+
+    /* Local Context81 is not upstream's Context80 ownership contract. */
+    if (ALTSCREEN_JAVA_OWNS_ZOOM) return 0;
 
     f = fopen(CLUSTER_OWNERSHIP_STATE_FILE, "r");
     if (!f) return 0;
@@ -847,7 +792,7 @@ static int native_consumer_keyframe_locked(struct native_slot *slot,
         return 2;
     }
     if (!slot->processing_live ||
-        (!ALTSCREEN_JAVA_OWNS_UI && slot->ui_event_state != 2) ||
+        slot->ui_event_state != 2 ||
         !slot->preconfig_rewritten || slot->keyframe_event_state == 1 ||
         (slot->consumer_keyframes &&
          (uint32_t)(now_us - slot->consumer_keyframe_at) <
@@ -859,6 +804,7 @@ static int native_consumer_keyframe_locked(struct native_slot *slot,
     slot->keyframe_event_state = 0;
     slot->keyframe_event_at = 0;
     slot->keyframe_remote_failures = 0;
+    slot->keyframe_attempts = 0;
     return 1;
 }
 
@@ -1256,6 +1202,8 @@ int p1404_cockpit_native_command_current(void *receiver, void *stream,
                                        uint32_t generation) {
     struct native_slot *slot;
     int live;
+    if (!alt_ui_session_epoch(receiver) ||
+        alt_ui_session_epoch(receiver) != altscreen_ui_session_generation()) return 0;
     native_lock();
     slot = find_stream_locked(receiver, stream);
     live = slot && slot->generation == generation && slot->processing_live;
@@ -1311,8 +1259,10 @@ static void native_check_stream_recovery(void *receiver, void *stream,
     uint32_t seq = 0, age = 0;
     int eligible, send_rc, live = 0, startup_probe = 0, rearmed = 0;
     /* Read before native_lock: the frame producer uses its own tap lock. */
-    if (!p111_frame_tap_get_progress(stream, &progress) || !progress.active)
-        return;
+    if (!p111_frame_tap_get_progress(stream, &progress) || !progress.active) {
+        memset(&progress, 0, sizeof(progress));
+        progress.generation = generation;
+    }
     native_lock();
     slot = find_stream_locked(receiver, stream);
     if (slot && slot->generation == generation &&
@@ -1334,7 +1284,7 @@ static void native_check_stream_recovery(void *receiver, void *stream,
         eligible = slot->processing_live && (cluster_owned || startup_probe) &&
             slot->ui_event_state == 2 &&
             slot->preconfig_rewritten && slot->config_ok &&
-            slot->first_real_frame_posted && slot->keyframe_event_state != 1 &&
+            slot->keyframe_event_state != 1 &&
             slot->view_area_event_state != 1 &&
             native_committed_stream_current(receiver, stream, state_generation);
         action = alt111_recovery_poll(&slot->recovery, now,
@@ -1380,66 +1330,7 @@ static void native_check_stream_recovery(void *receiver, void *stream,
  * and CarPlay's standard updateViewArea command.  Java publishes the OEM state;
  * no reconnect and no second /info transaction is required.
  */
-/* Our monitor services only decoder transport. It does not infer phone UI
- * acknowledgement from a heartbeat or from Java's map-readiness notification. */
-static void *local_transport_monitor(void *arg) {
-    struct native_thread_job *job = (struct native_thread_job *)arg;
-    struct native_slot *slot = job ? job->slot : NULL;
-    void *receiver = job ? job->receiver : NULL;
-    void *stream = job ? job->stream : NULL;
-    uint32_t generation = job ? job->generation : 0;
-    uint32_t state_generation = job ? job->state_generation : 0;
-    for (;;) {
-        struct native_consumer_keyframe_request req;
-        struct p111_frame_progress_snapshot progress;
-        int live, requested, send_keyframe = 0, resumed;
-        uint64_t now;
-        usleep(100000u);
-        now = p1404_monotonic_seconds();
-        requested = native_read_consumer_keyframe_request(&req);
-        if (!requested || !p111_frame_tap_get_progress(stream, &progress))
-            progress.generation = 0;
-        native_lock();
-        live = slot && slot->stream == stream && slot->receiver == receiver &&
-            slot->generation == generation &&
-            slot->state_generation == state_generation;
-        resumed = live ? native_tap_retry_locked(slot) : 0;
-        if (live && alt_oem_map_startup_ready()) {
-            if (slot->keyframe_event_state == 1 &&
-                now > slot->keyframe_event_at + NATIVE_EVENT_TIMEOUT_SECONDS)
-                slot->keyframe_event_state = 3;
-            if (requested)
-                (void)native_consumer_keyframe_locked(slot, &req,
-                    (uint32_t)getpid(), progress.generation,
-                    (uint32_t)(uintptr_t)stream, wheel_now_us32());
-            if (slot->processing_live && slot->preconfig_rewritten &&
-                slot->keyframe_event_state == 0 &&
-                (!slot->keyframe_event_at ||
-                 now > slot->keyframe_event_at + NATIVE_EVENT_RETRY_SECONDS)) {
-                slot->keyframe_event_state = 1;
-                slot->keyframe_event_at = now;
-                send_keyframe = 1;
-            }
-        }
-        native_unlock();
-        if (!live) break;
-        if (resumed)
-            altscreen_log("PHASE=NATIVE_111_TAP_RESUMED receiver=%p stream=%p generation=%u ui_owner=JAVA",
-                          receiver, stream, generation);
-        if (send_keyframe) {
-            int rc = alt_send_cluster_event(receiver, stream, generation,
-                                            ALT111_EVENT_FORCE_KEYFRAME);
-            if (rc)
-                p1404_cockpit_native_event_result(receiver, stream, generation,
-                    ALT111_EVENT_FORCE_KEYFRAME, 0, -1, rc, 0);
-        }
-    }
-    free(job);
-    return NULL;
-}
-
 static void *native_monitor_worker(void *arg) {
-    if (ALTSCREEN_JAVA_OWNS_UI) return local_transport_monitor(arg);
     struct native_thread_job *job = (struct native_thread_job *)arg;
     struct native_slot *slot = job ? job->slot : NULL;
     void *receiver = job ? job->receiver : NULL;
@@ -1449,11 +1340,11 @@ static void *native_monitor_worker(void *arg) {
     uint64_t now;
     int visible, pending, live, route_ready, event_kind, send_rc, tap_resumed;
     int desired_view_area = -1, view_area_send_index, zoom_gate, cluster_owned;
-    int desired_phone_card_mode = 0, phone_card_send_mode = -1;
     int wheel_generation_current;
     uint32_t view_area_command_seq = 0;
     uint32_t view_area_send_seq = 0;
-    uint32_t ui_command_seq = 0, ui_send_seq = 0;
+    uint32_t accepted_ui_revision = 0;
+    int new_ui_ack;
     int zoom_target_steps = 0;
     int zoom_sent_steps = 0;
     int zoom_stall_latched = 0;
@@ -1489,7 +1380,8 @@ static void *native_monitor_worker(void *arg) {
     uint32_t consumer_seq = 0;
 
     memset(&consumer_req, 0, sizeof(consumer_req));
-    native_wheel_zoom_tail(&zoom_last_epoch, &zoom_last_seq);
+    if (!ALTSCREEN_JAVA_OWNS_ZOOM)
+        native_wheel_zoom_tail(&zoom_last_epoch, &zoom_last_seq);
     altscreen_log(
         "PHASE=WHEEL_ZOOM_QUEUE_RESET receiver=%p stream=%p generation=%u "
         "baseline_epoch=%u baseline_seq=%u stale_events_before_attach=discarded "
@@ -1541,7 +1433,6 @@ static void *native_monitor_worker(void *arg) {
             (uint32_t)(wheel_now - view_area_last_poll_at) >=
                 ALT111_VIEW_AREA_POLL_US) {
             desired_view_area = native_read_view_area_target();
-            desired_phone_card_mode = alt_phone_card_mode();
             consumer_req_valid =
                 native_read_consumer_keyframe_request(&consumer_req);
             view_area_last_poll_at = wheel_now;
@@ -1553,15 +1444,21 @@ static void *native_monitor_worker(void *arg) {
         consumer_action = 0;
 
         cluster_owned = native_read_cluster_owned_for_zoom();
-        zoom_count = native_read_wheel_zoom_events(
+        zoom_count = ALTSCREEN_JAVA_OWNS_ZOOM ? 0 : native_read_wheel_zoom_events(
             zoom_last_epoch, zoom_last_seq,
             zoom_events, WHEEL_ZOOM_BATCH_MAX);
         event_kind = 0;
-        ui_send_seq = 0;
-        phone_card_send_mode = -1;
         view_area_send_index = -1;
         view_area_send_seq = 0;
         zoom_gate = 0;
+        accepted_ui_revision = alt_ui_accepted_revision(receiver);
+        new_ui_ack = 0;
+        {
+            char view[16], layout[128];
+            int dx, dy;
+            desired_view_area = alt_ui_hmi_snapshot(view, sizeof(view), layout,
+                sizeof(layout), &dx, &dy) ? (!strcmp(view, "SMALL") ? 1 : 0) : -1;
+        }
 
         native_lock();
         live = slot && slot->stream == stream && slot->receiver == receiver &&
@@ -1570,34 +1467,23 @@ static void *native_monitor_worker(void *arg) {
         tap_resumed = live ? native_tap_retry_locked(slot) : 0;
         visible = live ? slot->visible : 0;
         pending = live ? slot->action_pending : 0;
+        if (live) {
+            slot->ui_event_state = accepted_ui_revision ? 2 : 0;
+            if (accepted_ui_revision && slot->accepted_ui_revision != accepted_ui_revision) {
+                slot->accepted_ui_revision = accepted_ui_revision;
+                new_ui_ack = 1;
+                slot->view_area_applied = -1;
+                slot->view_area_event_state = 0;
+                slot->view_area_remote_failures = 0;
+                slot->view_area_attempts = 0;
+                slot->view_area_inflight_seq = 0;
+                slot->view_area_event_at = 0;
+            }
+        }
         route_ready = live && slot->processing_live && slot->ui_event_state == 2 &&
-                      slot->preconfig_rewritten && slot->config_ok &&
-                      slot->first_real_frame_posted;
+                      slot->preconfig_rewritten && slot->config_ok;
 
         if (live) {
-            if (native_phone_card_retarget_locked(slot, desired_phone_card_mode,
-                                                  wheel_now)) {
-                slot->phone_card_retry_at = 0;
-                altscreen_log("PHASE=PHONE_CARD_LAYOUT_TARGET receiver=%p stream=%p generation=%u mode=%d policy=FULL_B9_OR_Q7_ONLY same_session=1",
-                              receiver, stream, generation, desired_phone_card_mode);
-            }
-            if (slot->ui_event_state == 1 &&
-                now > slot->ui_event_at + NATIVE_EVENT_TIMEOUT_SECONDS) {
-                slot->ui_inflight_seq = 0;
-                if (slot->phone_card_mode_applied >= 0) {
-                    /* A card-only refresh must not strand an already working
-                     * map. Fence its late ACK and keep the last accepted UI. */
-                    slot->ui_event_state = 2;
-                    slot->keyframe_event_state = 2;
-                    slot->phone_card_retry_at = now;
-                    altscreen_log("WARN PHASE=PHONE_CARD_REFRESH_TIMEOUT receiver=%p stream=%p generation=%u keep_current_map=1 retry_after_s=2 late_ack_fenced=1",
-                                  receiver, stream, generation);
-                } else {
-                    slot->ui_event_state = 3;
-                    altscreen_log("ERROR PHASE=ALT111_EVENT_TIMEOUT receiver=%p stream=%p generation=%u event=showUI retry=0 fail_closed=1",
-                                  receiver, stream, generation);
-                }
-            }
             if (slot->keyframe_event_state == 1 &&
                 now > slot->keyframe_event_at + NATIVE_EVENT_TIMEOUT_SECONDS) {
                 slot->keyframe_event_state = 3;
@@ -1628,7 +1514,8 @@ static void *native_monitor_worker(void *arg) {
                     receiver, stream, generation,
                     slot->view_area_inflight_seq,
                     slot->view_area_target);
-                slot->view_area_event_state = 0;
+                slot->view_area_event_state =
+                    slot->view_area_attempts >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
                 slot->view_area_event_at = now;
                 slot->view_area_inflight_seq = 0;
                 slot->view_area_frame_pending = 0;
@@ -1638,9 +1525,14 @@ static void *native_monitor_worker(void *arg) {
 
         /* Nothing is asked of the phone before the OEM cluster map is up. */
         if (live && alt_oem_map_startup_ready()) {
+            if (desired_view_area < 0) {
+                slot->view_area_target = -1;
+                slot->view_area_inflight_seq = 0;
+                slot->view_area_event_state = 0;
+            }
             if (desired_view_area == 0 || desired_view_area == 1) {
                 if (slot->view_area_target != desired_view_area) {
-                    altscreen_log("PHASE=ALT111_VIEWAREA_TARGET receiver=%p stream=%p generation=%u old=%d new=%d source=/tmp/mmi-mirror-hmi.state gate=LayoutMIB2HighB9OrQ7 config=%ux%u canvas_gate=%d",
+                    altscreen_log("PHASE=ALT111_VIEWAREA_TARGET receiver=%p stream=%p generation=%u old=%d new=%d source=/ramdisk/mmi-mirror-hmi.state gate=LayoutMIB2HighB9OrQ7 config=%ux%u canvas_gate=%d",
                                   receiver, stream, generation,
                                   slot->view_area_target, desired_view_area,
                                   slot->config_width, slot->config_height,
@@ -1648,6 +1540,7 @@ static void *native_monitor_worker(void *arg) {
                                       slot->config_width,
                                       slot->config_height));
                     slot->view_area_remote_failures = 0;
+                    slot->view_area_attempts = 0;
                     slot->view_area_event_at = 0;
                     slot->view_area_target = desired_view_area;
                     slot->view_area_applied = -1;
@@ -1659,44 +1552,14 @@ static void *native_monitor_worker(void *arg) {
                 }
             }
 
-            /* Card mode changed (FULL<->SMALL, CARD LEFT/TOP/RIGHT) or the
-             * phone changed its suggestUI offer: re-send showUI on the same
-             * stream, then keyframe; the ACK reasserts the viewArea. */
-            if ((slot->ui_refresh_pending ||
-                 native_phone_card_refresh_due_locked(slot, wheel_now)) && route_ready &&
-                (!slot->phone_card_retry_at ||
-                 now > slot->phone_card_retry_at + NATIVE_EVENT_RETRY_SECONDS) &&
-                slot->keyframe_event_state != 1 &&
-                slot->view_area_event_state != 1 &&
-                !slot->view_area_frame_pending) {
-                slot->ui_refresh_pending = 0;
-                slot->ui_event_state = 0;
-                slot->keyframe_event_state = 0;
-                slot->ui_event_at = 0;
-                slot->keyframe_event_at = 0;
-                slot->ui_remote_failures = 0;
-                slot->keyframe_remote_failures = 0;
-                altscreen_log("PHASE=PHONE_CARD_UI_REFRESH receiver=%p stream=%p generation=%u offer_mask=%u card_mode=%d applied=%d action=show_selected_context_then_keyframe",
-                              receiver, stream, generation, slot->suggested_ui_mask,
-                              slot->phone_card_mode_target, slot->phone_card_mode_applied);
-            }
-
-            if (slot->processing_live && slot->ui_event_state == 0 &&
-                (!slot->ui_event_at || now > slot->ui_event_at + NATIVE_EVENT_RETRY_SECONDS)) {
-                slot->ui_event_state = 1;
-                slot->ui_event_at = now;
-                ++ui_command_seq;
-                if (!ui_command_seq) ++ui_command_seq;
-                slot->ui_inflight_seq = ui_command_seq;
-                ui_send_seq = ui_command_seq;
-                phone_card_send_mode = slot->phone_card_mode_target >= 0 ?
-                    slot->phone_card_mode_target : desired_phone_card_mode;
-                event_kind = ALT111_EVENT_SHOW_UI;
-            } else if (slot->processing_live && slot->ui_event_state == 2 && slot->preconfig_rewritten &&
+            /* showUI is owned by the receiver queue, including pre-video
+             * startup. The monitor consumes actual completions only. */
+            if (slot->processing_live && slot->ui_event_state == 2 && slot->preconfig_rewritten &&
                        slot->keyframe_event_state == 0 &&
                        (!slot->keyframe_event_at ||
                         now > slot->keyframe_event_at + NATIVE_EVENT_RETRY_SECONDS)) {
                 slot->keyframe_event_state = 1;
+                ++slot->keyframe_attempts;
                 slot->keyframe_event_at = now;
                 event_kind = ALT111_EVENT_FORCE_KEYFRAME;
             } else if (slot->ui_event_state == 2 &&
@@ -1713,6 +1576,7 @@ static void *native_monitor_worker(void *arg) {
                 ++view_area_command_seq;
                 if (!view_area_command_seq) ++view_area_command_seq;
                 slot->view_area_event_state = 1;
+                ++slot->view_area_attempts;
                 slot->view_area_event_at = now;
                 slot->view_area_inflight_seq = view_area_command_seq;
                 slot->view_area_frame_pending = 0;
@@ -1736,10 +1600,13 @@ static void *native_monitor_worker(void *arg) {
             altscreen_log("PHASE=NATIVE_111_TAP_RESUMED receiver=%p stream=%p generation=%u old_owner_released=1 renegotiation_required=0",
                           receiver, stream, generation);
         if (!live) break;
+        if (new_ui_ack)
+            alt_state_mark_native(receiver, state_generation,
+                ALT_STATE_NATIVE_UI_ACTIVE, "receiver-queue-showUI-actual-completion");
 
         wheel_generation_current =
             native_committed_stream_current(receiver, stream, state_generation);
-        zoom_gate = route_ready && cluster_owned && wheel_generation_current;
+        zoom_gate = !ALTSCREEN_JAVA_OWNS_ZOOM && route_ready && cluster_owned && wheel_generation_current;
 
         if (event_kind == ALT111_EVENT_UPDATE_VIEW_AREA) {
             native_view_area_capture_frame_baseline(
@@ -1753,15 +1620,11 @@ static void *native_monitor_worker(void *arg) {
                     view_area_send_seq, view_area_send_index,
                     send_rc, 0);
         } else if (event_kind) {
-            if (event_kind == ALT111_EVENT_SHOW_UI)
-                send_rc = alt_send_cluster_card_ui(receiver, stream, generation,
-                                                   ui_send_seq, phone_card_send_mode);
-            else
-                send_rc = alt_send_cluster_event(receiver, stream, generation, event_kind);
+            send_rc = alt_send_cluster_event(receiver, stream, generation, event_kind);
             if (send_rc != 0)
                 p1404_cockpit_native_event_result(receiver, stream, generation,
-                                                   event_kind, ui_send_seq,
-                                                   phone_card_send_mode, send_rc, 0);
+                                                   event_kind, 0,
+                                                   -1, send_rc, 0);
         }
 
         native_check_view_area_fresh_frame(receiver, stream, generation);
@@ -2217,52 +2080,24 @@ void p1404_cockpit_native_event_result(void *receiver, void *stream,
                                         uint32_t request_seq, int card_mode,
                                         int status, int response_received) {
     struct native_slot *slot;
-    uint32_t state_generation = 0;
     int accepted = status == 0 && response_received;
     int applied = 0, retry = 0;
     uint64_t result_now = p1404_monotonic_seconds();
     native_lock();
     slot = find_stream_locked(receiver, stream);
     if (slot && slot->generation == generation) {
-        state_generation = slot->state_generation;
-        if (event_kind == ALT111_EVENT_SHOW_UI && slot->ui_event_state == 1 &&
-            request_seq && request_seq == slot->ui_inflight_seq) {
-            slot->ui_inflight_seq = 0;
-            if (accepted) {
-                slot->ui_remote_failures = 0;
-                native_phone_card_accept_locked(slot, card_mode);
-                slot->phone_card_retry_at = 0;
-                slot->ui_event_state = 2;
-            } else if (slot->phone_card_mode_applied >= 0) {
-                /* A failed card refresh keeps the map the phone already shows
-                 * and retries the new card mode later. */
-                slot->ui_event_state = 2;
-                slot->keyframe_event_state = 2;
-                slot->phone_card_retry_at = result_now;
-            } else {
-                if (response_received) ++slot->ui_remote_failures;
-                slot->ui_event_state =
-                    slot->ui_remote_failures >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
-                slot->ui_event_at = result_now;
-            }
-            retry = slot->ui_event_state == 0;
-            applied = 1;
-        } else if (event_kind == ALT111_EVENT_FORCE_KEYFRAME &&
+        if (event_kind == ALT111_EVENT_FORCE_KEYFRAME &&
                    slot->keyframe_event_state == 1) {
             if (accepted) slot->keyframe_remote_failures = 0;
             else if (response_received) ++slot->keyframe_remote_failures;
             slot->keyframe_event_state = accepted ? 2 :
-                slot->keyframe_remote_failures >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
+                slot->keyframe_attempts >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
             if (!accepted) slot->keyframe_event_at = result_now;
             retry = slot->keyframe_event_state == 0;
             applied = 1;
         }
     }
     native_unlock();
-    if (accepted && applied && event_kind == ALT111_EVENT_SHOW_UI)
-        alt_state_mark_native(receiver, state_generation,
-                              ALT_STATE_NATIVE_UI_ACTIVE,
-                              "showUI-alt-uuid-cluster-map-response-status0");
     altscreen_log("PHASE=ALT111_EVENT_RESULT receiver=%p stream=%p generation=%u event=%d request_seq=%u card_mode=%d status=%d response_received=%d accepted=%d applied=%d retry=%d failure_origin=%s",
                   receiver, stream, generation, event_kind, request_seq, card_mode, status,
                   response_received, accepted && applied, applied,
@@ -2292,6 +2127,7 @@ void p1404_cockpit_native_suggest_ui(void *receiver, unsigned offered_mask) {
         slot->suggested_ui_mask = offered_mask;
     }
     native_unlock();
+    if (refresh) alt_ui_reapply(receiver);
     altscreen_log("PHASE=PHONE_CARD_UI_OFFER receiver=%p mask=%u stream_found=%d refresh_queued=%d",
                   receiver, offered_mask, found, refresh);
 }
@@ -2324,7 +2160,7 @@ void p1404_cockpit_native_view_area_result(void *receiver, void *stream,
             slot->view_area_frame_pending = 1;
         } else {
             if (response_received) ++slot->view_area_remote_failures;
-            slot->view_area_event_state = slot->view_area_remote_failures >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
+            slot->view_area_event_state = slot->view_area_attempts >= NATIVE_EVENT_REMOTE_FAILURES ? 3 : 0;
             slot->view_area_event_at = result_now;
             slot->view_area_inflight_seq = 0;
             slot->view_area_frame_pending = 0;
@@ -2523,6 +2359,7 @@ static int finalize_private_attach(void *receiver, void *stream) {
         return 0;
     }
     (void)g_pthread_detach(monitor);
+    alt_ui_resume(receiver);
     altscreen_log("PHASE=NATIVE_111_ATTACH receiver=%p stream=%p video_impl=%p renderer=%p displayable=58 first_config_rewritten=1 main110_untouched=1 capture=0 rfb=0 scaling=0 fixed_geometry=0",
                   receiver, stream, video_impl, renderer);
     return 1;
@@ -2689,7 +2526,6 @@ int p1404_cockpit_native_stop_ui(void *receiver, void *stream) {
     struct native_slot *slot;
     uint32_t generation = 0;
     int rc;
-    if (ALTSCREEN_JAVA_OWNS_UI) return 0;
     native_lock();
     slot = find_stream_locked(receiver, stream);
     if (slot && slot->monitor_started && !slot->stop_ui_submitted) {
@@ -2699,7 +2535,7 @@ int p1404_cockpit_native_stop_ui(void *receiver, void *stream) {
     }
     native_unlock();
     if (!generation) return 0;
-    rc = alt_send_cluster_event(receiver, stream, generation, ALT111_EVENT_STOP_UI);
+    rc = alt_ui_stop(receiver);
     native_lock();
     slot = find_stream_locked(receiver, stream);
     if (slot && slot->generation == generation) {
@@ -2738,8 +2574,7 @@ void p1404_cockpit_native_detach(void *receiver, void *stream) {
     native_unlock();
     if (generation) p111_direct_tap_stream_end(stream);
     if (generation && send_stop)
-        (void)alt_send_cluster_event(receiver, stream, generation,
-                                     ALT111_EVENT_STOP_UI);
+        (void)alt_ui_stop(receiver);
     if (restore) {
         // No helper, route lock or wait belongs on the stock audio-stop path.
         // The detached job carries only an identity; it never dereferences a

@@ -4,14 +4,59 @@ This candidate targets only `MHI2Q_US_AUG22_P5145 / MU1316`.
 It replaces the old AltScreen hook and mirror binaries with local source builds.
 It is **host-verified, not vehicle-verified**. No SD card was written during this
 integration. Earlier vehicle reports do not validate this candidate.
-**The follow-up audit found missing upstream fixes and features. This is not a
-feature-complete V3.8 integration. Hold this candidate for correction, not SD
-deployment.** The audit changes documentation only.
+**The earlier `490dce9` package remains on hold.** Its follow-up audit found
+missing upstream fixes and features. The audit tables below describe that
+package; the corrected source and separate `build/upstream-corrected-sd`
+candidate must not be confused with it. Final clean-commit packaging is tracked
+in the checklist.
 
-Follow-up source correction: VC **More settings -> Map cards** now includes the
-existing Speed / limit badge switch, using the shared settings worker. The audit
-tables below describe `490dce9`, where that row was missing. This menu correction
-does not repair the other gaps, rebuild the SD package or release its hold.
+The first follow-up (`140c304`) added the missing VC badge switch. The corrective
+work below supersedes it with the shared three-way selector and addresses the
+other audited omissions.
+
+## Corrective source status
+
+The corrective work is tracked in [the integration checklist](upstream-integration-checklist.md).
+It now includes count-zero typed lists, missing-junction fallback, shared optional
+approach timing, current Luka lane-cache fixes, transport worker recovery, Road ETA,
+renderer-independent Fct19/20 output, and coordinated native model/KOMO updates.
+Both menus use **Off / Our camera-first badge / Phone sign**. The phone sign is
+app-rendered content, not numeric speed-limit data. Our badge keeps Audi-map fallback.
+
+The wrapper captures map/card layout, phone sign and ETA in one preference read,
+before receiver exec. Java matches that snapshot to the native receiver PID and
+keeps it across module restarts. Card position can change live; profile, sign and
+ETA changes still require reconnect. Native FULL/SMALL selection uses accepted
+layout/View data and a 1500 ms `/ramdisk` HMI lease. Native UI completion, stopUI
+and bounded no-frame recovery share one native owner.
+
+Local context **82** retains `{101,102,3}` while rebinding renderer 98, then
+returns to verified **81**. It is the role adapter for upstream refresh context
+81, not another context writer or a new displayable. Rejected/unconfirmed refresh
+uses the established 72 fallback. Final readback, receiver lifecycle and renderer
+peer revision fence acknowledgement. A successful bind is not resent on a timer.
+
+Full-mode native model writes use the existing stock formatting but bypass stock
+BAP-listener mutation. Native callbacks retain independent latest values.
+Release restores those values, not a stale takeover snapshot or project data
+returned by `updateAll()`. NavigationJobs owns model writes; a blocked setter
+cannot hold the route callback's pending-work lock. Partial failures retain
+cleanup responsibility, and old owners/services cannot clear a replacement.
+Lower-bar-only mode does not touch these models, native route guidance or renderer
+contexts. Its wheel Road/Trip toggle remains available.
+The receiver-scoped renderer monitor remains available for a live return to full
+guidance. Text-only output never waits for it; renderer-independent output does
+not mean the persistent renderer process must be stopped.
+
+GEM now directs preferences to normal MMI. It has one START entry. Compatibility
+START scripts remain, but obsolete layout/shift/safe-area scripts fail explicitly
+without changing files. Existing legacy layouts remain readable before a normal
+preference file exists. Reset writes normal preferences; it does not delete old
+expert files, backups or private data.
+
+These are **source/host results**, not confirmation of phone rendering, physical
+clearance, QNX runtime behavior or installation. Final source-matched packaging,
+fault paths and remaining checklist items still gate delivery.
 
 ## Source pins and merge decisions
 
@@ -21,6 +66,7 @@ does not repair the other gaps, rebuild the SD package or release its hold.
 | Allemon main | `1289981` | Merge ancestry; adapt placement/view-area work to local ownership and tests |
 | Allemon PR 7 | `af3d353983261a12646a87cbe1ff8793aec251ec` | Accept corrected final-script checksum; regenerate it during staging |
 | Allemon PR 14 | `3282773e5785c86a8e574d524840689bae76d69f` | Do not merge its night-mode retry implementation |
+| Luka main | `ab3317c65cedd0d323da71192d60f627d6f13246` | Reviewed current lane selection/cache fixes; retain the single local RGI stack |
 | yuedizhibo V3.8 | `141e7ed33775af02a5af0b8616ee3c6250eea997` | Import native source; port compatible Java/RGI/telephony fixes instead of importing a second stack |
 
 Allemon's touchpad-bridge removal would delete a local configurable feature.
@@ -38,6 +84,43 @@ send an older captured mode. That can cross a session boundary or overwrite a
 new mode. The delayed retry is not included. This is not a claim that its
 reported theme issue is fixed.
 
+The underlying report is
+[Allemon/mib2-carplay-rgi-altscreen#13](https://github.com/Allemon/mib2-carplay-rgi-altscreen/issues/13).
+It reports success on **MU1329**, wired, with iOS 27; it is not a MU1316 or
+source-built V3.8 result. Its server-level `nightMode` observation and claimed
+Google Maps behavior are useful evidence, but an opposite-mode pulse is an
+active phone-wide change, not passive synchronization. No such pulse is enabled
+here. A parked trial must compare Google/Apple Maps, app appearance settings,
+connect/reconnect and genuine day/night edges. Retain local logs and raw/final
+cluster images if the symptom occurs. Do not call this issue fixed without that
+evidence or reuse its conflicting command number.
+
+### Repeatable source comparison
+
+The three upstream HEADs were rechecked against the full pins above. Allemon PRs
+7 and 14 were still open. Recheck pins and PR bodies on the next integration; do
+not interpret a fetched branch as merged ancestry.
+
+| Upstream component | Local adapter |
+| --- | --- |
+| V3.8 `hmi/src/com/luka/carplay/routeguidance` | `java_patch/com/luka/carplay/rgd`, including the shared policy and model owner |
+| V3.8 cluster controller | `ScreenModule`, `ClusterLayerController`, `AltScreenCluster` and `AltScreenPlacement`; map context roles before porting |
+| V3.8 native hook/mirror | `altscreen_native`; original path/hash mapping is in its provenance and build source manifest |
+| Luka native lane/cache implementation | Existing `hook/routeguidance`, with local timezone bit 22 retained |
+| V3.8 install/recovery scripts | Existing `altscreen/Toolbox/scripts` transaction and restore paths, not a second installer |
+
+For a fresh comparison, clone the public source into ignored build space and
+check out the full pin, rather than comparing only similar basenames:
+
+```powershell
+git clone --no-checkout https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen.git build\upstream-reference
+git -C build\upstream-reference checkout --detach 141e7ed33775af02a5af0b8616ee3c6250eea997
+git diff --no-index -- build\upstream-reference\Toolbox\carplay_alt_screen\hmi\src\com\luka\carplay\routeguidance\BAPBridge.java java_patch\com\luka\carplay\rgd\BAPBridge.java
+```
+
+The diff command returns 1 when files differ. Review each difference against the
+checklist and its regression, not as a command failure or an automatic merge.
+
 ## One owner for each function
 
 | Function | Owner in this fork |
@@ -45,9 +128,9 @@ reported theme issue is fixed.
 | Native RGI, artwork and iAP2 telephony | `hook/`, built as the existing GPL `libcarplay_hook.so` |
 | Type111 transport, stock OMX decoding and decoded SHM | `altscreen_native/hook/`, separate source-available DSO |
 | NV12-to-GLES mirror | `altscreen_native/mirror/`, separate source-built executable |
-| Contexts 81, 80 and 74 | Java `ScreenModule` only |
+| Contexts 81, 80, 74 and transient refresh 82 | Java `ScreenModule` only |
 | Phone layout and wheel zoom | Existing Java bus commands and `hook/altcluster/` only |
-| Phone FULL/SMALL view-area selection | Not wired in `490dce9`; see the functionality audit below |
+| Phone FULL/SMALL view-area selection | One native UI queue, using Java's accepted HMI snapshot |
 | Physical displayable-3 placement | Java `AltScreenPlacement` only |
 | Mascots, cards, VC panel and speed badge | Existing mirror-only EGL preload |
 | Receiver/USB lifecycle | Stock SI and the existing exec wrapper |
@@ -57,8 +140,9 @@ Receiver preload order is **RGI hook, then AltScreen hook**. The RGI display
 dictionary wrapper must see the source hook's result. The mirror does not inherit
 either receiver preload.
 
-The source hook's native showUI, stopUI, zoom and competing geometry policy are
-disabled. Its stream-supervisor executable mode is not deployed. The old frame-rate
+The source hook's UI queue handles showUI, stopUI and view-area completion.
+Competing native zoom and physical-plane writers remain disabled.
+Its stream-supervisor executable mode is not deployed. The old frame-rate
 binary patcher is no longer in the build path. The startup logo, transparent
 watermark asset and unused Window58 bridge are no longer needed or distributed.
 The mirror waits for real video before publishing readiness.
@@ -93,8 +177,8 @@ the first frame, so the custom overlay sees the actual presentation.
 
 Startup requires two independent facts: OEM `MapKombi` readiness and a usable
 native AirPlay command channel. `CMD_OEM_MAP_READY=0x0119` opens the native OEM
-gate. `EVT_ALT_SESSION=0x0031` carries a four-byte, big-endian session epoch;
-zero withdraws readiness. A nonzero epoch requires successful Main110 SETUP,
+gate. `EVT_ALT_SESSION=0x0031` now carries eight big-endian bytes: epoch followed
+by receiver PID. Epoch zero withdraws readiness. A nonzero epoch requires successful Main110 SETUP,
 successful SessionStart and an event client. The getter itself sends nothing.
 Java queues one cached-URL startup request before video readiness, then coalesces
 the first video edge. Later route/View/main-MMI requests keep their existing
@@ -108,6 +192,24 @@ lower-bar mode are compatible additions. `LowerBarKomo` also updates OEM models
 and KOMO, not just the fields sent by our direct BAP publisher. It needs an
 ownership/formatting adapter, not rejection as an inherently redundant component.
 Arrow timing is a real policy choice; it need not require deleting either option.
+
+### Timing and output audit
+
+| Domain | Clock and behavior |
+| --- | --- |
+| Native frame pacing | `CLOCK_MONOTONIC`, 64-bit nanosecond subtraction; multi-second delays cannot wrap a QNX 32-bit `long` |
+| Java lifecycle waits, collapsed wheel events and KOMO retries | Shared positive-wall-delta `ElapsedClock`; backward jumps do not strand waits or prolong input markers; forward jumps still advance it |
+| RGI presentation retries, text scrolling and page timeout | Existing bounded/rebased wall-time handling remains; retry waits are capped and stale page deadlines reset rather than waiting for the old clock |
+| Native BAP-gate installation/replay | Existing backward-jump/expiry guards retire old queued tickets; native values remain cached for retry |
+| Receiver, HMI, panel, mascot and speed leases | Keep realtime timestamps shared with native readers; enforce identity, expiry and maximum future lease bounds |
+| ETA and destination zone | Keep UTC/wall-clock conversion and the explicit destination offset; elapsed clocks must never become arrival timestamps |
+| Renderer output | Check its append-mode regular stderr file each monotonic second; reset at the 1 MiB threshold without replacing the inode; leave pipes/TTYs alone |
+
+The log threshold is not a zero-overshoot hard cap. A cap failure is explicit and
+stops the renderer with a failure exit status. The renderer's check remains active
+after its receiver monitor exits. Host fixtures cover multi-second timing,
+same-inode reset, non-owned output and truncate failure; QNX cross-compilation
+is not proof of every target filesystem failure mode.
 
 ## Functionality audit: 2026-10-18
 
@@ -352,6 +454,42 @@ or the missing VC speed-badge option. Those are corrections/additions, not reaso
 to discard local features. ABI restrictions, licenses and one-owner rules remain
 constraints, not optional preferences.
 
+## Installation and rescue
+
+The corrected package uses **Update Toolbox -> INSTALL -> wait for PASS -> one
+full MMI reboot**, while parked with stable power and the phone disconnected.
+Reconnect afterward. INSTALL includes boot-only START arming inside its
+transaction; the public START entry remains compatible but is not a second
+required installation step. This sequence passed host transaction/fault tests.
+Its QNX execution and vehicle startup still need a separate trial.
+
+Preflight validates firmware, unit identity, payload and runtime prerequisites.
+The transaction preserves the complete pre-operation state separately from the
+original stock backup. Pending state keeps boot activation inert. Failures at
+mutation, arming, verification, sync/remount or activation roll back; incomplete
+cleanup retains recovery files and reports failure. Stale transactions are
+verified before recovery, not overwritten. Export-only does not mutate them.
+
+With the matching SD inserted, guarded manual recovery uses the installed helper:
+
+```sh
+/bin/sh /mnt/app/root/carplay-altscreen/bin/altscreen_rescue.sh recover
+/bin/sh /mnt/app/root/carplay-altscreen/bin/altscreen_rescue.sh restore-original --confirm-stock-rescue
+```
+
+The second command is an explicit stock rescue, not diagnostics. Successful
+stock rescue removes that installed directory. To reverse it, use the helper
+on the matching SD (`<SD>` means its actual mounted root):
+
+```sh
+/bin/sh <SD>/Toolbox/scripts/altscreen_rescue.sh undo --confirm-pre-rescue
+```
+
+Undo restores the pre-rescue state, including any prior damage; it does not
+repair that state. Do not delete retained transactions, substitute backups from
+another unit, or bypass identity/checksum guards. Rescue and installation are
+not normal-MMI preference actions. No SD write is part of host validation.
+
 ## License and source limits
 
 The owner accepted **source-available noncommercial** native components.
@@ -385,15 +523,27 @@ both artifact checksums and `build/altscreen/SOURCES.sha256` against the checkou
 That manifest comes from the same Linux-volume snapshot used for compilation.
 Import stubs and toolchain libraries are never staged.
 
+Run the source-native host suite with
+`bash altscreen_native/tests/run_docker.sh`. Its Linux volume keeps concurrent
+rename/read fixtures off Windows bind mounts. The ownership fixture publishes
+geometry before starting its concurrent worker, then exercises lease changes;
+it does not relax PID/epoch/freshness checks to hide scheduling races.
+
 The integration checks cover exact-stock Java compilation/linkage, strict native
 menu and woven-setter verification, RGI and telephony lifecycles, native transport,
 malformed inputs, real offscreen GLES, source-session fencing, and package
-install/upgrade/export/restore failure paths. The install fixture explicitly
-stubs the ARM mirror: it cannot establish actual QNX video output. Host previews
-are synthetic, not cockpit photographs.
+install/upgrade/export/restore/rescue failure paths. Final package checks use
+`INSTALLER_PACKAGE_MODE=staged` with an explicit `SD_DIR`; development
+source-overlay mode is not evidence for the packaged scripts or pins. Staged
+mode verifies manifest coverage, hashes, real ARM ELF payloads and their fixture
+copies. Only runtime execution is explicitly stubbed in disposable fixtures.
+The local installer image uses a labelled Bash fallback, not QNX pdksh.
+Neither it nor synthetic GLES previews establishes QNX video output.
 
 A parked vehicle trial is still required for cold startup, reconnect, native
-navigation restoration, Google Maps centering, theme changes, phone/Bluetooth
-handoff, VC input and physical layout. Wireless-adapter behavior and sustained
+navigation restoration, Google Maps centering, theme changes, phone-card/sign/ETA
+support, phone/Bluetooth handoff, VC input and physical layout. Compare live card
+position changes with reconnect-only profile/sign/ETA changes; queue completion
+does not prove that the phone applied them. Wireless-adapter behavior and sustained
 frame rate remain unverified. Do not use older vehicle reports as evidence for
 this source-built candidate.

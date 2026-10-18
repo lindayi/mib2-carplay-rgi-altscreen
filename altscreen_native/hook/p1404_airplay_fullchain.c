@@ -15,8 +15,10 @@ void altscreen_mark_phone_requested_legacy(void);
 #define AirPlayReceiverSessionPlatformControl AirPlayReceiverSessionPlatformControl_legacy
 #define ALT111_TRACKED_BOOTSTRAP 1
 #include <stdint.h>
+#include <stddef.h>
 static int bootstrap_command_current(void *, uint32_t);
 static void bootstrap_event_result(void *, uint32_t, int, int, int);
+static int bootstrap_selected_url(void *, uint32_t, char *, size_t);
 #include "p1404_airplay.c"
 #include "p1404_lock_wait.h"
 #undef AirPlayReceiverSessionPlatformControl
@@ -232,6 +234,7 @@ static int fullchain_teardown_admitted(void *session, const void *params,
             params = request;
         }
     }
+    if (scope & TEARDOWN_ALT) (void)alt_ui_stop(session);
     /* Always cancel a pending 111 transaction on full/111 teardown, even before
      * it has installed a state mapping. Audio/Main-only changes preserve it. */
     if ((scope & TEARDOWN_ALT) &&
@@ -586,6 +589,7 @@ static int fullchain_stop_server(void *session, unsigned flags, void *command,
         fullchain_lifecycle_leave(session, &lease, 0);
         return admission == ALT_SESSION_CLOSED ? 0 : -1;
     }
+    (void)alt_ui_stop(session);
     if (!alt_private111_teardown_deferred(session, "stopServer", &after_stock_cleanup)) {
         altscreen_log("ERROR PHASE=TEARDOWN_PRIVATE_BARRIER session=%p command=stopServer callback_refused=1 stock_caller_may_ignore_status=1",
                       session);

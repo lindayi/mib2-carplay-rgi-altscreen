@@ -236,6 +236,10 @@ public class ManeuverMapper {
          * JunctionType gate (see comment above):
          * - For junctionType!=0, only allow the "roundabout exit" family for junctionType==1.
          */
+        if (junctionType == -1) {
+            junctionType=(maneuverType==MT_EXIT_ROUNDABOUT || maneuverType>=28 && maneuverType<=46)
+                ?JUNCTION_ROUNDABOUT:JUNCTION_SINGLE_INTERSECTION;
+        }
         if (junctionType != JUNCTION_SINGLE_INTERSECTION) {
             if (junctionType != JUNCTION_ROUNDABOUT) {
                 mainElement = NO_INFO;

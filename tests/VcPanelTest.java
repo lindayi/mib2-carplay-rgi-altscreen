@@ -200,16 +200,19 @@ public final class VcPanelTest {
         acknowledge();VcPanel.scale(5);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
         check(get("page").equals("cards"),"Map cards reachable after a shared-worker save");
         acknowledge();VcPanel.scale(2);
-        for(int value=1;value>=0;value--) {
+        for(int value:new int[]{1,2,0}) {
+            acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+            check(get("page").equals("choice:"+Setting.SPEED_BADGE),"speed display must open one selector");
+            acknowledge();VcPanel.scale(value-(Integer)get("focus"));
             acknowledge();VcPanel.roller(1);VcPanel.roller(0);
             end=System.currentTimeMillis()+4000;
             while(SettingsRuntime.busy() && System.currentTimeMillis()<end)Thread.sleep(10);
             check(!SettingsRuntime.busy() && prefs.snapshot().get(Setting.SPEED_BADGE)==value,
-                "VC badge switch did not use shared settings worker");
+                "VC speed selector did not use shared settings worker");
             check(new String(Files.readAllBytes(root.resolve("preferences")),"US-ASCII")
                 .contains("speed_badge="+value+"\n"),"VC badge choice not persisted");
             check(get("page").equals("cards") && (Integer)get("focus")==2,
-                "badge toggle lost the current page or focus");
+                "speed selection lost the parent page or focus");
         }
         SettingsRuntime.stop();VcPanel.stop();Files.delete(helper);Files.delete(sessionFile);Files.delete(ownerFile);
         Files.deleteIfExists(root.resolve("preferences"));Files.deleteIfExists(root.resolve("layout"));Files.delete(root);

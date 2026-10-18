@@ -148,24 +148,46 @@ public final class RouteInfoPresentationTest {
 
         RouteGuidance.State state = route();
         set(BAPBridge.class, bridge, "lastEtaSeconds", Long.valueOf(System.currentTimeMillis() / 1000L + 2220));
-        equal("small dotted-circle time", "\u25CC 37 min", render(bridge, output, state, true, 1).position);
+        check("small duration retains arrival",render(bridge, output, state, true, 1).position.startsWith("\u25CC 37 min | "));
         byte[] wire = output.position.getBytes("UTF-8");
         check("exact U+25CC wire prefix", (wire[0] & 255) == 0xE2
             && (wire[1] & 255) == 0x97 && (wire[2] & 255) == 0x8C && wire[3] == 0x20);
         String full = render(bridge, output, state, false, 1).position;
         check("full marked arrival and duration in one field", full.startsWith("\u25CC ") && full.endsWith(" | 37 min"));
         check("full marker appears only once", full.indexOf('\u25CC', 1) < 0);
-        equal("next click restores quoted navigation", "\u2039Exit 12: Main Street\u203A",
-            render(bridge, output, state, false, 0).position);
+        String road=render(bridge,output,state,false,0).position;
+        check("Road retains arrival beside clipped navigation: "+road,
+            road.startsWith("\u2039Exit ") && road.contains("\u203A | "));
         set(BAPBridge.class, bridge, "lastEtaSeconds", Long.valueOf(-1));
         set(BAPBridge.class, bridge, "lastTimeRemainingSeconds", Long.valueOf(3900));
         set(BAPBridge.class, bridge, "lastTimeRemainingSampleSeconds", Long.valueOf(System.currentTimeMillis() / 1000L));
-        equal("duration-only input and long-trip format", "\u25CC 1 h 05 min",
-            render(bridge, output, state, true, 1).position);
+        check("duration-only input and long-trip format",
+            render(bridge, output, state, true, 1).position.startsWith("\u25CC 1 h 05 min | "));
         full = render(bridge, output, state, false, 1).position;
         check("duration-only input produces arrival too", full.startsWith("\u25CC ") && full.endsWith(" | 1 h 05 min"));
         set(BAPBridge.class, bridge, "lastEtaSeconds", Long.valueOf(1));
-        equal("past ETA clamps at zero", "\u25CC 0 min", render(bridge, output, state, true, 1).position);
+        check("past ETA clamps at zero",render(bridge, output, state, true, 1).position.startsWith("\u25CC 0 min | "));
+        state.etaSeconds=36000;state.destinationTimeZoneMinutes=120;
+        state.dirtyMask=RouteGuidance.State.DIRTY_ETA|RouteGuidance.State.DIRTY_DEST_TIMEZONE;
+        state.mExitInfo[0]=repeat("x",120);
+        check("Road ETA uses destination zone",
+            render(bridge,output,state,false,0).position.endsWith("\u203A | 12:00 dest"));
+        Method tick=BAPBridge.class.getDeclaredMethod("tickPositionScroll",long.class);
+        tick.setAccessible(true);
+        long now=System.currentTimeMillis();
+        for(int i=1;i<=12;i++) {
+            tick.invoke(bridge,now+i*2000L);
+            check("each scrolling fragment retains ETA",output.position.endsWith("\u203A | 12:00 dest"));
+            check("ETA fits byte budget",output.position.getBytes("UTF-8").length<=96);
+        }
+        full=render(bridge,output,state,false,1).position;
+        check("generated Trip clock is not duplicated",full.indexOf("12:00")==full.lastIndexOf("12:00"));
+        state.mExitInfo[0]="Exit 12 | ETA: 08:15";
+        String supplied=render(bridge,output,state,false,0).position;
+        check("phone-supplied clock normalized without duplicate",supplied.contains(" | 08:15")
+            && !supplied.contains("ETA") && !supplied.contains("12:00"));
+        state.mExitInfo[0]="BETA Road";
+        check("ordinary road name remains intact",render(bridge,output,state,false,0).position.contains("BETA Road"));
         System.out.println("RouteInfoPresentationTest: PASS (" + checks + " checks)");
     }
 }

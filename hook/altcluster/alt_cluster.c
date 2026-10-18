@@ -23,6 +23,7 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <string.h>
+#include <unistd.h>
 
 DEFINE_LOG_MODULE(ALTCLUSTER);
 
@@ -62,6 +63,7 @@ static pthread_once_t g_lock_once = PTHREAD_ONCE_INIT;
 static void* g_session;
 static uint32_t g_session_generation;
 static uint32_t g_published_session;
+static uint32_t g_published_pid;
 static int g_session_published;
 
 static void alt_lock_init(void) {
@@ -184,17 +186,24 @@ static void alt_on_zoom(uint16_t type, uint8_t flags, const uint8_t* payload, ui
 }
 
 static void alt_on_ui_context(uint16_t type, uint8_t flags, const uint8_t* payload, uint32_t len, void* ctx) {
+    typedef int (*queue_ui_f)(const char *, uint32_t);
+    typedef uint32_t (*generation_f)(void);
     (void)type; (void)flags; (void)ctx;
     char url[ALT_MAX_URL_LEN];
-    if (len == 0 || len >= sizeof(url)) {
+    if (!payload || len == 0 || len >= sizeof(url) || memchr(payload, 0, len)) {
         LOG_WARN(LOG_MODULE, "showUI url length %u rejected", (unsigned)len);
         return;
     }
     memcpy(url, payload, len);
     url[len] = '\0';
-    int32_t err = alt_send("showUI", "url", url, 0, 0);
-    if (err != 0) LOG_WARN(LOG_MODULE, "showUI %s failed err=%d", url, (int)err);
-    else          LOG_INFO(LOG_MODULE, "showUI %s", url);
+    queue_ui_f queue = (queue_ui_f)dlsym(RTLD_DEFAULT, "altscreen_queue_ui");
+    generation_f generation = (generation_f)dlsym(RTLD_DEFAULT, "altscreen_ui_session_generation");
+    uint32_t epoch = generation ? generation() : 0;
+    alt_lock();
+    int err = g_session && queue && epoch ? queue(url, epoch) : -1;
+    alt_unlock();
+    if (err != 0) LOG_WARN(LOG_MODULE, "native UI queue refused epoch=%u err=%d", epoch, err);
+    else LOG_INFO(LOG_MODULE, "native UI intent queued epoch=%u (not phone acknowledgement)", epoch);
 }
 
 static void alt_on_oem_map_ready(uint16_t type, uint8_t flags, const uint8_t* payload,
@@ -220,13 +229,16 @@ static void alt_session_tick(void) {
         LOG_WARN(LOG_MODULE, "source AltScreen session readiness unavailable");
     }
     uint32_t current = generation ? generation() : 0;
+    uint32_t pid = (uint32_t)getpid();
     alt_lock();
     if (!g_session) current = 0;
-    if (!g_session_published || current != g_published_session) {
-        uint8_t payload[4] = { current >> 24, current >> 16, current >> 8, current };
-        if (bus_send(EVT_ALT_SESSION, BUS_FLAG_BINARY | BUS_FLAG_STICKY, payload, 4) == HOOK_OK) {
+    if (!g_session_published || current != g_published_session || pid != g_published_pid) {
+        uint8_t payload[8] = { current >> 24, current >> 16, current >> 8, current,
+                              pid >> 24, pid >> 16, pid >> 8, pid };
+        if (bus_send(EVT_ALT_SESSION, BUS_FLAG_BINARY | BUS_FLAG_STICKY, payload, 8) == HOOK_OK) {
             g_session_published = 1;
             g_published_session = current;
+            g_published_pid = pid;
         }
     }
     alt_unlock();

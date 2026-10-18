@@ -1846,9 +1846,7 @@ int p111_frame_tap_get_progress(
 
     tap_lock();
     if (stream && g_stream == stream && g_generation &&
-        g_frame && g_frame->active && g_frame->writer_pid &&
-        g_frame->frame_count && g_frame->sequence &&
-        g_last_frame_publish_us32) {
+        g_frame && g_frame->active && g_frame->writer_pid) {
         out->generation = g_generation;
         out->frame_count = g_frame->frame_count;
         out->sequence = g_frame->sequence;

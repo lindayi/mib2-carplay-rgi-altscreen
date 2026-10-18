@@ -115,10 +115,11 @@ public final class CarPlayAppLifecycleTest {
             check(LifecycleTestModule.count(0)==0,"disabled session started cockpit module");
             CarPlayApp.setFeaturesEnabled(true);settled();
             check(CarPlayApp.isActive() && LifecycleTestModule.count(1)==1,"enabled connection not activated");
-            CarPlayApp.setGuidanceEnabled(false);settled();
-            check(LifecycleTestModule.count(1)==1 && LifecycleTestModule.count(0)==2,"map-only restarted RGI");
-            CarPlayApp.setGuidanceEnabled(true);settled();
-            check(LifecycleTestModule.count(1)==2,"live guidance re-enable");
+            CarPlayApp.setGuidanceEnabled(false);awaitRebind(false);
+            check(LifecycleTestModule.count(1)==2 && LifecycleTestModule.count(0)==1
+                && LifecycleTestModule.count(2)==1,"text-only mode must rebind RGD without restarting video/input");
+            CarPlayApp.setGuidanceEnabled(true);awaitRebind(false);
+            check(LifecycleTestModule.count(1)==3 && LifecycleTestModule.count(0)==1,"live guidance re-enable");
             CarPlayApp.setFeaturesEnabled(false);settled();
             check(!CarPlayApp.isActive() && CarPlayApp.isSessionConnected(),"disable lost physical session");
             CarPlayApp.onDeactivateAndWait();

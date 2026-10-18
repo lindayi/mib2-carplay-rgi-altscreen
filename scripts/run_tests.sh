@@ -9,6 +9,10 @@ OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 if [ "$(uname)" = Darwin ]; then DEAD_STRIP=-Wl,-dead_strip; else DEAD_STRIP=-Wl,--gc-sections; fi
 
+printf '%-32s ' renderer_runtime_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/renderer_runtime_test.c -o "$OUT/renderer_runtime"
+"$OUT/renderer_runtime"
+
 printf '%-32s ' maneuver_surface_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -ffunction-sections -fdata-sections -Imaneuver_render/hostcheck -Icommon \

@@ -58,11 +58,20 @@ font; retain `maneuver_render/LICENSE.DEJAVU` with distributions.
 
 The root contains Enabled, Display mode, Map layout, Map mascot and More settings.
 More provides Guidance, Appearance, Information bar, Controls, Reapply map
-layout and Map cards. Map cards independently toggles the passive Now Playing
-and estimated Trip cards and the experimental Speed / limit badge, all default
-Off. The badge uses the same live switch as main MMI; it needs no reconnect or
-MMI reboot after installation. These controls do not change input ownership.
-They share a fixed, RGI-inspired left frame with a rectangular black lower base
+layout and Map cards. Map layout provides top/right/left cards, map-only and
+original profiles, plus separate phone arrival-time choices. Card-to-card
+position changes apply live; profile and phone ETA changes require reconnect.
+Guidance includes the shared always-real/upstream-approach arrow policy.
+
+Map cards independently toggles the passive Now Playing and estimated Trip
+cards. Its shared **Speed-limit display** choice is **Off / Our camera-first
+badge / Phone sign**, default Off. Our badge retains Audi-map fallback; Phone
+sign uses the app's own pixels, not a numeric phone feed. Entering or leaving
+phone-sign mode requires reconnect. Off/our badge changes otherwise apply live;
+our badge stays suppressed while a cached phone-sign session is active.
+No choice reboots MMI or changes input ownership.
+
+The music/Trip cards share a fixed, RGI-inspired left frame with a rectangular black lower base
 and no artificial dial cutout: one section expands inside it when the
 other is unavailable or Off, and both Off removes it. Long media title/artist
 lines scroll independently. The progress caption sits directly above its bar,

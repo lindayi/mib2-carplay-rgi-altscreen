@@ -33,6 +33,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
      * travel information and destination menu; maneuver/lane records remain
      * session-gated. */
     volatile boolean blockCurrentPositionInfo;
+    private boolean currentPositionTextOnly;
 
     public GatedCombiService(CombiBAPServiceNavi r) { this.real = r; }
 
@@ -42,6 +43,10 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     private long lastReplayWarning;
 
     private boolean positionField(int i) { return i == 3 || i >= 8; }
+    private boolean fieldBlocked(int i) {
+        return positionField(i)?blockCurrentPositionInfo && (!currentPositionTextOnly || i==3 || i==8)
+            :blockRouteGuidance;
+    }
 
     private void markReplay(boolean position) {
         for (int i = 0; i < latest.length; i++)
@@ -50,7 +55,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
 
     public synchronized boolean hasPendingReplay() {
         for (int i = 0; i < latest.length; i++)
-            if (replayPending[i] && !(positionField(i) ? blockCurrentPositionInfo : blockRouteGuidance))
+            if (replayPending[i] && !fieldBlocked(i))
                 return true;
         return false;
     }
@@ -67,7 +72,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     private void replay(boolean position) {
         if (retired) return;
         for (int i = 0; i < latest.length; i++) {
-            if (!replayPending[i] || latest[i] == null || positionField(i) != position) continue;
+            if (!replayPending[i] || latest[i] == null || positionField(i) != position || fieldBlocked(i)) continue;
             Object[] v = latest[i];
             try {
                 switch (i) {
@@ -105,9 +110,23 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     }
 
     public synchronized void setCurrentPositionInfoBlocked(boolean blocked) {
-        if (blockCurrentPositionInfo && !blocked) markReplay(true);
-        blockCurrentPositionInfo = blocked;
-        if (!blocked) replay(true);
+        setCurrentPositionInfoBlocked(blocked,false);
+    }
+    public synchronized void setCurrentPositionInfoBlocked(boolean blocked,boolean textOnly) {
+        for(int i=0;i<latest.length;i++) {
+            if(positionField(i) && latest[i]!=null && fieldBlocked(i)
+                    && !(blocked && (!textOnly || i==3 || i==8)))replayPending[i]=true;
+        }
+        blockCurrentPositionInfo=blocked;currentPositionTextOnly=blocked && textOnly;
+        replay(true);
+    }
+    /** Tightening from workers may not replay a released field off NavigationJobs. */
+    public synchronized void tightenCurrentPositionInfo(boolean textOnly) {
+        if(!blockCurrentPositionInfo){blockCurrentPositionInfo=true;currentPositionTextOnly=textOnly;}
+        else if(!textOnly)currentPositionTextOnly=false;
+    }
+    public synchronized boolean ownsCurrentPosition(boolean textOnly) {
+        return !retired && blockCurrentPositionInfo && currentPositionTextOnly==textOnly;
     }
 
     /* GATED ROUTE-GUIDANCE METHODS */
@@ -132,7 +151,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public synchronized void updateCurrentPositionInfo(String s) {
         if (retired) return;
         latest[3] = new Object[]{s};
-        if (!blockCurrentPositionInfo) { real.updateCurrentPositionInfo(s); replayPending[3] = false; }
+        if (!fieldBlocked(3)) { real.updateCurrentPositionInfo(s); replayPending[3] = false; }
     }
 
     public synchronized void updateManeuverDescriptor(CombiBAPNaviManeuverDescriptor[] a) {
@@ -166,15 +185,15 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public synchronized void updateTurnToInfo(String a, String b) {
         if (retired) return;
         latest[8] = new Object[]{a, b};
-        if (!blockCurrentPositionInfo) { real.updateTurnToInfo(a, b); replayPending[8] = false; } }
+        if (!fieldBlocked(8)) { real.updateTurnToInfo(a, b); replayPending[8] = false; } }
     public synchronized void updateDistanceToDestination(int a, int b, boolean c) {
         if (retired) return;
         latest[9] = new Object[]{new Integer(a), new Integer(b), c ? Boolean.TRUE : Boolean.FALSE};
-        if (!blockCurrentPositionInfo) { real.updateDistanceToDestination(a, b, c); replayPending[9] = false; } }
+        if (!fieldBlocked(9)) { real.updateDistanceToDestination(a, b, c); replayPending[9] = false; } }
     public synchronized void updateTimeToDestination(int a, int b, long c) {
         if (retired) return;
         latest[10] = new Object[]{new Integer(a), new Integer(b), new Long(c)};
-        if (!blockCurrentPositionInfo) { real.updateTimeToDestination(a, b, c); replayPending[10] = false; } }
+        if (!fieldBlocked(10)) { real.updateTimeToDestination(a, b, c); replayPending[10] = false; } }
     public void updateTMCInfoMessages(CombiBAPTMCInfoMessage[] a) {
         real.updateTMCInfoMessages(a); }
     public void updateLastDestinationsList(CombiBAPDestinationListEntry[] a) {
@@ -221,7 +240,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public synchronized void updateDestinationInfo(CombiBAPDestinationInfo a) {
         if (retired) return;
         latest[11] = new Object[]{a};
-        if (!blockCurrentPositionInfo) { real.updateDestinationInfo(a); replayPending[11] = false; } }
+        if (!fieldBlocked(11)) { real.updateDestinationInfo(a); replayPending[11] = false; } }
     public void updateAltitude(int a, int b) {
         real.updateAltitude(a, b);            /* native altitude — not gated on this branch */
     }

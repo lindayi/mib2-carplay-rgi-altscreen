@@ -244,11 +244,14 @@ public final class CurrentPositionDeliveryTest {
         f.tick();
         f.bridge.refreshInfoPresentation(f.state, 0);
         check(f.out.text.equals(first), "View refresh did not restart");
-        set(f.bridge, "lastEtaSeconds", System.currentTimeMillis() / 1000 + 300);
+        f.feed("eta_seconds:n:"+(System.currentTimeMillis()/1000+300)+"\n");
+        String firstWithEta=f.out.text;
+        check(firstWithEta.startsWith(first.substring(0,5)) && firstWithEta.contains("\u203a | "),
+            "ETA-only delta did not repaint Road with its suffix");
         f.bridge.refreshInfoPresentation(f.state, 1);
         check(f.out.text.startsWith("◌ "), "OK phase did not replace road");
         f.bridge.refreshInfoPresentation(f.state, 0);
-        check(f.out.text.equals(first), "return from OK did not restart road");
+        check(f.out.text.equals(firstWithEta), "return from OK did not restart road with ETA");
         f.bridge.onStop();
         writes = f.out.textWrites;
         f.bridge.tickPositionScroll(System.currentTimeMillis() + 3000);

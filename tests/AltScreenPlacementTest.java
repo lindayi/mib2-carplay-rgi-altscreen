@@ -45,6 +45,7 @@ public final class AltScreenPlacementTest implements InvocationHandler {
 
         /* Classic: no small-stage offset, no config -> displayable 3 is never written. */
         reset(cfg.getPath());
+        AltScreenPlacement.setPhoneProfile(0);
         AltScreenPlacement.onMapPlacement(dm, 1, classic, 0, 26, 0, 0, false);
         AltScreenPlacement.onMapPlacement(dm, 1, classic, 0, 26, 0, 0, true);
         AltScreenPlacement.poll();
@@ -61,35 +62,28 @@ public final class AltScreenPlacementTest implements InvocationHandler {
         AltScreenPlacement.onMapPlacement(dm, 1, sport, 0, 26, -476, 0, false);
         check(t.last().equals("3@0,26"), "sport full returns to origin: " + t.moves);
 
-        /* GEM shift: picked up live by poll(); removing the file restores the origin. */
+        /* Source profiles replace the legacy additive shift; never apply both. */
         reset(cfg.getPath());
         t.moves.clear();
-        AltScreenPlacement.onMapPlacement(dm, 1, classic, 0, 26, 0, 0, false);
+        AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,true);
         AltScreenPlacement.onVideoReady();
+        check(t.moves.isEmpty(),"unknown receiver profile must not guess physical placement");
+        AltScreenPlacement.setPhoneProfile(1);
+        check(t.last().equals("3@-445,26"),"card Sport translation: "+t.moves);
         write(cfg, "full_dx=-120\nsmall_dx=-476\n");
         AltScreenPlacement.poll();
-        check(t.last().equals("3@-120,26"), "full_dx applied: " + t.moves);
-        AltScreenPlacement.onMapPlacement(dm, 1, classic, 0, 26, 0, 0, true);
-        check(t.last().equals("3@-476,26"), "small_dx simulates Sport on Classic: " + t.moves);
-        cfg.delete();
-        AltScreenPlacement.poll();
-        check(t.last().equals("3@0,26"), "config removed -> origin: " + t.moves);
-
-        /* Out-of-range or malformed values are ignored. */
-        write(cfg, "full_dx=-9000\nsmall_dx=abc\n");
-        int before = t.moves.size();
-        AltScreenPlacement.poll();
-        check(t.moves.size() == before, "bad values must not move the plane: " + t.moves);
-        cfg.delete();
-
-        write(cfg, "full_dx=-120\nsmall_dx=-476\n");
-        AltScreenPlacement.poll();
-        check(t.last().equals("3@-476,26"), "active shift: " + t.moves);
-        long stamp = cfg.lastModified();
-        write(cfg, "full_dx=-120\nsmall_dx=-120\n");
-        check(cfg.setLastModified(stamp), "restore coarse filesystem timestamp");
-        AltScreenPlacement.poll();
-        check(t.last().equals("3@-120,26"), "same-size same-timestamp save must apply");
+        check(t.last().equals("3@-445,26") && cfg.isFile(),"legacy shift must not stack or be deleted");
+        AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,false);
+        check(t.last().equals("3@0,26"),"card full View restores origin");
+        AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,true);
+        AltScreenPlacement.setPhoneProfile(0);
+        check(t.last().equals("3@-476,26"),"replacement map profile uses stock offset");
+        AltScreenPlacement.setPhoneProfile(-1);
+        check(t.last().equals("3@0,26"),"lost profile restores origin");
+        int before=t.moves.size();
+        AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,true);
+        check(t.moves.size()==before,"map callback cannot reclaim unknown profile");
+        AltScreenPlacement.setPhoneProfile(1);
         AltScreenPlacement.setActive(false);
         check(t.last().equals("3@0,26"), "inactive restores position: " + t.moves);
         before = t.moves.size();
@@ -98,6 +92,6 @@ public final class AltScreenPlacementTest implements InvocationHandler {
         check(t.moves.size() == before, "inactive must not reclaim video plane");
         cfg.delete();
 
-        System.out.println("AltScreenPlacementTest: PASS (classic untouched, Sport small-stage -476, GEM shift live, bad config ignored)");
+        System.out.println("AltScreenPlacementTest: PASS (map -476, card -445, no double legacy offset, release and unknown-profile gates)");
     }
 }

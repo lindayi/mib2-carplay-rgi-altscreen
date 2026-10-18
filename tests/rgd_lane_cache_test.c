@@ -62,19 +62,37 @@ int main(void) {
     assert(rgd_lane_slot_for_iap_index(2, false) >= 0);
     assert(rgd_lane_slot_for_iap_index(3, false) >= 0);
     assert(published_lanes == 2);
+    rgd_update_t current;
+    memset(&current, 0, sizeof(current));
+    current.present = RGD_UPD_LANE_INDEX;
+    current.lane_guidance_index = 3;
+    published_lanes = 0;
+    write_bus_update_partial(&current);
+    assert(rgd_lane_slot_for_iap_index(2, false) < 0);
+    assert(rgd_lane_slot_for_iap_index(3, false) >= 0);
+    assert(published_lanes == 1);
 
     rgd_maneuver_map_reset();
     for (int index = 100; index < 132; ++index)
         assert(rgd_lane_slot_for_iap_index((uint16_t)index, true) >= 0);
-    g_rgd.lane_slot_to_iap_idx[31] = 1;
     g_rgd.update_cache.present = RGD_UPD_LANE_INDEX;
     g_rgd.update_cache.lane_guidance_index = 110;
+    for (int n = 0; n < 5; ++n) assert(rgd_lane_slot_for_iap_index(100, false) == 0);
     assert(rgd_lane_slot_for_iap_index(132, true) == 0);
     assert(rgd_lane_slot_for_iap_index(110, false) >= 0);
-    /* With only a newer passed event left, retain older prefetched future lanes. */
-    g_rgd.update_cache.lane_guidance_index = 2;
-    assert(rgd_lane_slot_for_iap_index(133, true) == 31);
-    assert(rgd_lane_slot_for_iap_index(101, false) >= 0);
+    assert(rgd_lane_slot_for_iap_index(133, true) == 1);
+    assert(rgd_lane_slot_for_iap_index(101, false) < 0);
+    /* A reroute can precache a newly numbered window before activating it. */
+    for (int index = 0; index < 6; ++index)
+        assert(rgd_lane_slot_for_iap_index((uint16_t)index, true) >= 0);
+    for (int index = 0; index < 6; ++index)
+        assert(rgd_lane_slot_for_iap_index((uint16_t)index, false) >= 0);
+    assert(rgd_lane_slot_for_iap_index(110, false) >= 0);
+    current.lane_guidance_index = 3;
+    write_bus_update_partial(&current);
+    assert(rgd_lane_slot_for_iap_index(2, false) < 0);
+    assert(rgd_lane_slot_for_iap_index(3, false) >= 0);
+    assert(rgd_lane_slot_for_iap_index(5, false) >= 0);
     rgd_maneuver_map_reset();
     assert(rgd_lane_slot_for_iap_index(133, false) < 0);
     g_rgd.component_valid = true;
@@ -94,7 +112,7 @@ int main(void) {
     assert(g_rgd.sent_5200 && g_rgd.active && g_rgd.start_5200_attempts == 1);
     completion(completion_token, HOOK_OK);
     assert(g_rgd.start_5200_attempts == 1);
-    puts("RGI lane cache: separate IDs, future retention, active protection and route reset PASS");
+    puts("RGI lane cache: separate IDs, precache then activation, insertion-order eviction, active protection and reroute PASS");
     puts("RGI start: queued is not sent, failure retry and stale completion rejection PASS");
     return 0;
 }

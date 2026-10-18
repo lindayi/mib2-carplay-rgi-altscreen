@@ -62,6 +62,7 @@ public class BAPBridge {
         new BAPDistanceFormatter(new SilentLogChannel());
 
     private boolean initialized = false;
+    private boolean textOnly;
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
@@ -91,6 +92,7 @@ public class BAPBridge {
      * waiting for another iOS RGI delta. */
     private long lastEtaSeconds = -1L;
     private int lastDestinationTimeZoneMinutes = RouteGuidance.State.UNKNOWN_TIMEZONE;
+    private LowerBarKomo lowerBarKomo;
     private long lastTimeRemainingSeconds = -1L;
     private long lastTimeRemainingSampleSeconds = -1L;
     private int lastDistanceToDestinationM = -1;
@@ -98,6 +100,8 @@ public class BAPBridge {
     /* Approach mode controls only bargraph/blink timing. The real next-maneuver
      * descriptor remains visible at every distance. */
     private boolean inApproachZone = false;
+    private boolean showRealManeuver = true;
+    private boolean startupFramePending = true;
     /* Track the primary maneuver's slot identity so we know when iOS
      * actually swapped the head of the list vs. just reordered/extended it.
      * mVer changes when the C hook reassigns a slot to a new iAP2 index. */
@@ -423,7 +427,13 @@ public class BAPBridge {
      * ============================================================ */
 
     public boolean init(Object naviService) {
-        if (initialized) return true;
+        return init(naviService,false);
+    }
+    public boolean init(Object naviService,boolean lowerBarTextOnly) {
+        if (initialized) {
+            if(textOnly==lowerBarTextOnly)return true;
+            Log.e(TAG,"Route output mode cannot change on a live bridge");return false;
+        }
 
         try {
             if (!(naviService instanceof CombiBAPServiceNavi)) {
@@ -432,6 +442,7 @@ public class BAPBridge {
                 return false;
             }
             this.appConnectorNavi = (CombiBAPServiceNavi) naviService;
+            textOnly=lowerBarTextOnly;
 
             initialized = true;
             Log.i(TAG, "Initialized successfully (AppConnectorNavi only): " + naviService.getClass().getName());
@@ -522,6 +533,7 @@ public class BAPBridge {
      * Non-fatal - if this fails, native RG stream won't be blocked.
      */
     private void initClusterAccess() {
+        if(textOnly)return;
         try {
             Navigation navi = Navigation.getInstance();
             ClusterService cs = navi == null ? null : navi.getClusterService();
@@ -531,6 +543,7 @@ public class BAPBridge {
                 if (cs != csRef) forceClusterRouteInfoState(false);
                 forceGfxAvailable(false);
             }
+            if (this.csRef != cs) clearLowerBarKomo();
             this.csRef = cs;
             this.komoService = nextKomo;
             if (cs == null) {
@@ -603,6 +616,7 @@ public class BAPBridge {
      *  no CarPlay navigation would run with stock RG never blocked. */
     public boolean engageTakeover() {
         if (!initialized) return false;
+        if(textOnly)return true;
         try {
             takeoverEngaged = true;
             initClusterAccess();
@@ -623,6 +637,7 @@ public class BAPBridge {
 
     /** REPLACE: on disconnect, reopen the native RG gate so stock nav works normally again. */
     public void disengageTakeover() {
+        if(textOnly)return;
         try {
             takeoverEngaged = false;
             /* Last chance to hand the container back its DSI value: onShutdown may never have
@@ -649,6 +664,8 @@ public class BAPBridge {
             bapSessionStarted = false;
             clearPositionScroll();
             inApproachZone = false;
+            showRealManeuver = true;
+            startupFramePending = true;
             latchedPositionText = "";
             routeTextPublished = false;
             infoPhase = com.luka.carplay.settings.Preferences.get().snapshot()
@@ -667,6 +684,15 @@ public class BAPBridge {
                 lastDistM = 0;
                 lastBarOn = false;
                 lastBar = 0;
+            }
+            if(textOnly) {
+                com.luka.carplay.core.ScreenNavStatusGate.setCurrentPositionInfoBlocked(true,true);
+                if(!com.luka.carplay.core.ScreenNavStatusGate.isCurrentPositionInfoBlocked(true))return false;
+                appConnectorNavi.updateTurnToInfo("","");
+                appConnectorNavi.updateCurrentPositionInfo(ROUTE_TEXT_PENDING);
+                bapSessionStarted=true;
+                Log.i(TAG,"Started lower-bar text only; renderer and native route state unchanged");
+                return true;
             }
             /* Action blink thread starts/stops with approach zone enter/exit
              * (see update() near approachChanged) — not on session start.
@@ -761,6 +787,7 @@ public class BAPBridge {
      * shut; engageTakeover/disengageTakeover own that independently. */
     private void rollbackFailedStart() {
         clearPositionScroll();
+        if(textOnly){clearLowerBar();return;}
         try { appConnectorNavi.updateRGStatus(0); } catch (Throwable t) { }
         try { appConnectorNavi.updateActiveRGType(0); } catch (Throwable t) { }
         try { sendNoSymbol(); } catch (Throwable t) { }
@@ -776,6 +803,7 @@ public class BAPBridge {
         forceGfxAvailable(false);
         bapSessionStarted = false;
         rendererPrimed = false;
+        rendererBinding = 0;
         crConsecutiveSendFailures = 0;
         /* Release FctIDs 19/20 only after our cleanup transaction has completed,
          * so stock cannot overwrite route text in the middle of rollback. */
@@ -817,6 +845,7 @@ public class BAPBridge {
     public void onRouteEnd() { shutdown(true); }
 
     private void shutdown(boolean preserveSurface) {
+        clearLowerBarKomo();
         if (!initialized) return;
 
         try {
@@ -835,6 +864,7 @@ public class BAPBridge {
             lastTimeRemainingSampleSeconds = -1L;
             lastDistanceToDestinationM = -1;
 
+            if(textOnly){clearLowerBar();return;}
             /*
              * Guidance stop — full BAP teardown:
              * 1. RGStatus(0) - triggers sync(0) for {17,39,23,18,49}
@@ -874,6 +904,7 @@ public class BAPBridge {
                 rendererClient = null;
             }
             rendererPrimed = false;
+            rendererBinding = 0;
             /* REPLACE: keep the native RG gate SHUT for the whole connected session.
              * This path also runs when navigation ends within a session, so without
              * this guard the gate would reopen mid-session and stock nav RG could reappear on
@@ -899,11 +930,13 @@ public class BAPBridge {
 
     public boolean update(RouteGuidance.State s) {
         if (!initialized || s == null) return false;
+        if(textOnly)return updateLowerBarOnly(s);
 
         int failureSerial = rendererSendFailureSerial;
         int dirty = s.dirtyMask;
         cacheTravelInfo(s, dirty);
         if (dirty == 0) return false;
+        updateLowerBarKomo(s, dirty);
         int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
             | RouteGuidance.State.DIRTY_MANEUVER_LIST
             | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
@@ -926,7 +959,7 @@ public class BAPBridge {
             int distM = s.distManeuverM;
             int[] idxs = getManeuverIndexList(s);
             boolean hasManeuverList = (idxs != null && idxs.length > 0);
-            boolean hasAnyManeuver = (s.maneuverCount > 0);
+            boolean hasAnyManeuver = hasManeuverList || (s.maneuverCount > 0);
             boolean shouldClearManeuver = (s.maneuverCount == 0) && (s.routeState <= 0);
 
             int firstIdx = primaryManeuverIndex(s);
@@ -951,6 +984,9 @@ public class BAPBridge {
                 isHighway = (type0 >= 0) && ManeuverMapper.isHighwayManeuver(type0);
             }
             int prepareThreshold  = isHighway ? HIGHWAY_PREPARE_THRESHOLD_M : CITY_PREPARE_THRESHOLD_M;
+            boolean alwaysReal=com.luka.carplay.settings.Preferences.get().snapshot()
+                .get(com.luka.carplay.settings.Setting.ARROW_POLICY)==0;
+            if(!alwaysReal)prepareThreshold=ManeuverDistancePolicy.threshold(rawStepM,isHighway);
             int bargraphDenominatorM = getBargraphDenominatorM(s, firstIdx, prepareThreshold);
             updateActionBlinkContext(
                 hasManeuverList && showManeuver && (bargraphDenominatorM > 0) && !shouldClearManeuver && !explicitClear,
@@ -986,8 +1022,14 @@ public class BAPBridge {
                 || type0 == ManeuverMapper.MT_ARRIVE_END_OF_DIRECTIONS
                 || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_LEFT
                 || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT);
-            boolean nowApproach = isArrival
-                || (hasUsableDistance ? (distM <= prepareThreshold) : inApproachZone);
+            boolean nowApproach = ManeuverDistancePolicy.showReal(distM,prepareThreshold,isArrival,false,inApproachZone);
+            boolean realNow=alwaysReal || (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver
+                && ManeuverDistancePolicy.showReal(distM,prepareThreshold,isArrival,
+                    distM==0 && startupFramePending && s.routeState>0,
+                    primaryChanged?nowApproach:showRealManeuver));
+            if(realNow!=showRealManeuver) {
+                showRealManeuver=realNow;dirty|=crIconMask;rendererManeuverPending=true;
+            }
             boolean approachChanged = hasUsableDistance
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
@@ -1025,9 +1067,8 @@ public class BAPBridge {
                     descriptorSent = true;
                 } else if (hasManeuverList) {
                     if (showManeuver) {
-                        /* Always expose the real next maneuver. Distance affects
-                         * only bargraph/action timing, never icon selection. */
-                        sendManeuvers(s);
+                        if(showRealManeuver)sendManeuvers(s);
+                        else sendFollowStreet();
                         descriptorSent = true;
                     } else if (shouldClearManeuver) {
                         sendNoSymbol();
@@ -1101,21 +1142,7 @@ public class BAPBridge {
              * Phase 0: angle-quoted exit/signpost, else next road, else current road.
              * Phase 1: compact ETA duration in smallscreen, arrival + duration
              * in fullscreen. FctID 20 stays empty in both phases. */
-            int routeTextDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
-                | RouteGuidance.State.DIRTY_MANEUVER_TEXT
-                | RouteGuidance.State.DIRTY_MANEUVER_LIST
-                | RouteGuidance.State.DIRTY_MANEUVER_ICON
-                | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
-            if (infoPhase != 0) {
-                routeTextDirty |= RouteGuidance.State.DIRTY_DIST_DEST
-                    | RouteGuidance.State.DIRTY_TIME_REMAINING
-                    | RouteGuidance.State.DIRTY_ETA
-                    | RouteGuidance.State.DIRTY_DEST_TIMEZONE;
-            }
-            if (!routeTextPublished || (dirty & routeTextDirty) != 0) {
-                updateLatchedRouteText(s);
-                publishRouteTextForMode();
-            }
+            publishRouteInfoText(s,dirty);
 
             /*
              * 5. Maneuver state (FctID 55) - for HUD
@@ -1130,7 +1157,8 @@ public class BAPBridge {
                 } else if (shouldClearManeuver || (hasManeuverList && showManeuver)) {
                     int bapState;
                     if (showManeuver) {
-                        if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
+                        if(!showRealManeuver)bapState=1;
+                        else if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
                             bapState = 4;   /* Action */
                         } else {
                             bapState = 2;   /* Prepare */
@@ -1248,8 +1276,34 @@ public class BAPBridge {
      *  - the current TCP peer acknowledged at least one eglSwapBuffers frame.
      */
     public boolean isPresentationReady() {
+        if(textOnly)return bapSessionStarted;
         RendererServer r = rendererClient;
         return bapSessionStarted && customRendererStarted && r != null && r.isFrameReady();
+    }
+    public boolean isTextOnly(){return textOnly;}
+
+    private boolean updateLowerBarOnly(RouteGuidance.State s) {
+        cacheTravelInfo(s,s.dirtyMask);
+        if(s.dirtyMask==0)return false;
+        try {publishRouteInfoText(s,s.dirtyMask);return true;}
+        catch(Throwable t){Log.e(TAG,"Lower-bar update failed",t);return false;}
+    }
+    private void publishRouteInfoText(RouteGuidance.State s,int dirty) {
+        int mask=RouteGuidance.State.DIRTY_CURRENT_ROAD|RouteGuidance.State.DIRTY_MANEUVER_TEXT
+            |RouteGuidance.State.DIRTY_MANEUVER_LIST|RouteGuidance.State.DIRTY_MANEUVER_ICON
+            |RouteGuidance.State.DIRTY_MANEUVER_COUNT|RouteGuidance.State.DIRTY_DIST_DEST
+            |RouteGuidance.State.DIRTY_TIME_REMAINING|RouteGuidance.State.DIRTY_ETA
+            |RouteGuidance.State.DIRTY_DEST_TIMEZONE;
+        if(!routeTextPublished || (dirty&mask)!=0) {
+            updateLatchedRouteText(s);publishRouteTextForMode();
+        }
+    }
+    private void clearLowerBar() {
+        try {appConnectorNavi.updateTurnToInfo("","");}
+        catch(Throwable t){Log.w(TAG,"Lower-bar turn-text clear failed: "+t);}
+        try {appConnectorNavi.updateCurrentPositionInfo("");}
+        catch(Throwable t){Log.w(TAG,"Lower-bar position clear failed: "+t);}
+        finally {com.luka.carplay.core.ScreenNavStatusGate.setCurrentPositionInfoBlocked(false);}
     }
 
     /**
@@ -1265,7 +1319,7 @@ public class BAPBridge {
             cacheTravelInfo(s, s.dirtyMask);
             updateLatchedRouteText(s);
             publishRouteTextForMode();
-            publishTimeToDestinationForMode();
+            if(!textOnly)publishTimeToDestinationForMode();
             Log.i(TAG, "route-info phase=" + infoPhase + " applied view="
                 + (com.luka.carplay.core.ScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
             return true;
@@ -1307,6 +1361,7 @@ public class BAPBridge {
     private void publishRouteTextForMode() {
         boolean smallScreen = com.luka.carplay.core.ScreenModule.isSmallScreenViewArea();
         String text = infoPhase == 0 ? "" : (smallScreen ? buildShortSummary() : buildTripSummary());
+        boolean suppliedArrival=text.length()>0 && (!smallScreen || currentRemainingSeconds()<0L);
         String before = "", after = "";
         if (text.length() == 0) {
             text = latchedPositionText;
@@ -1317,6 +1372,12 @@ public class BAPBridge {
             text = text.substring(before.length());
         }
         if (text.length() == 0) text = ROUTE_TEXT_PENDING;
+        suppliedArrival |= containsArrivalClock(text);
+        text=normalizeEtaLabel(text);
+        if(!suppliedArrival) {
+            String clock=formatArrivalForText(currentArrivalSeconds());
+            if(clock.length()>0)after+=" | "+clock.substring(ROUTE_TIME_PREFIX.length());
+        }
         boolean changed = positionScroll.configure(text, before, after, positionRestart);
         positionScrollChanged |= changed;
         positionRestart = false;
@@ -1338,6 +1399,56 @@ public class BAPBridge {
         positionScroll.sent(System.currentTimeMillis());
         positionSendFailed = false;
         routeTextPublished = true;
+    }
+
+    private static boolean containsArrivalClock(String text) {
+        String[] labels={"ETA","\u5230\u8fbe\u65f6\u95f4","\u9884\u8ba1\u5230\u8fbe","\u9884\u8ba1\u62b5\u8fbe","|"};
+        for(int label=0;label<labels.length;label++) {
+            for(int at=0;at<text.length();at++) {
+                if(!text.regionMatches(true,at,labels[label],0,labels[label].length()))continue;
+                if(label==0 && at>0 && isAsciiLetter(text.charAt(at-1)))continue;
+                if(arrivalClockStart(text,at+labels[label].length())>=0)return true;
+            }
+        }
+        return false;
+    }
+    private static boolean isAsciiLetter(char c) {
+        return (c>='A' && c<='Z') || (c>='a' && c<='z');
+    }
+    private static int arrivalClockStart(String text,int pos) {
+        while(pos<text.length() && (text.charAt(pos)==' ' || text.charAt(pos)==':' || text.charAt(pos)=='\uff1a'))pos++;
+        int clock=pos,hour=0,count=0;
+        while(pos<text.length() && count<2 && text.charAt(pos)>='0' && text.charAt(pos)<='9') {
+            hour=hour*10+text.charAt(pos++)-'0';count++;
+        }
+        if(count==0 || hour>23 || pos+2>=text.length())return -1;
+        char colon=text.charAt(pos++),m1=text.charAt(pos++),m2=text.charAt(pos++);
+        return (colon==':' || colon=='\uff1a') && m1>='0' && m1<='5' && m2>='0' && m2<='9'
+            && (pos==text.length() || text.charAt(pos)<'0' || text.charAt(pos)>'9')?clock:-1;
+    }
+    /** Upstream compact phone ETA labels; never strip ETA from an ordinary road name. */
+    private static String normalizeEtaLabel(String text) {
+        String[] labels={"\u9884\u8ba1\u5230\u8fbe\u65f6\u95f4","\u9884\u8ba1\u62b5\u8fbe\u65f6\u95f4",
+            "\u5230\u8fbe\u65f6\u95f4","\u9884\u8ba1\u5230\u8fbe","\u9884\u8ba1\u62b5\u8fbe","ETA"};
+        StringBuffer result=null;int from=0;
+        for(int i=0;i<text.length();i++) {
+            int label=-1;
+            for(int k=0;k<labels.length;k++) {
+                if(text.regionMatches(true,i,labels[k],0,labels[k].length())){label=k;break;}
+            }
+            if(label<0 || (label==labels.length-1 && i>0 && isAsciiLetter(text.charAt(i-1))))continue;
+            int clock=arrivalClockStart(text,i+labels[label].length());
+            if(clock<0)continue;
+            if(result==null)result=new StringBuffer();
+            int end=i;
+            while(end>from && text.charAt(end-1)==' ')end--;
+            if(end>from && text.charAt(end-1)=='|') {
+                end--;while(end>from && text.charAt(end-1)==' ')end--;
+            }
+            result.append(text.substring(from,end)).append(end>from?" | ":"| ");
+            from=clock;i=clock-1;
+        }
+        return result==null?text:result.append(text.substring(from)).toString();
     }
 
     private void clearPositionScroll() {
@@ -1474,6 +1585,27 @@ public class BAPBridge {
             ? utcMs + offset * 60000L : convertUtcToLocalMs(utcMs);
     }
 
+    private void updateLowerBarKomo(RouteGuidance.State state, int dirty) {
+        if (csRef == null || !bapSessionStarted) return;
+        if (lowerBarKomo == null || !lowerBarKomo.targets(csRef)) {
+            clearLowerBarKomo();
+            lowerBarKomo = new LowerBarKomo(csRef);
+            dirty |= RouteGuidance.State.DIRTY_CURRENT_ROAD | RouteGuidance.State.DIRTY_DIST_DEST
+                | RouteGuidance.State.DIRTY_ETA;
+        }
+        long utc = currentArrivalSeconds();
+        long arrival = utc < 0L ? -1L : arrivalWallClockMs(utc * 1000L);
+        boolean offset = utc >= 0L && arrival != convertUtcToLocalMs(utc * 1000L);
+        lowerBarKomo.update(dirty, state.currentRoad, state.distDestM, arrival, offset);
+    }
+
+    private void clearLowerBarKomo() {
+        if (lowerBarKomo != null) {
+            lowerBarKomo.clear();
+            lowerBarKomo = null;
+        }
+    }
+
     private String formatArrivalForText(long utcSeconds) {
         if (utcSeconds < 0L) return "";
         long utcMs = utcSeconds * 1000L;
@@ -1518,7 +1650,7 @@ public class BAPBridge {
 
     /** Advance the renderer handshake without waiting. Called by the presentation worker. */
     public boolean preparePresentation() {
-        startCustomRenderer();
+        if(!textOnly)startCustomRenderer();
         return isPresentationReady();
     }
 
@@ -1577,20 +1709,18 @@ public class BAPBridge {
 
     private static LaneGuidanceSnapshot rendererLaneGuidance(RouteGuidance.State s, boolean showing) {
         if (!showing) return LaneGuidanceSnapshot.HIDDEN;
-        int slot = resolveLaneGuidanceManeuverIndex(s); // Same selection as HUD.
-        boolean complete = slot >= 0 && slot < s.lgLaneComplete.length
-            && lgSlotMatches(s, slot, s.laneGuidanceIndex) && s.lgLaneComplete[slot] == 1;
+        int slot = activeLaneSlot(s); // Same selection as HUD.
+        boolean complete = slot >= 0 && slot < s.lgLaneComplete.length && s.lgLaneComplete[slot] == 1;
         return LaneGuidanceSnapshot.copy(s.laneGuidanceIndex, true, complete,
-            laneCountForManeuver(s, slot), lanePositionsFor(s, slot), laneDirectionsFor(s, slot),
+            laneCacheCountForSlot(s, slot), lanePositionsFor(s, slot), laneDirectionsFor(s, slot),
             laneStatusFor(s, slot), laneAnglesFor(s, slot));
     }
 
     private void sendLaneGuidance(RouteGuidance.State s) throws Exception {
-        int idx = resolveLaneGuidanceManeuverIndex(s);
-        int count = laneCountForManeuver(s, idx);
-        boolean hasRealData = hasLaneGuidanceForManeuver(s, idx);
+        int idx = activeLaneSlot(s);
+        int count = laneCacheCountForSlot(s, idx);
 
-        if (hasRealData) {
+        if (count > 0) {
             sendRealLaneGuidance(s, idx, count);
         } else {
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
@@ -1629,39 +1759,9 @@ public class BAPBridge {
         appConnectorNavi.updateLaneGuidance(true, arr);
     }
 
-    private static boolean hasLaneGuidanceForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return false;
-        if (hasLaneCacheForSlot(s, manIdx)) return true;
-        if (s.mLaneDirections == null || manIdx >= s.mLaneDirections.length) return false;
-        if (s.mLaneDirections[manIdx] == null) return false;
-        return laneCountForManeuver(s, manIdx) > 0;
-    }
-
     private static boolean hasLaneCacheForSlot(RouteGuidance.State s, int slot) {
         if (slot < 0) return false;
         return laneCacheCountForSlot(s, slot) > 0;
-    }
-
-    /* Verify lg-cache slot's stored event id still matches the active idx.
-     * Needed because lg cache slots are LRU-allocated independently of
-     * maneuver slot numbers, so a slot can be remapped to a different
-     * event after eviction. */
-    private static boolean lgSlotMatches(RouteGuidance.State s, int slot, int idx) {
-        if (slot < 0 || s.lgIndex == null || slot >= s.lgIndex.length) return false;
-        return s.lgIndex[slot] == idx;
-    }
-
-    /* m-cache-only check (skips lg-cache).  Used in legacy fallback paths
-     * where we need m-cache data without aliasing into lg-cache that
-     * happens to occupy the same numeric slot. */
-    private static boolean hasMCacheLaneForSlot(RouteGuidance.State s, int slot) {
-        if (slot < 0) return false;
-        if (s.mLaneDirections == null || slot >= s.mLaneDirections.length) return false;
-        if (s.mLaneDirections[slot] == null) return false;
-        int count = -1;
-        if (s.mLaneCount != null && slot < s.mLaneCount.length) count = s.mLaneCount[slot];
-        if (count < 0) count = s.mLaneDirections[slot].length;
-        return count > 0;
     }
 
     private static int laneCacheCountForSlot(RouteGuidance.State s, int slot) {
@@ -1692,152 +1792,31 @@ public class BAPBridge {
         return -1;
     }
 
-    /* Slot ids are shared by the legacy m-cache fallback and the lg-cache
-     * arrays.  Keep both caches in the same bounded numeric slot range. */
+    /* lg cache slots (C rgd_lane_slot_for_iap_index), never maneuver slots. */
     private static int[] lanePositionsFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLanePositions != null && slot < s.lgLanePositions.length)
-            return s.lgLanePositions[slot];
-        if (s.mLanePositions != null && slot >= 0 && slot < s.mLanePositions.length)
-            return s.mLanePositions[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLanePositions[slot] : null;
     }
 
     private static int[] laneDirectionsFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneDirections != null && slot < s.lgLaneDirections.length)
-            return s.lgLaneDirections[slot];
-        if (s.mLaneDirections != null && slot >= 0 && slot < s.mLaneDirections.length)
-            return s.mLaneDirections[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneDirections[slot] : null;
     }
 
     private static int[] laneStatusFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneStatus != null && slot < s.lgLaneStatus.length)
-            return s.lgLaneStatus[slot];
-        if (s.mLaneStatus != null && slot >= 0 && slot < s.mLaneStatus.length)
-            return s.mLaneStatus[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneStatus[slot] : null;
     }
 
     private static int[][] laneAnglesFor(RouteGuidance.State s, int slot) {
-        if (hasLaneCacheForSlot(s, slot) && s.lgLaneAngles != null && slot < s.lgLaneAngles.length)
-            return s.lgLaneAngles[slot];
-        if (s.mLaneAngles != null && slot >= 0 && slot < s.mLaneAngles.length)
-            return s.mLaneAngles[slot];
-        return null;
+        return hasLaneCacheForSlot(s, slot) ? s.lgLaneAngles[slot] : null;
     }
 
-    private static int laneCountForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return 0;
-        if (hasLaneCacheForSlot(s, manIdx)) {
-            return laneCacheCountForSlot(s, manIdx);
-        }
-        int count = 0;
-        if (s.mLaneCount != null && manIdx < s.mLaneCount.length) {
-            count = s.mLaneCount[manIdx];
-            if (count >= 0) return count;
-        }
-        if (count <= 0 && s.mLaneDirections != null && manIdx < s.mLaneDirections.length
-            && s.mLaneDirections[manIdx] != null) {
-            count = s.mLaneDirections[manIdx].length;
-        }
-        if (count <= 0 && s.mLaneStatus != null && manIdx < s.mLaneStatus.length
-            && s.mLaneStatus[manIdx] != null) {
-            count = s.mLaneStatus[manIdx].length;
-        }
-        if (count < 0) count = 0;
-        return count;
-    }
-
-    private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
-        /*
-         * iOS exposes the currently displayed lane guidance as a top-level
-         * currentLaneGuidanceIndex (0x5201 InfoType 16 — written by Maps.app
-         * in setCurrentLaneGuidanceIndex: from CarMetadataNavigationListener
-         * each location update).  0x5204's TLV1 is iOS's
-         * composedGuidanceEventIndex — an EVENT IDENTIFIER, sent for every
-         * cached event including future precache.  So the active is purely
-         * 0x5201, and we must look up the lg-cache slot whose stored event
-         * id matches the active.
-         *
-         * lg cache slot indices are NOT the same numeric space as maneuver
-         * slot indices: in C, rgd_lane_slot_for_iap_index() maintains an
-         * independent LRU.  After eviction, lg slot N may hold any cached
-         * event id, not necessarily event N — which means resolving by
-         * "primary maneuver slot" via lg-cache silently sends data for
-         * the wrong event.  Validate s.lgIndex[slot] == active before
-         * trusting any lg-cache slot.
-         */
-
-        int activeIdx = s.laneGuidanceIndex;
-        if (activeIdx < 0) return -1;
-
-        if (s.laneGuidanceSlot >= 0 && hasLaneCacheForSlot(s, s.laneGuidanceSlot)
-            && lgSlotMatches(s, s.laneGuidanceSlot, activeIdx)) {
-            return s.laneGuidanceSlot;
-        }
-
-        int byIndex = laneSlotForGuidanceIndex(s, activeIdx);
-        if (byIndex >= 0) return byIndex;
-
-        /*
-         * Linked-lane fallback: C publishes mN_linked_lane_guidance_slot
-         * pointing at a real lg-cache slot (not a maneuver slot), so it's
-         * safe to consult directly.  Only use it when its stored event id
-         * still matches the active (the linked field can outlive a cache
-         * remap of its target).
-         */
-        int primary = getFirstManeuverIndex(s);
-        int linked = linkedLaneSlotForManeuver(s, primary);
-        if (linked >= 0 && hasLaneCacheForSlot(s, linked)
-            && lgSlotMatches(s, linked, activeIdx)) {
-            return linked;
-        }
-
-        /*
-         * Legacy m-cache fallback for compatibility with pre-lg-split
-         * hooks (which wrote lane data into mN_lane_*).  Skip if the
-         * primary slot has any lg-cache data — that lg entry could be
-         * unrelated event data (post-eviction) and m-cache lookup with
-         * the same numeric slot would alias into it.
-         */
-        // Once the independent lg cache is present, a missing/empty active
-        // event must stay empty. Never substitute a maneuver's old lane data.
-        if (s.laneGuidanceSlot >= 0) return -1;
-        if (s.lgIndex != null) for (int i = 0; i < s.lgIndex.length; i++) {
-            if (s.lgIndex[i] >= 0) return -1;
-        }
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-        if (activeIdx < max && hasMCacheLaneForSlot(s, activeIdx)
-            && !hasLaneCacheForSlot(s, activeIdx)) {
-            return activeIdx;
-        }
-        if (primary >= 0 && s.mLinkedLaneGuidanceIndex != null
-            && primary < s.mLinkedLaneGuidanceIndex.length
-            && s.mLinkedLaneGuidanceIndex[primary] == activeIdx
-            && hasMCacheLaneForSlot(s, primary)
-            && !hasLaneCacheForSlot(s, primary)) {
-            return primary;
-        }
-
-        return -1;
-    }
-
-
-
-    private static int linkedLaneSlotForManeuver(RouteGuidance.State s, int manIdx) {
-        if (manIdx < 0) return -1;
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-
-        if (s.mLinkedLaneGuidanceSlot != null && manIdx < s.mLinkedLaneGuidanceSlot.length) {
-            int slot = s.mLinkedLaneGuidanceSlot[manIdx];
-            if (slot >= 0 && slot < max) return slot;
-        }
-
-        if (s.mLinkedLaneGuidanceIndex != null && manIdx < s.mLinkedLaneGuidanceIndex.length) {
-            int linkedIdx = s.mLinkedLaneGuidanceIndex[manIdx];
-            if (linkedIdx >= 0 && linkedIdx < max) return linkedIdx;
-        }
-        return -1;
+    /*
+     * The active lane event is purely 0x5201's currentLaneGuidanceIndex; 0x5204
+     * events are iOS's precached window (CarKitNavigation sendLaneGuidances).
+     * Its lg-cache slot is the one whose stored event id matches; a missing or
+     * empty active event stays empty.
+     */
+    private static int activeLaneSlot(RouteGuidance.State s) {
+        return laneSlotForGuidanceIndex(s, s.laneGuidanceIndex);
     }
 
     private static short mapLanePosition(RouteGuidance.State s, int manIdx, int laneIdx) {
@@ -2009,6 +1988,8 @@ public class BAPBridge {
 
     private volatile boolean customRendererStarted = false;
     private boolean rendererPrimed = false;
+    private int rendererPeerGeneration = -1;
+    private int rendererBinding;
 
     /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change.
      * lastCrVer tracks the slot version so a new maneuver with identical type/angle
@@ -2053,6 +2034,13 @@ public class BAPBridge {
                 Log.w(TAG, "CR: bind failed; renderer pipeline disabled");
                 return false;
             }
+            int peer = rendererClient.connectionGeneration();
+            if (rendererPeerGeneration != peer) {
+                rendererPeerGeneration = peer;
+                customRendererStarted = false;
+                rendererPrimed = false;
+                rendererBinding = 0;
+            }
 
             /* If the current peer vanished/reconnected, withdraw the old presentation before
              * priming the replacement. All calls remain on RouteGuidance's worker/update path. */
@@ -2060,6 +2048,7 @@ public class BAPBridge {
                 forceGfxAvailable(false);
                 customRendererStarted = false;
                 rendererPrimed = false;
+                rendererBinding = 0;
                 notifyPresentationStateChanged("renderer-presentation-lost");
             }
             if (customRendererStarted) return true;
@@ -2084,6 +2073,10 @@ public class BAPBridge {
                 if (!sent) return false;
             }
             if (!rendererClient.isFrameReady()) return false;
+            if (!bapSessionStarted) return false;
+            if (rendererBinding == 0)
+                rendererBinding = com.luka.carplay.core.ScreenModule.requestRendererBinding();
+            if (!com.luka.carplay.core.ScreenModule.isRendererBindingApplied(rendererBinding)) return false;
 
             /* BAP route info state for HUD icons.  onStart() also forces this,
              * but renderer respawn can happen mid-route without onStart(). */
@@ -2131,6 +2124,7 @@ public class BAPBridge {
         try { if (rendererClient != null) rendererClient.disconnectClient(); } catch (Throwable t) { /* ignore */ }
         customRendererStarted = false;
         rendererPrimed = false;
+        rendererBinding = 0;
         crConsecutiveSendFailures = 0;
         notifyPresentationStateChanged("renderer-send-failures");
     }
@@ -2148,6 +2142,7 @@ public class BAPBridge {
             forceGfxAvailable(false);
             customRendererStarted = false;
             rendererPrimed = false;
+            rendererBinding = 0;
             Log.i(TAG, "CR: stopped (preserveSurface=" + preserveSurface + ")");
         } catch (Throwable t) {
             Log.w(TAG, "CR stop failed: " + t.getClass().getName() + ": " + t.getMessage());
@@ -2169,9 +2164,9 @@ public class BAPBridge {
 
         try {
             int firstIdx = primaryManeuverIndex(s);
-            if (firstIdx < 0 || s.maneuverCount == 0) return false;
+            if (firstIdx < 0) return false;
             int[] bap = mapManeuver(s, firstIdx);
-            RendererMapper.Mapping mapped = RendererMapper.map(bap[0], bap[1],
+            RendererMapper.Mapping mapped = ManeuverDistancePolicy.map(showRealManeuver,bap,
                 s.mDrivingSide[firstIdx], s.mType[firstIdx], s.mTurnAngle[firstIdx],
                 anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
             int icon = mapped.icon;
@@ -2229,6 +2224,7 @@ public class BAPBridge {
                 progressState);
             // Failed enqueue must remain eligible for retry with the same input.
             if (ok) {
+                startupFramePending=false;
                 if (!roadsOnly) lastCrDistanceLabel = lastCrRoadLabel = null;
                 lastCrIcon = icon;
                 lastCrDirection = direction;
@@ -2301,7 +2297,7 @@ public class BAPBridge {
         if (rendererClient == null || !customRendererStarted) return;
         int idx = primaryManeuverIndex(s);
         String distance = "", road = "";
-        if (!rendererManeuverPending && s.routeState > 0 && s.maneuverCount > 0 && idx >= 0
+        if (!rendererManeuverPending && s.routeState > 0 && idx >= 0
                 && idx == lastCrIdx && s.routeGeneration == lastCrRouteGeneration) {
             FormattedDistance fd = formatDistanceToTurn(s.distManeuverM);
             distance = RouteLabels.distance(fd.value, fd.unit);

@@ -204,9 +204,55 @@ public final class CarplayBusTransportTest {
         check(art[0] == 9, "held frame not delivered once dispatchLock was free");
     }
 
+    private static void elapsedClock() throws Exception {
+        Class type=com.luka.carplay.framework.ElapsedClock.class;
+        Field wall=type.getDeclaredField("wall"),elapsed=type.getDeclaredField("elapsed");
+        wall.setAccessible(true);elapsed.setAccessible(true);
+        Method advance=type.getDeclaredMethod("advance",Long.TYPE);advance.setAccessible(true);
+        long savedWall=wall.getLong(null),savedElapsed=elapsed.getLong(null);
+        try {
+            wall.setLong(null,1000L);elapsed.setLong(null,5000L);
+            check(((Long)advance.invoke(null,1100L)).longValue()==5100L,"positive local elapsed delta");
+            check(((Long)advance.invoke(null,100L)).longValue()==5100L,"backward wall jump reduced elapsed clock");
+            check(((Long)advance.invoke(null,200L)).longValue()==5200L,"clock waited for old wall time to catch up");
+            check(((Long)advance.invoke(null,20200L)).longValue()==25200L,"forward wall jump was falsely hidden");
+        } finally {
+            wall.setLong(null,savedWall);elapsed.setLong(null,savedElapsed);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
-        malformedLists(); realWireAndRestart(); delayedOldRead(); lateListenerGetsSticky();
+        elapsedClock(); malformedLists(); workerRecovery(); realWireAndRestart(); delayedOldRead(); lateListenerGetsSticky();
         System.out.println("CarplayBusTransportTest: malformed lists, 30 restarts, fragmented wire, stale bind/read, outbound bounds and late sticky listener PASS");
+    }
+    private static void workerRecovery() throws Exception {
+        ServerSocket blocker=new ServerSocket(0,1,java.net.InetAddress.getByName("127.0.0.1"));
+        CarplayBus bus=new CarplayBus(blocker.getLocalPort());
+        try {
+            bus.start();Thread.sleep(260);
+            check((Boolean)get(bus,"running") && get(bus,"serverSocket")==null,"occupied port disabled bus");
+            blocker.close();
+            check(port(bus)>0,"bind did not recover without another start");
+            ServerSocket old=(ServerSocket)get(bus,"serverSocket");
+            Thread writer=(Thread)get(bus,"writerThread");
+            set(bus,"writerThread",new Thread());
+            bus.start();port(bus);
+            check(old.isClosed() && old!=get(bus,"serverSocket"),"dead writer retained listener");
+            writer.join(3000);check(!writer.isAlive(),"retired writer remained blocked");
+            synchronized(get(bus,"lock")) {
+                set(bus,"sock",new Socket());
+                set(bus,"out",new java.io.OutputStream() {
+                    public void write(int b){throw new AssertionError("injected worker failure");}
+                });
+            }
+            check(bus.sendBinary(CarplayBus.CMD_ALT_ZOOM,new byte[]{1}),"failure fixture enqueue");
+            long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);
+            while((Boolean)get(bus,"running") && System.nanoTime()<end)Thread.sleep(1);
+            synchronized(get(bus,"lock")) {
+                check(!(Boolean)get(bus,"running") && get(bus,"serverSocket")==null,"failed writer did not retire run");
+            }
+            bus.start();check(port(bus)>0,"failed run could not restart");
+        } finally {blocker.close();bus.stop();}
     }
 }

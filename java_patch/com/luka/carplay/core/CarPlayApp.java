@@ -85,9 +85,10 @@ public final class CarPlayApp {
         synchronized(lock) {
             if(guidanceEnabled==enabled)return;
             guidanceEnabled=enabled;
-            if(active){serviceChangeGeneration++;lifecycleGeneration++;lock.notifyAll();}
         }
+        requestRgdRebind("Guidance output changed");
     }
+    public static boolean isGuidanceEnabled(){synchronized(lock){return guidanceEnabled;}}
 
     /** Bring the transport up ALWAYS-ON, independent of any CarPlay session.
      *  Called from the patched TerminalModeBapCombi.init() (component start / boot),
@@ -151,11 +152,11 @@ public final class CarPlayApp {
     public static void onDeactivateAndWait() {
         synchronized(lock){phoneContext=null;}
         int generation = publishDeactivate();
-        long deadline = System.currentTimeMillis() + 3000L;
+        long deadline = com.luka.carplay.framework.ElapsedClock.nowMs() + 3000L;
         synchronized (lock) {
             while (lifecycleAppliedGeneration != generation
                     && lifecycleGeneration == generation) {
-                long remaining = deadline - System.currentTimeMillis();
+                long remaining = deadline - com.luka.carplay.framework.ElapsedClock.nowMs();
                 if (remaining <= 0L) {
                     Log.w(TAG, "deactivate cleanup timed out generation=" + generation);
                     break;
@@ -270,6 +271,7 @@ public final class CarPlayApp {
                 refreshRgd = wantActive && started[RGD_MODULE_INDEX];
             }
             ScreenNavStatusGate.retryPending(wantActive);
+            RGD_MODULE.retryCleanup();
             if (refreshRgd) RGD_MODULE.refreshServiceBindings();
         }
     }
@@ -298,9 +300,9 @@ public final class CarPlayApp {
                  * lands mid-teardown the session collapses.  Wait briefly; if a newer edge
                  * arrives (the re-activation), drop this stale inactive edge and coalesce to it. */
                 if (!maintenance && !wantActive) {
-                    long deadline = System.currentTimeMillis() + DEACTIVATE_DEBOUNCE_MS;
+                    long deadline = com.luka.carplay.framework.ElapsedClock.nowMs() + DEACTIVATE_DEBOUNCE_MS;
                     while (lifecycleGeneration == generation) {
-                        long remaining = deadline - System.currentTimeMillis();
+                        long remaining = deadline - com.luka.carplay.framework.ElapsedClock.nowMs();
                         if (remaining <= 0L) break;
                         try { lock.wait(remaining); }
                         catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
@@ -327,6 +329,9 @@ public final class CarPlayApp {
      * invokes this from NavigationJobs; the small worker keeps teardown/start outside that
      * dispatcher and coalesces rapid remove+add pairs. */
     public static void onNavigationServiceChanged() {
+        requestRgdRebind("Navigation service changed");
+    }
+    private static void requestRgdRebind(final String reason) {
         final int generation;
         final int activeLifecycleGeneration;
         final IContext activeContext;
@@ -350,7 +355,7 @@ public final class CarPlayApp {
                     try { MODULES[RGD_MODULE_INDEX].stop(); }
                     catch (Throwable x) { Log.w(TAG, "rgd rebind stop: " + x); }
                     synchronized (lock) { started[RGD_MODULE_INDEX] = false; }
-                    Log.i(TAG, "Navigation service changed - rebinding RGD");
+                    Log.i(TAG, reason+" - rebinding RGD");
                     if (!startPass(activeLifecycleGeneration)
                             && lifecycleCurrent(activeLifecycleGeneration, true,
                                                 activeContext)) {
@@ -386,7 +391,6 @@ public final class CarPlayApp {
                 if (!active || expectedLifecycleGeneration != lifecycleGeneration
                         || fwRef != fw) return false;
                 if (started[i]) continue;
-                if(i==RGD_MODULE_INDEX && !guidanceEnabled){started[i]=true;continue;}
             }
             boolean ok;
             try { ok = MODULES[i].start(fw); }

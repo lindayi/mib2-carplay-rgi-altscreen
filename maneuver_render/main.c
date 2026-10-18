@@ -27,6 +27,7 @@
 
 #include "platform.h"
 #include "route_labels.h"
+#include "frame_clock.h"
 
 #define TARGET_FPS     30
 #define FRAME_TIME_NS  (1000000000L / TARGET_FPS)
@@ -542,6 +543,7 @@ int main(int argc, char **argv) {
 
     int dirty = 1;
     int running = 1;
+    int exit_status = 0;
     int announced_first_frame = 0;
     g_render_loop_started = 1;
 
@@ -563,6 +565,16 @@ int main(int argc, char **argv) {
         watch_stage(WATCH_POLL);
         __sync_fetch_and_add(&g_loop_progress, 1);
         clock_gettime(CLOCK_MONOTONIC, &t_start);
+        static time_t last_log_check;
+        if(last_log_check!=t_start.tv_sec) {
+            last_log_check=t_start.tv_sec;
+            if(bound_private_output()<0) {
+                fprintf(stderr,"PRIVATE_LOG_ERROR errno=%d; stopping renderer to prevent unbounded output\n",errno);
+                exit_status=1;
+                running=0;
+                break;
+            }
+        }
 #ifdef CR_DIAG_FRAME_LOG
         stat_loop_iters++;
 #endif
@@ -1035,9 +1047,7 @@ int main(int argc, char **argv) {
         if (rendered_this_frame) {
             struct timespec t_end;
             clock_gettime(CLOCK_MONOTONIC, &t_end);
-            long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
-                            + (t_end.tv_nsec - t_start.tv_nsec);
-            long sleep_ns = FRAME_TIME_NS - elapsed_ns;
+            long long sleep_ns=frame_delay_ns(&t_start,&t_end,FRAME_TIME_NS);
             if (sleep_ns > 0) {
                 struct timespec ts = { sleep_ns / 1000000000L, sleep_ns % 1000000000L };
                 watch_stage(WATCH_SLEEP);
@@ -1053,9 +1063,7 @@ int main(int argc, char **argv) {
         if (rendered_this_frame && altscreen_video_up(&t_start)) {
             struct timespec t_end;
             clock_gettime(CLOCK_MONOTONIC, &t_end);
-            long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
-                            + (t_end.tv_nsec - t_start.tv_nsec);
-            long sleep_ns = ALTSCREEN_FRAME_TIME_NS - elapsed_ns;
+            long long sleep_ns=frame_delay_ns(&t_start,&t_end,ALTSCREEN_FRAME_TIME_NS);
             if (sleep_ns > 0) {
                 struct timespec ts = { sleep_ns / 1000000000L, sleep_ns % 1000000000L };
                 watch_stage(WATCH_SLEEP);
@@ -1107,5 +1115,5 @@ int main(int argc, char **argv) {
     g_renderer_running = 0;
 
     fprintf(stderr, "maneuver_render: exit\n");
-    return 0;
+    return exit_status;
 }

@@ -48,8 +48,8 @@ p(){ printf '%s%s\n' "$FIXED_ROOT" "$1"; }
 if [ "$TESTING" = 1 ]; then
     FIXED_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
     VOLUME=${ALTSCREEN_CHAIN_VOLUME:-}
-    case "$FIXED_ROOT" in /tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_ROOT" ;; esac
-    case "$VOLUME" in /tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_VOLUME" ;; esac
+    case "$FIXED_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_ROOT" ;; esac
+    case "$VOLUME" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) fail "invalid ALTSCREEN_CHAIN_VOLUME" ;; esac
 else
     action=${1:-}
     VOLUME=${ALTSCREEN_SD_VOLUME:-}
@@ -105,6 +105,7 @@ RUNTIME_PUBLISHED=0
 RUNTIME_HAD_CURRENT=0
 RUNTIME_SCRIPTS="altscreen_chain_test.sh altscreen_chain_test_known.sh altscreen_chain_test_universal.sh altscreen_persistent_diag.sh altscreen_adaptive_diag.sh altscreen_boot_diag.sh altscreen_live_diag.sh altscreen_preload.awk install_mmi_cockpit_carplay_rx.sh start_mmi_cockpit_carplay_test.sh start_mmi_cockpit_carplay_rx_test.sh force_start_mmi_cockpit_carplay_rx_test.sh stop_mmi_cockpit_carplay_test.sh status_mmi_cockpit_carplay_test.sh finish_mmi_cockpit_carplay_test.sh rgi_companion.sh export_mmi_cockpit_diagnostics.sh carplay_mmi_action.sh"
 RUNTIME_SCRIPTS="$RUNTIME_SCRIPTS altscreen_firewall.sh"
+RUNTIME_SCRIPTS="$RUNTIME_SCRIPTS altscreen_transaction.sh altscreen_rescue.sh altscreen_firewall_diag.sh"
 
 mount_app_rw(){ [ "$TESTING" = 1 ] || mount -uw /mnt/app; }
 mount_app_ro(){ [ "$TESTING" = 1 ] || mount -ur /mnt/app; }
@@ -117,7 +118,7 @@ mark_runtime_pending(){
         mount_app_ro >/dev/null 2>&1 || true
         return 1
     }
-    sync >/dev/null 2>&1 || true
+    sync || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
     mount_app_ro
 }
 
@@ -125,7 +126,7 @@ clear_runtime_pending(){
     [ -f "$RUNTIME_ROOT/$RUNTIME_OWNER" ] || return 1
     mount_app_rw || return 1
     rm -f "$RUNTIME_PENDING" || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
-    sync >/dev/null 2>&1 || true
+    sync || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
     mount_app_ro
 }
 
@@ -242,7 +243,7 @@ precheck_app_runtime(){
     if [ "$ok" = 1 ]; then printf '%s\n' "$token" > "$probe" 2>/dev/null || ok=0; fi
     if [ "$ok" = 1 ]; then [ "$(cat "$probe" 2>/dev/null)" = "$token" ] || ok=0; fi
     rm -f "$probe" 2>/dev/null || true
-    sync >/dev/null 2>&1 || true
+    sync || ok=0
     if ! mount_app_ro; then
         echo "FAIL: /mnt/app write precheck could not restore read-only mount" >&2
         return 1
@@ -355,7 +356,7 @@ install_runtime_scripts(){
         return 1
     fi
     RUNTIME_PUBLISHED=1
-    sync >/dev/null 2>&1 || true
+    sync || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
     if ! mount_app_ro; then return 1; fi
     echo "RUNTIME_SCRIPTS_INSTALLED=PASS path=/mnt/app/root/carplay-altscreen/bin no_eso_write=YES"
     return 0
@@ -371,7 +372,7 @@ rollback_runtime_scripts(){
         fi
     fi
     rm -rf "$RUNTIME_STAGE" 2>/dev/null || rc=1
-    sync >/dev/null 2>&1 || true
+    sync || rc=1
     mount_app_ro >/dev/null 2>&1 || rc=1
     [ "$rc" = 0 ] || return 1
     RUNTIME_PUBLISHED=0
@@ -414,6 +415,9 @@ cleanup_volatile_runtime(){
                 "$ram_root"/carplay_mascot.status.*.new \
                 "$ram_root"/carplay_cards.control \
                 "$ram_root"/carplay_cards.control.new \
+                "$ram_root"/mmi-mirror-hmi.state \
+                "$ram_root"/mmi-mirror-hmi.state.new \
+                "$ram_root"/mmi-mirror-hmi.state.*.new \
                 "$ram_root"/carplay_vc_panel.control \
                 "$ram_root"/carplay_vc_panel.control.new \
                 "$ram_root"/carplay_vc_panel.status \
@@ -446,7 +450,7 @@ commit_runtime_scripts(){
     [ ! -e "$RUNTIME_PREV" ] && return 0
     mount_app_rw || return 1
     rm -rf "$RUNTIME_PREV" || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
-    sync >/dev/null 2>&1 || true
+    sync || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
     mount_app_ro || return 1
     echo "RUNTIME_PREVIOUS_REMOVED=PASS"
 }
@@ -466,7 +470,7 @@ remove_runtime_scripts(){
         [ ! -e "$RUNTIME_ROOT" ] || rm -rf "$RUNTIME_ROOT" || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
         [ ! -e "$RUNTIME_PREV" ] || rm -rf "$RUNTIME_PREV" || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
         rm -rf "$RUNTIME_STAGE" 2>/dev/null || true
-        sync >/dev/null 2>&1 || true
+        sync || { mount_app_ro >/dev/null 2>&1 || true; return 1; }
     fi
     mount_app_ro || return 1
     echo "RUNTIME_SCRIPTS_REMOVED=PASS path=/mnt/app/root/carplay-altscreen"
@@ -578,11 +582,19 @@ precheck_sd_write(){
 
 CMD=${1:-}
 case "$CMD" in
+  install-preflight)
+    select_install_route "" >/dev/null || exit 1
+    validate_runtime_sources || exit 1
+    [ -d "$(p /ramdisk)" ] || fail "/ramdisk is required"
+    /bin/sh "$UNIVERSAL" install-preflight || exit 1
+    ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$SD_SCRIPTS/rgi_companion.sh" preflight || exit 1
+    ;;
   sd-preflight)
     precheck_sd_write || exit 1
     echo "SD_WRITE=READY volume=$VOLUME"
     ;;
   install)
+    [ "$TESTING" = 1 ] || [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ] || fail "use the transactional INSTALL entry"
     precheck_sd_write || exit 1
     route=$(select_install_route "${2:-}") || exit 1
     existing_route=""
@@ -603,32 +615,41 @@ case "$CMD" in
     record_transaction INSTALL IN_PROGRESS || fail "cannot record INSTALL transaction"
     mark_runtime_pending || fail "cannot mark installed runtime as pending"
     if ! install_runtime_scripts; then
-        rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+        if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ]; then
+            rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+        fi
         echo "FAIL: persistent runtime could not be staged under /mnt/app/root; no CarPlay mutation attempted" >&2
         exit 1
     fi
     if ! delegate_install "$route"; then
-        rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+        if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ]; then
+            rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+        fi
         exit 1
     fi
     if [ "$route" = UNIVERSAL ]; then
         diag=$(persistent_diag_helper || true)
         if [ -z "$diag" ] || ! ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$diag" install; then
             echo "FAIL: universal persistent diagnostics could not be installed; rolling back" >&2
-            [ -z "$diag" ] || ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$diag" remove >/dev/null 2>&1 || true
-            delegate "$route" restore >/dev/null 2>&1 || echo "WARN: rollback failed; use RESTORE ORIGINAL before reboot" >&2
-            rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+            if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ]; then
+                [ -z "$diag" ] || ALTSCREEN_SD_VOLUME="$VOLUME" /bin/sh "$diag" remove >/dev/null 2>&1 || true
+                delegate "$route" restore >/dev/null 2>&1 || echo "WARN: rollback failed; use RESTORE ORIGINAL before reboot" >&2
+                rollback_runtime_scripts >/dev/null 2>&1 || echo "WARN: runtime rollback incomplete; retry RESTORE ORIGINAL" >&2
+            fi
             exit 1
         fi
     fi
     ensure_dirs "$STATE_DIR" || exit 1
     echo "$route" > "$ROUTE_FILE" || exit 1
     commit_runtime_scripts || fail "previous runtime cleanup failed after INSTALL"
-    clear_runtime_pending || fail "installed runtime could not be activated; retry INSTALL"
-    record_transaction INSTALL COMMITTED || echo "WARN: INSTALL completed but SD transaction log could not be updated" >&2
+    if [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" != 1 ]; then
+        clear_runtime_pending || fail "installed runtime could not be activated; retry INSTALL"
+    fi
+    record_transaction INSTALL APPLIED || fail "INSTALL journal update failed"
     echo "ROUTER_INSTALL=PASS profile=$route runtime=/mnt/app/root/carplay-altscreen/bin no_eso_write=YES"
     ;;
   restore)
+    [ "$TESTING" = 1 ] || [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}" = 1 ] || fail "use transactional RESTORE ORIGINAL"
     precheck_sd_write || exit 1
     route=$(route_for_existing) || fail "no installed firmware route; run INSTALL first"
     echo "ROUTER_PROFILE=$route"
@@ -657,7 +678,8 @@ case "$CMD" in
     ;;
   start|status|collect|disarm)
     if [ "$CMD" != status ]; then precheck_sd_write || exit 1; fi
-    if [ "$CMD" = start ] && [ -e "$RUNTIME_PENDING" ]; then
+    if [ "$CMD" = start ] && [ -e "$RUNTIME_PENDING" ] &&
+        [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}:${ALTSCREEN_INSTALL_BOOT_ONLY:-0}" != 1:1 ]; then
         fail "an INSTALL or RESTORE is incomplete; run RESTORE ORIGINAL, then INSTALL"
     fi
     route=$(route_for_existing) || fail "no installed firmware route; run INSTALL first"

@@ -145,8 +145,37 @@ public final class RendererServerTransportTest {
         server.dispose();
     }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); labelQueue(); optionsQueue(); restart();
+        Log.setLevel(-1); workerRecovery(); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); labelQueue(); optionsQueue(); restart();
         System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS");
+    }
+    private static void workerRecovery() throws Exception {
+        RendererServer server=new RendererServer(0);
+        try {
+            check(server.connect(),"initial listener");
+            ServerSocket old=(ServerSocket)get(server,"server");
+            int lifecycle=(Integer)get(server,"lifecycleGeneration");
+            Thread writer=(Thread)get(server,"writerThread");
+            set(server,"writerThread",new Thread());
+            check(server.connect(),"dead-worker replacement");
+            check(old.isClosed() && old!=get(server,"server"),"connect accepted dead worker");
+            writer.join(3000);check(!writer.isAlive(),"retired writer remained blocked");
+            Method retire=RendererServer.class.getDeclaredMethod("failRun",ServerSocket.class,int.class,String.class,Throwable.class);
+            retire.setAccessible(true);retire.invoke(server,old,lifecycle,"stale",null);
+            check((Boolean)get(server,"running"),"old worker retired replacement");
+            synchronized(get(server,"lock")) {
+                set(server,"sock",new Socket());
+                set(server,"out",new java.io.OutputStream() {
+                    public void write(int b){throw new AssertionError("injected worker failure");}
+                });
+            }
+            check(server.sendProgress(1,1,RendererServer.PROGRESS_FILL),"failure fixture enqueue");
+            long end=System.nanoTime()+3000000000L;
+            while((Boolean)get(server,"running") && System.nanoTime()<end)Thread.sleep(1);
+            synchronized(get(server,"lock")) {
+                check(!(Boolean)get(server,"running") && get(server,"server")==null,"failed writer did not retire run");
+            }
+            check(server.connect(),"failed run could not reconnect");
+        } finally {server.dispose();}
     }
     private static void labelQueue() throws Exception {
         RendererServer server=new RendererServer(0);

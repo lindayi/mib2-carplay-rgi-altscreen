@@ -15,8 +15,13 @@ TESTING=${ALTSCREEN_CHAIN_TESTING:-0}
 DEVICE_ROOT=""
 if [ "$TESTING" = 1 ]; then
     DEVICE_ROOT=${ALTSCREEN_CHAIN_ROOT:-}
-    case "$DEVICE_ROOT" in /tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
+    case "$DEVICE_ROOT" in /work/build/*|/repo/build/*|/tmp/*|/var/tmp/*) ;; *) echo "FAIL: invalid ALTSCREEN_CHAIN_ROOT"; exit 2 ;; esac
 fi
+BOOT_ONLY=0
+if [ "${1:-}" = --boot-only ]; then
+    [ "${ALTSCREEN_TRANSACTION_ACTIVE:-0}:${ALTSCREEN_INSTALL_BOOT_ONLY:-0}" = 1:1 ] || exit 1
+    BOOT_ONLY=1
+elif [ "$#" -ne 0 ]; then exit 2; fi
 
 APP_BIN="$DEVICE_ROOT/mnt/app/root/carplay-altscreen/bin"
 APP_SELF="$APP_BIN/start_mmi_cockpit_carplay_rx_test.sh"
@@ -77,19 +82,30 @@ for candidate in "$DEVICE_ROOT/mnt/system/etc/boot/startup.sh" "$DEVICE_ROOT/etc
     if [ -f "$candidate" ]; then STARTUP=$candidate; break; fi
 done
 [ -n "$STARTUP" ] || { echo "FAIL: startup.sh not found"; exit 1; }
+[ ! -e "$START_PENDING" ] &&
+    { [ ! -e "$STATE/transaction.pending" ] || [ "$BOOT_ONLY" = 1 ]; } || {
+    echo "FAIL: transaction recovery required before START"; exit 1;
+}
+if [ "$BOOT_ONLY" != 1 ] && [ -f "$ENABLED" ] && [ -f "$STATE/ACTIVE" ] &&
+    [ "$(grep -c '^# BEGIN ALT111 BASEVIDEO3 AUTOSTART$' "$STARTUP")" = 1 ] &&
+    [ "$(grep -c '^# END ALT111 BASEVIDEO3 AUTOSTART$' "$STARTUP")" = 1 ]; then
+    echo "START=ALREADY_ACTIVE boot_configured=YES live_launch=NO"
+    exit 0
+fi
 
 strip_blocks(){
     awk '
-      $0 == "# BEGIN ALT111 MIRROR AUTOSTART" { in_old=1; next }
-      $0 == "# END ALT111 MIRROR AUTOSTART"   { in_old=0; next }
-      $0 == "# BEGIN ALT111 BASEVIDEO3 AUTOSTART" { in_new=1; next }
-      $0 == "# END ALT111 BASEVIDEO3 AUTOSTART"   { in_new=0; next }
+      $0 == "# BEGIN ALT111 MIRROR AUTOSTART" { if(in_old||in_new||old_seen++)exit 9; in_old=1; next }
+      $0 == "# END ALT111 MIRROR AUTOSTART"   { if(!in_old)exit 9; in_old=0; next }
+      $0 == "# BEGIN ALT111 BASEVIDEO3 AUTOSTART" { if(in_old||in_new||new_seen++)exit 9; in_new=1; next }
+      $0 == "# END ALT111 BASEVIDEO3 AUTOSTART"   { if(!in_new)exit 9; in_new=0; next }
       !in_old && !in_new { print }
       END { if (in_old || in_new) exit 9 }
     ' "$1"
 }
 
-STAGING_PREFIX="$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.startup"
+STAGING_PREFIX="$DEVICE_ROOT/ramdisk/MMI-Cockpit-Carplay.startup"
+[ -d "$DEVICE_ROOT/ramdisk" ] || { echo "FAIL: /ramdisk required"; exit 1; }
 CLEAN="$STAGING_PREFIX.clean.$$"
 BLOCK="$STAGING_PREFIX.block.$$"
 NEW="$STAGING_PREFIX.new.$$"
@@ -128,7 +144,7 @@ rollback(){
             rollback_ok=0
         fi
     fi
-    [ "$SYSTEM_RW" != 1 ] || { mount_system_ro >/dev/null 2>&1 || true; SYSTEM_RW=0; }
+    [ "$SYSTEM_RW" != 1 ] || { mount_system_ro >/dev/null 2>&1 || rollback_ok=0; SYSTEM_RW=0; }
     if [ "$ENABLED_CREATED" = 1 ]; then
         [ "$APP_RW" = 1 ] || { mount_app_rw >/dev/null 2>&1 && APP_RW=1; }
         [ "$APP_RW" != 1 ] || rm -f "$ENABLED" >/dev/null 2>&1 || rollback_ok=0
@@ -137,10 +153,14 @@ rollback(){
         [ "$APP_RW" = 1 ] || { mount_app_rw >/dev/null 2>&1 && APP_RW=1; }
         [ "$APP_RW" != 1 ] || rm -f "$START_PENDING" >/dev/null 2>&1 || rollback_ok=0
     fi
-    [ "$APP_RW" != 1 ] || { mount_app_ro >/dev/null 2>&1 || true; APP_RW=0; }
-    [ ! -x "$MIRROR_STOP" ] || /bin/sh "$MIRROR_STOP" >/dev/null 2>&1 || true
-    rm -f "$ACTIVE" "$READY" 2>/dev/null || true
-    cleanup
+    [ "$APP_RW" != 1 ] || { mount_app_ro >/dev/null 2>&1 || rollback_ok=0; APP_RW=0; }
+    if [ "$BOOT_ONLY" != 1 ]; then
+        [ ! -x "$MIRROR_STOP" ] || /bin/sh "$MIRROR_STOP" >/dev/null 2>&1 || true
+        rm -f "$ACTIVE" "$READY" 2>/dev/null || true
+    fi
+    sync || rollback_ok=0
+    if [ "$rollback_ok" = 1 ]; then cleanup
+    else echo "FAIL: START rollback incomplete; recovery drafts retained" >&2; fi
 }
 fail(){ msg=$1; rollback; echo "FAIL: $msg" >&2; exit 1; }
 
@@ -151,7 +171,7 @@ touch "$START_PENDING" || fail "cannot mark START pending"
 START_PENDING_CREATED=1
 touch "$ENABLED" || fail "cannot enable BaseVideo3 boot demand"
 ENABLED_CREATED=1
-sync >/dev/null 2>&1 || true
+sync || fail "cannot sync boot demand"
 mount_app_ro || fail "cannot remount /mnt/app read-only"
 APP_RW=0
 
@@ -170,7 +190,8 @@ cp "$STARTUP" "$ORIGINAL" || fail "cannot snapshot startup.sh"
 strip_blocks "$STARTUP" > "$CLEAN" || fail "invalid existing BaseVideo3/Mirror autostart block"
 cat > "$BLOCK" <<'BASEVIDEO3_BOOT'
 # BEGIN ALT111 BASEVIDEO3 AUTOSTART
-if [ -f /mnt/app/root/carplay-altscreen/state/basevideo3.enabled ]; then
+if [ -f /mnt/app/root/carplay-altscreen/state/basevideo3.enabled ] &&
+   [ ! -e /mnt/app/root/carplay-altscreen/state/transaction.pending ]; then
     rm -f /tmp/mmi-mirror-basevideo.ready >/dev/null 2>&1 || true
     touch /tmp/mmi-mirror-active >/dev/null 2>&1 || true
     /mnt/app/root/carplay-altscreen/bin/mirror/start_vehicle.sh >>/tmp/MMI-Cockpit-Carplay.mirror.autostart.log 2>&1 &
@@ -183,29 +204,37 @@ sh -n "$NEW" || fail "BaseVideo3 autostart makes startup.sh invalid"
 cp "$NEW" "$PUBLISH" && chmod 755 "$PUBLISH" && cmp -s "$NEW" "$PUBLISH" &&
     mv "$PUBLISH" "$STARTUP" || fail "cannot publish BaseVideo3 autostart"
 STARTUP_CHANGED=1
-sync >/dev/null 2>&1 || true
+sync || fail "cannot sync autostart"
 mount_system_ro || fail "cannot remount /mnt/system read-only"
 SYSTEM_RW=0
 
-rm -f "$READY" 2>/dev/null || true
-touch "$ACTIVE" || fail "cannot publish current-boot BaseVideo demand"
+if [ "$BOOT_ONLY" != 1 ]; then
+    rm -f "$READY" 2>/dev/null || true
+    touch "$ACTIVE" || fail "cannot publish current-boot BaseVideo demand"
+fi
 
 ALTSCREEN_INTEGRATED_START=1 /bin/sh "$CONTROLLER" start
 RC=$?
 [ "$RC" -eq 0 ] || { rollback; exit "$RC"; }
 
-/bin/sh "$MIRROR_START"
-MIRROR_RC=$?
-[ "$MIRROR_RC" -eq 0 ] || { rollback; exit "$MIRROR_RC"; }
+if [ "$BOOT_ONLY" != 1 ]; then
+    /bin/sh "$MIRROR_START"
+    MIRROR_RC=$?
+    [ "$MIRROR_RC" -eq 0 ] || { rollback; exit "$MIRROR_RC"; }
+fi
 
 mount_app_rw || fail "cannot clear START journal"
 APP_RW=1
 rm -f "$START_PENDING" || fail "cannot clear START journal"
-sync >/dev/null 2>&1 || true
+sync || fail "cannot sync completed START"
 mount_app_ro || fail "cannot remount /mnt/app after START"
 APP_RW=0
 
 cleanup
+if [ "$BOOT_ONLY" = 1 ]; then
+    echo "BOOT_ARM=PASS live_launch=NO reboot_required=YES"
+    exit 0
+fi
 echo "DISPLAY_PATH=PRIVATE111_DIRECT source=ScreenStreamProcessData h264_shm=/carplay111_h264 decoder_backend=stock_omx_screen_linearized_shm decoded_shm=/carplay111_decoded sink=displayable3_gles window58_readback=0"
 echo "HMI_CONTROL_PLANE=JAVA80 context=80 composite=98,101,102,3"
 echo "CONTEXT_POLICY=JAVA_ONLY native_dmdt=0 sidecar_dmdt=0"
