@@ -1,8 +1,37 @@
 {
   "repository": "https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen.git",
   "commit": "141e7ed33775af02a5af0b8616ee3c6250eea997",
-  "scope": "GPL RGI native, Java integration and renderer source components. Canonical paths are build inputs, not an unused vendor copy. Explicit platform/ownership replacements remain listed below.",
+  "scope": "GPL RGI native, Java integration and renderer source components plus their Unicode and flag-atlas data inputs. Context/lifecycle orchestration migration remains incomplete; retained implementations are explicit replacements, not narrow upstream adapters.",
+  "excluded": [
+    {"path": "Toolbox/carplay_alt_screen/hmi/stubs", "reason": "Tests compile against exact private MU1316 ABI, not permissive upstream platform stubs."},
+    {"path": "Toolbox/carplay_alt_screen/hmi/vendor", "reason": "Opaque upstream baseline JAR is not a build input; local Java implementation is source-built against the stock platform."},
+    {"path": "Toolbox/carplay_alt_screen/hmi/release", "reason": "Prebuilt upstream HMI artifacts are not deployed."},
+    {"path": "Toolbox/carplay_alt_screen/rgi_native/release", "reason": "Native runtime is cross-built from the pinned source, not imported from release artifacts."},
+    {"path": "Toolbox/carplay_alt_screen/rgi_renderer/release", "except": ["flag_atlas.rgba"], "reason": "Only the runtime flag atlas is an input; upstream build metadata and checksums do not describe our rebuilt artifacts."},
+    {"path": "Toolbox/carplay_alt_screen/src", "reason": "Separate source-available AltScreen component is tracked by altscreen_native provenance and source manifest, not this GPL RGI pin."},
+    {"path": "Toolbox/carplay_alt_screen/mirror_display", "reason": "Separate mirror component is tracked by altscreen_native provenance and source manifest; do not mix its license boundary with GPL objects."}
+  ],
   "files": [
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/resources/META-INF/UNICODE-LICENSE.txt",
+      "sha256": "8437ba5f4e4c8ae0268c3df5cf106006f2d045ff3452eedd1f27e8eb26c5f327",
+      "local": "Toolbox/carplay_alt_screen/hmi/resources/META-INF/UNICODE-LICENSE.txt",
+      "reason": "Retain the upstream Unicode table license in the HMI JAR."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/resources/com/luka/carplay/routeguidance/vc-text.bin",
+      "sha256": "8b4a8d0b5b006ad2465c846170f2294bdf5696e3ec607cf1356fb8ba66e8ba22",
+      "local": "Toolbox/carplay_alt_screen/hmi/resources/com/luka/carplay/routeguidance/vc-text.bin",
+      "kind": "binary",
+      "reason": "VCTextData loads this exact table; update format and data together without text normalization."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/release/flag_atlas.rgba",
+      "sha256": "b1985705eabcb0379bed9a5c0055694a4b3db7ac28cef29c57a9d7f2e619dd11",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/resources/flag_atlas.rgba",
+      "kind": "binary",
+      "reason": "Renderer flag coordinates depend on the upstream atlas; stage its exact bytes from the local resources directory."
+    },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
       "sha256": "1fb7cada02f54989ef93af22cd802c31fc9ed1fded63b9ba703115ca152e0707",

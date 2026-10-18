@@ -57,7 +57,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     }
 
     public synchronized void setCurrentPositionInfoBlocked(boolean blocked) {
-        setCurrentPositionInfoBlocked(blocked, false);
+        setCurrentPositionInfoBlocked(blocked, currentPositionTextOnly);
     }
 
     public synchronized void setCurrentPositionInfoBlocked(boolean blocked, boolean textOnly) {

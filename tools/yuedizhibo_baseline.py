@@ -10,8 +10,8 @@ import tempfile
 
 PREFIX = "Toolbox/carplay_alt_screen/"
 TREES = tuple(PREFIX + p for p in (
-    "hmi/src", "rgi_native/src", "rgi_renderer/src",
-    "rgi_renderer/common", "rgi_renderer/toolchain",
+    "hmi/src", "hmi/resources", "rgi_native/src", "rgi_renderer/src",
+    "rgi_renderer/common", "rgi_renderer/toolchain", "rgi_renderer/release/flag_atlas.rgba",
 ))
 LOCK = PREFIX + "UPSTREAM.json"
 
@@ -35,6 +35,10 @@ def digest(data):
 
 def normalized(data):
     return data.replace(b"\r\n", b"\n")
+
+
+def comparable(entry, data):
+    return data if entry.get("kind") == "binary" else normalized(data)
 
 
 def source_path(root, path):
@@ -63,6 +67,10 @@ def check(root, lock):
         upstream = blob(root, revision, entry["upstream"])
         if digest(upstream) != entry["sha256"]:
             raise ValueError("Upstream hash mismatch: " + entry["upstream"])
+        if entry.get("kind", "text") not in ("text", "binary"):
+            raise ValueError("Unknown input kind: " + entry["upstream"])
+        if b"\0" in upstream and entry.get("kind") != "binary":
+            raise ValueError("Binary input needs explicit kind: " + entry["upstream"])
         if not entry.get("reason"):
             raise ValueError("Missing delta rationale: " + entry["upstream"])
         local = entry["local"]
@@ -75,7 +83,7 @@ def check(root, lock):
             replacements += 1
             continue
         local_data = source_path(root, local).read_bytes()
-        if normalized(local_data) == normalized(upstream):
+        if comparable(entry, local_data) == comparable(entry, upstream):
             same += 1
         else:
             adapted += 1
@@ -114,7 +122,7 @@ def plan(root, lock, revision, output):
         path, local = entry["upstream"], entry["local"]
         base = blob(root, lock["commit"], path)
         if path not in new_paths:
-            if local is not None and normalized(source_path(root, local).read_bytes()) != normalized(base):
+            if local is not None and comparable(entry, source_path(root, local).read_bytes()) != comparable(entry, base):
                 review.append({"path": path, "reason": "upstream removed a locally modified file"})
             else:
                 if local is not None:
@@ -124,12 +132,19 @@ def plan(root, lock, revision, output):
         theirs = blob(root, revision, path)
         next_entry = dict(entry, sha256=digest(theirs))
         entries.append(next_entry)
-        if normalized(theirs) == normalized(base):
+        if comparable(entry, theirs) == comparable(entry, base):
             continue
         if local is None:
             review.append({"path": path, "reason": "upstream changed an explicitly replaced component"})
             continue
-        data, conflicted = merge(source_path(root, local).read_bytes(), base, theirs)
+        ours = source_path(root, local).read_bytes()
+        if entry.get("kind") == "binary":
+            if ours != base and ours != theirs:
+                review.append({"path": path, "reason": "binary resource conflict: manual resolution required"})
+                continue
+            writes[local] = theirs
+            continue
+        data, conflicted = merge(ours, base, theirs)
         writes[local] = data
         if conflicted:
             review.append({"path": path, "reason": "three-way conflict"})

@@ -24,11 +24,13 @@ source callers, reflection/weave names, tests and resources use it.
 The independent source-available AltScreen transport/mirror remains in
 `altscreen_native`, under its existing license boundary.
 
-The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for every file
-in the five upstream source trees, including host tools and build files. At the
-initial migration, 47 files match after CRLF/LF normalization, 47 have local
-deltas, and 12 are explicitly replaced integration files. These counts are
-source comparisons, not a feature-coverage percentage.
+The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 109 files
+in the five source trees, `hmi/resources`, and the runtime flag atlas from
+`rgi_renderer/release`. It includes the Unicode license. It also lists excluded
+vendor/stub/release trees and the separately tracked AltScreen native components.
+At this checkpoint, 50 files match, 47 have local deltas, and 12 have explicit
+replacement mappings. Text comparisons normalize CRLF/LF; binary resource
+comparisons use exact bytes. These counts are not a feature-coverage percentage.
 
 Existing native/Java RGI and renderer code already shared much of upstream's
 implementation. Do not discard later fixes just to obtain identical files.
@@ -38,7 +40,20 @@ preferences, custom footer, cards, settings and lifecycle fencing.
 The status gate now starts from the upstream implementation and API, with
 retirement, NavigationJobs ownership and VC-panel/speed-badge notifications added.
 
-## Explicit integration adapters
+## Retained integrations: migration not complete
+
+The independent review found that lifecycle and display orchestration still
+use the local implementation. `CarPlayHook`, `ClusterStateController` and
+`WheelZoomBridge` are substantive replacements, not narrow adapters around
+upstream code. `LowerBarKomo`, `OemMapStartupGate` and `ScreenModule` also contain
+large local rewrites even though their files have direct source mappings.
+An "adapted" count does not imply a small delta or an easy future merge.
+
+**The requested upstream-first lifecycle/context migration is not complete.**
+The data path and renderer have a pinned upstream baseline. The control layer
+still requires a separately verified integration before this branch can be
+described as meeting the full maintenance goal. Do not merge this checkpoint as
+completion of that goal.
 
 The file-level map names replacements and their reasons. The principal contracts
 are:
@@ -59,8 +74,15 @@ setters would reintroduce BAP side effects and thread-affinity failures.
 The upstream FD-9/port-19801 supervisor lease is **not enabled**. The existing
 supervisor is not claimed to be that implementation. Changing these integration
 contracts requires a separate reviewed adaptation, not silent replacement during
-an upstream refresh. These exceptions mean this is a component baseline with
-local patches, not a wholesale copy of the upstream application.
+an upstream refresh.
+
+The local tests cover async lifecycle intent, duplicate/stale activation, late
+navigation services and service replacement, Master Off, one context writer,
+context readback, RGI window rebinding, OEM field restoration and wheel ownership.
+They do not prove implementation parity with the upstream activation actor,
+context circuit breaker, generic geometry observer or FD-9 supervisor lease.
+Those controller changes still need manual comparison; the planner deliberately
+reports changes to replaced files instead of pretending it can merge them.
 
 ## Updating the baseline
 
@@ -84,6 +106,9 @@ new upstream**, rather than treating our last Q5 commit as the upstream base.
 It preserves disjoint local changes and emits normal diff3 conflicts for
 overlapping changes. It never edits current sources, deletes them, updates the
 active pin, commits, pushes or touches an SD card.
+Binary data updates retain exact bytes. An unchanged local binary can accept an
+upstream candidate; divergent local/upstream binary edits require manual review
+and produce no replacement file. Review resource and reader changes together.
 
 `PLAN.json` lists candidate source writes, upstream removals and required review.
 New upstream files and changes to replaced components require explicit

@@ -107,8 +107,28 @@ public final class RgiGateLifecycleTest {
         check(c.values.get("updateCurrentPositionInfo")[0].equals("Audi road"),
             "text-only release did not restore the held road");
     }
+    static void upstreamTextOnlyBeforeBlock() {
+        Capture c = new Capture(); GatedCombiService g = new GatedCombiService(c.service());
+        g.setCurrentPositionTextOnly(true);
+        g.setCurrentPositionInfoBlocked(true);
+        g.updateCurrentPositionInfo("held road");
+        g.updateDistanceToDestination(55, 1, false);
+        g.updateTimeToDestination(1, 2, 66L);
+        check(!c.values.containsKey("updateCurrentPositionInfo")
+            && c.values.containsKey("updateDistanceToDestination")
+            && c.values.containsKey("updateTimeToDestination"),
+            "upstream text-only-before-block order lost stock travel fields");
+        g.setCurrentPositionInfoBlocked(false);
+        check(c.values.get("updateCurrentPositionInfo")[0].equals("held road"),
+            "upstream ordered release did not restore road");
+        c.values.clear();
+        g.setCurrentPositionInfoBlocked(true);
+        g.updateDistanceToDestination(77, 1, false);
+        check(!c.values.containsKey("updateDistanceToDestination"),
+            "release retained text-only policy for a later full block");
+    }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); boundedReplay(); upstreamTextOnlyReplay();
+        Log.setLevel(-1); boundedReplay(); upstreamTextOnlyReplay(); upstreamTextOnlyBeforeBlock();
         Queue q = (Queue)U.allocateInstance(Queue.class); q.tasks = new ArrayList<>();
         Navi navi = (Navi)U.allocateInstance(Navi.class);
         ClusterService cs = (ClusterService)U.allocateInstance(ClusterService.class);

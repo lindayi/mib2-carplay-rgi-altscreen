@@ -40,7 +40,9 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - Java uses upstream `com.luka.carplay.routeguidance`, not `.rgd`. Update direct
   imports, reflection/ASM names, tests and resource paths together; do not compile
   a second legacy package or substitute the opaque upstream baseline JAR.
-- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins all 106 upstream source files.
+- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins 109 upstream source/data files,
+  including the Unicode table/license and renderer flag atlas. Binary updates
+  use exact bytes; divergent edits require review, never text normalization.
   The 12 explicit integration replacements are not claimed as identical upstream
   behavior. In particular, keep MU1316 context roles, the single zoom sender,
   NavigationJobs model writes, and SI-owned supervision until an explicit
@@ -58,6 +60,10 @@ Do not turn this into a raw conversation log or store credentials/private captur
   not acquire the new source-directory prefix.
 - See `docs/upstream-baseline.md`. This is a component baseline with documented
   local deltas, not a merge of every upstream file or a whole-fork reparenting.
+- The independent Opus review found the upstream-first lifecycle/context
+  migration incomplete: CarPlayApp/ScreenModule remain substantive replacements,
+  not narrow adapters around upstream controllers. Do not report this checkpoint
+  as the full requested migration. Preserve Q5 behavior while reconciling that layer.
 
 ### Source integration candidate: 2026-10-18
 
@@ -914,7 +920,7 @@ They are machine-local helpers; on another machine use the repository scripts wi
 the documented toolchain/private inputs and recreate the Windows adapter if needed.
 
 - Java source/target is **1.4**, class version **48.0**, built in JDK 8. Modern Java
-  syntax belongs only in host tools/tests, not `java_patch`.
+  syntax belongs only in host tools/tests, not `Toolbox/carplay_alt_screen/hmi/src`.
 - QNX image is `qnx65-armv7-toolchain:8.5` (also tagged `:latest` locally), ARMv7
   QNX 6.5, EABI5/softfp. The C/C++-only image is enough; Go/Rust are unnecessary.
 - The native helper compiles in a temporary **Linux Docker volume** and copies

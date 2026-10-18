@@ -10,6 +10,14 @@ Map of Content for the reverse-engineering and implementation notes. Each note c
 every factual claim is validated against a source (code / firmware / iOS binary) and states only the
 final verified fact. `reconciles:` frontmatter records which legacy docs were folded in.
 
+**Source-path migration:** older notes retain their original source paths and
+revision-specific line references. Current build inputs live under
+`Toolbox/carplay_alt_screen/`: `hook/` is now `rgi_native/src/`, `java_patch/`
+is `hmi/src/`, `java_resources/` is `hmi/resources/`, and `maneuver_render/`
+is `rgi_renderer/src/`. The Java `.rgd` package is now `.routeguidance`.
+See [the baseline map and remaining migration work](upstream-baseline.md).
+This maps code references, not the documentation directories linked below.
+
 > **All topics seeded [x]** - 33 notes. `(!)` items inside notes are real product TODOs, not doc gaps.
 
 ## 🗂️ [architecture](architecture.md) - process topology, threading, boot / init - build, test & deploy  [x]

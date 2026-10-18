@@ -3,7 +3,7 @@ title: Architecture - process topology & threading
 tags: [architecture, overview, verified]
 status: verified-source
 sources:
-  - code: hook/, java_patch/, java_resources/, maneuver_render/, deploy/smartphone_integrator/
+  - code: Toolbox/carplay_alt_screen/, deploy/smartphone_integrator/
   - code: scripts/, tests/
 reconciles:
   - README.md
@@ -14,6 +14,11 @@ reconciles:
 # Architecture - process topology & threading
 
 The one-page overview; each subsystem has its own note. Start at [INDEX](INDEX.md).
+
+This page describes the original RGI process topology, not the full AltScreen
+video stack. See [the component baseline](upstream-baseline.md) for current source
+ownership and adapters, and [upstream integration](upstream-integration.md) for
+the combined stack.
 
 ## 📋 What the patch does
 
@@ -37,9 +42,12 @@ byte-identical to stock.
 
 | Component | Type | Output | Topic |
 |---|---|---|---|
-| `hook/` | C (ARM32 QNX), `LD_PRELOAD` into `dio_manager`; exports exactly 5 interposers | `libcarplay_hook.so` | [iap2-interception](hook/iap2-interception.md) [cover-art](hook/cover-art.md) [integration-seam](hook/integration-seam.md) |
-| `java_patch/` + `java_resources/` | Java 1.4 class overrides loaded by the HMI (`lsd`) + VC glyph table | `carplay_hook.jar` | [rgd-activation](rgd/rgd-activation.md) [display-contexts](cluster/display-contexts.md) [touchpad-dpad](input/touchpad-dpad.md) |
-| `maneuver_render/` | C EGL/GLES2 + C++11 scene engine (ARM QNX / macOS) | `maneuver_render` | [maneuver-renderer](cluster/maneuver-renderer.md) [compositing](cluster/compositing.md) |
+| `rgi_native/src/` | C (ARM32 QNX), `LD_PRELOAD` into `dio_manager`; exports exactly 5 interposers | `libcarplay_hook.so` | [iap2-interception](hook/iap2-interception.md) [cover-art](hook/cover-art.md) [integration-seam](hook/integration-seam.md) |
+| `hmi/src/` + `hmi/resources/` | Java 1.4 class overrides loaded by the HMI (`lsd`) + VC glyph table | `carplay_hook.jar` | [rgd-activation](rgd/rgd-activation.md) [display-contexts](cluster/display-contexts.md) [touchpad-dpad](input/touchpad-dpad.md) |
+| `rgi_renderer/src/` | C EGL/GLES2 + C++11 scene engine (ARM QNX / macOS) | `maneuver_render` | [maneuver-renderer](cluster/maneuver-renderer.md) [compositing](cluster/compositing.md) |
+
+Source paths in this table are relative to `Toolbox/carplay_alt_screen/`.
+The Java RGI package is `com.luka.carplay.routeguidance`.
 
 ## 🗂️ Process topology
 
@@ -99,8 +107,8 @@ flowchart LR
 ```
 
 All three build in Docker - no host toolchain. The `qnx65-armv7-toolchain` image is built once from
-[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain) (`./host-scripts/qnx-run.sh build`). No Java variants; `java_patch/` builds directly to the
-jar, and `java_resources/` (the `vc-text.bin` glyph/Unicode table) is copied in before `jar cf`. The
+[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain) (`./host-scripts/qnx-run.sh build`). No Java variants; `hmi/src/` builds directly to the
+jar, and `hmi/resources/` (the `vc-text.bin` glyph/Unicode table) is copied in before `jar cf`. The
 renderer's `scene/` is C++11 compiled with the image's `g++` into `build/libmaneuver_scene.a` (no C++
 runtime allowed). The native builds synthesize import stubs; the resulting ELF binds the unit's real
 Screen/EGL/GLES libs at runtime. `build_hook.sh` also enforces the 5-symbol export allowlist.
@@ -117,13 +125,13 @@ Screen/EGL/GLES libs at runtime. `build_hook.sh` also enforces the 5-symbol expo
 python3 tests/test_rgd_native_contract.py   # after build_java.sh: real C parser + slot writer -> Java -> stock BAP sender
 ```
 
-The Java suites need the MU1316 stock jar and JDK under `../../Tools/jxe2jar`.
+The Java suites need the MU1316 stock JAR and JDK. Set `TOOLS_DIR` and `STOCK_JAR`
+as described in the [build instructions](../README.md).
 
-Deploy by copying the runtime files to `/mnt/app/root/hooks/`, pointing `smartphone_integrator.json`
-at `carplay_child.json`, and dropping `carplay_hook.jar` into `/mnt/app/eso/hmi/lsd/jars/`.
-Separately, the RGD message IDs (0x5200/0x5203 sent, 0x5201/0x5202/0x5204 received) must be registered
-in `dio_manager.json` (`MessagesSentByAccessory` / `MessagesReceivedFromDevice`). Then reboot - there
-is no one-shot flasher. Runtime integration + install paths: [supervisor-lifecycle](deploy/supervisor-lifecycle.md).
+Use the combined package and the [documented installation sequence](../README.md),
+not manual JAR or library replacement. The installer wires the launcher, HMI JAR
+and RGD message registration together. Runtime integration and install paths:
+[supervisor-lifecycle](deploy/supervisor-lifecycle.md).
 
 ## 📚 Reverse-engineering references
 

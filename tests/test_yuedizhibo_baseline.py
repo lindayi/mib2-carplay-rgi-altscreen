@@ -89,6 +89,39 @@ class BaselineTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unaccounted"):
             baseline.check(self.root, self.lock)
 
+    def test_binary_resources_are_pinned_and_updated_without_text_normalization(self):
+        for relative in ("hmi/resources/com/luka/carplay/routeguidance/vc-text.bin",
+                         "rgi_renderer/release/flag_atlas.rgba"):
+            path = baseline.PREFIX + relative
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"\x00old\r\nresource")
+            self.lock["files"].append({
+                "upstream": path, "local": path, "kind": "binary",
+                "sha256": baseline.digest(target.read_bytes()), "reason": "runtime data",
+            })
+        self.lock["commit"] = self.commit()
+        self.lock["files"][-1].pop("kind")
+        with self.assertRaisesRegex(ValueError, "Binary input needs explicit kind"):
+            baseline.check(self.root, self.lock)
+        self.lock["files"][-1]["kind"] = "binary"
+        target.write_bytes(b"\x00new\r\nresource")
+        revision = self.commit()
+        target.write_bytes(b"\x00old\r\nresource")
+        report = baseline.plan(self.root, self.lock, revision, self.root / "build/plan")
+        self.assertFalse(report["review"])
+        self.assertEqual((self.root / "build/plan" / path).read_bytes(), b"\x00new\r\nresource")
+        self.assertEqual(target.read_bytes(), b"\x00old\r\nresource")
+
+    def test_divergent_binary_resource_requires_review_without_overwrite(self):
+        self.lock["files"][0]["kind"] = "binary"
+        ours = b"\x00local\r\nresource"
+        report = self.update(b"\x00upstream\r\nresource", ours)
+        self.assertEqual(report["writes"], [])
+        self.assertEqual(report["review"][0]["reason"],
+                         "binary resource conflict: manual resolution required")
+        self.assertEqual(self.file.read_bytes(), ours)
+
 
 if __name__ == "__main__":
     unittest.main()
