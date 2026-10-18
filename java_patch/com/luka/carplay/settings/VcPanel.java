@@ -145,7 +145,7 @@ public final class VcPanel {
             new String[]{"Enabled","Display mode","Map layout","Map mascot","More settings"});
         if(page.equals("more"))return new Page("More settings",null,
             new String[]{"Guidance","Appearance","Information bar","Controls","Reapply map layout","Map cards"});
-        if(page.equals("cards"))return new Page("Map cards",new int[]{Setting.NOW_PLAYING_CARD,Setting.TRIP_CARD},null);
+        if(page.equals("cards"))return new Page("Map cards",new int[]{Setting.NOW_PLAYING_CARD,Setting.TRIP_CARD,Setting.SPEED_BADGE},null);
         if(page.equals("guidance"))return new Page("Guidance",new int[]{Setting.DISTANCE,Setting.ROAD,Setting.LANES,Setting.PROGRESS},null);
         if(page.equals("appearance"))return new Page("Appearance",new int[]{Setting.PRESET,Setting.TEXT_SIZE,Setting.ROAD_SCROLL,Setting.BACKGROUND},null);
         if(page.equals("information"))return new Page("Information bar",new int[]{Setting.INFO_DEFAULT,Setting.INFO_ROAD,Setting.INFO_RETURN},null);

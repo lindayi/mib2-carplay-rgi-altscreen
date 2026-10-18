@@ -37,6 +37,12 @@ Do not turn this into a raw conversation log or store credentials/private captur
   upstream one-step installation with integrated transaction recovery/rescue.
   These are not implemented in `490dce9`. Keep its existing deployment procedure
   until the replacement is built and fault-tested; never disconnect silently.
+- VC More settings -> Map cards now includes the shared Speed / limit badge
+  switch alongside media and Trip. Keep native-MMI and VC page membership aligned;
+  this source correction alone does not rebuild or approve the held SD candidate.
+  Shared-save fixtures need valid receiver session/owner records or the settings
+  worker correctly withdraws video eligibility. VC worker fixtures also need a
+  child JVM PID above 1; keep the Docker shell alive after a standalone Java test.
 - `integrate-upstreams-20261018` merges Allemon `1289981`; PR 7's checksum fix
   is included. PR 14 is not: its `0x0117` night command collides with `CMD_TEL`
   and its delayed mode sends are not session-safe.

@@ -120,8 +120,9 @@ public final class VcPanelTest {
         acknowledge();VcPanel.scale(5);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
         check(get("page").equals("cards"),"sixth More row opens Map cards");
         String cardPage=(String)snapshot.invoke(null,1000L);
-        check(cardPage.contains("Now Playing map card") && cardPage.contains("Trip progress map card"),
-            "both independent card controls visible");
+        check(cardPage.contains("Now Playing map card") && cardPage.contains("Trip progress map card")
+            && cardPage.contains(Setting.ALL[Setting.SPEED_BADGE].label),
+            "all three independent card/badge controls visible");
         acknowledge();VcPanel.back();acknowledge();VcPanel.back();
         check(get("page").equals("root") && (Integer)get("focus")==4,"Map cards restores physical Back focus");
         acknowledge();keys.updateKey2(4,41,1,3,1);keys.updateKey2(1,16,1,4,1);
@@ -179,6 +180,13 @@ public final class VcPanelTest {
         check(preview.contains(Setting.ALL[Setting.MASCOT].choices[lastMascot])
             && preview.contains("PREVIEW "+(lastMascot+1)+"\n"),"focused mascot preview ID");
         check(prefs.snapshot().revision==beforePreview && prefs.snapshot().get(Setting.MASCOT)==0,"preview saved a selection");
+        // The real save worker keeps video eligible only for a live receiver record.
+        Path sessionFile=Paths.get("/ramdisk/carplay_menu_session");
+        Path ownerFile=Paths.get("/ramdisk/carplay_supervisor.owner");
+        String receiverPid=new File("/proc/self").getCanonicalFile().getName();
+        check(!Files.exists(sessionFile) && !Files.exists(ownerFile),"fixture receiver records already exist");
+        Files.write(ownerFile,receiverPid.getBytes("US-ASCII"));
+        Files.write(sessionFile,("pid="+receiverPid+"\nenabled=1\nvideo=1\nverbose=0\nconfig_error=0\n").getBytes("US-ASCII"));
         Path helper=Paths.get("/mnt/app/root/carplay-altscreen/bin/carplay_mmi_action.sh");
         check(!Files.exists(helper),"fixture helper already exists");
         Files.createDirectories(helper.getParent());Files.write(helper,"#!/bin/sh\nexit 0\n".getBytes("US-ASCII"));
@@ -186,7 +194,24 @@ public final class VcPanelTest {
         long end=System.currentTimeMillis()+4000;
         while(SettingsRuntime.busy() && System.currentTimeMillis()<end)Thread.sleep(10);
         check(prefs.snapshot().get(Setting.MASCOT)==lastMascot,"last mascot not persisted by shared settings worker");
-        SettingsRuntime.stop();VcPanel.stop();Files.delete(helper);
+        VcPanel.dismiss();VcPanel.scale(1);hold();acknowledge();
+        check((Boolean)get("open"),"panel did not reopen for badge controls");
+        VcPanel.scale(4);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+        acknowledge();VcPanel.scale(5);acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+        check(get("page").equals("cards"),"Map cards reachable after a shared-worker save");
+        acknowledge();VcPanel.scale(2);
+        for(int value=1;value>=0;value--) {
+            acknowledge();VcPanel.roller(1);VcPanel.roller(0);
+            end=System.currentTimeMillis()+4000;
+            while(SettingsRuntime.busy() && System.currentTimeMillis()<end)Thread.sleep(10);
+            check(!SettingsRuntime.busy() && prefs.snapshot().get(Setting.SPEED_BADGE)==value,
+                "VC badge switch did not use shared settings worker");
+            check(new String(Files.readAllBytes(root.resolve("preferences")),"US-ASCII")
+                .contains("speed_badge="+value+"\n"),"VC badge choice not persisted");
+            check(get("page").equals("cards") && (Integer)get("focus")==2,
+                "badge toggle lost the current page or focus");
+        }
+        SettingsRuntime.stop();VcPanel.stop();Files.delete(helper);Files.delete(sessionFile);Files.delete(ownerFile);
         Files.deleteIfExists(root.resolve("preferences"));Files.deleteIfExists(root.resolve("layout"));Files.delete(root);
         System.out.println("VC panel: default hold, short/release arbitration, ack/revision leases, scale, Back, View/drawer/session/parking gates and shared save PASS");
     }

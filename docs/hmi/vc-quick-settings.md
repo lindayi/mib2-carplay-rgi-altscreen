@@ -59,7 +59,9 @@ font; retain `maneuver_render/LICENSE.DEJAVU` with distributions.
 The root contains Enabled, Display mode, Map layout, Map mascot and More settings.
 More provides Guidance, Appearance, Information bar, Controls, Reapply map
 layout and Map cards. Map cards independently toggles the passive Now Playing
-and estimated Trip cards, both default Off; it does not change input ownership.
+and estimated Trip cards and the experimental Speed / limit badge, all default
+Off. The badge uses the same live switch as main MMI; it needs no reconnect or
+MMI reboot after installation. These controls do not change input ownership.
 They share a fixed, RGI-inspired left frame with a rectangular black lower base
 and no artificial dial cutout: one section expands inside it when the
 other is unavailable or Off, and both Off removes it. Long media title/artist

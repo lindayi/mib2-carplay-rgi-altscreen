@@ -8,6 +8,11 @@ integration. Earlier vehicle reports do not validate this candidate.
 feature-complete V3.8 integration. Hold this candidate for correction, not SD
 deployment.** The audit changes documentation only.
 
+Follow-up source correction: VC **More settings -> Map cards** now includes the
+existing Speed / limit badge switch, using the shared settings worker. The audit
+tables below describe `490dce9`, where that row was missing. This menu correction
+does not repair the other gaps, rebuild the SD package or release its hold.
+
 ## Source pins and merge decisions
 
 | Source | Pin | Decision |
