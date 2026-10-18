@@ -47,6 +47,10 @@ public final class MapCardsTest {
         Socket peer=null;
         try {
             cards.start();
+            field(CarPlayApp.class,"phoneContext").set(null,null);
+            cards.track(track("Early song"),true);
+            cards.playback(new PlaybackInfoChangedEvent(PlaybackInfoChangedEvent.PlaybackState.PAUSED),true);
+            check(!MapCards.snapshot(true,true).media,"early metadata stays hidden before session readiness");
             bus.addObserver(CarplayBus.EVT_RGD_UPDATE,after);
             bus.addObserver(CarplayBus.EVT_COVERART,after);
             bus.start();
@@ -55,7 +59,11 @@ public final class MapCardsTest {
                 check(System.nanoTime()<end,"bus start");Thread.sleep(1);
             }
             peer=connect();
-            check(!copy().media && !copy().trip,"no fabricated initial data");
+            field(CarPlayApp.class,"phoneContext").set(null,phone);
+            check(copy().media && copy().title.equals("Early song") && copy().playback.equals("Paused"),
+                "first eligible snapshot catches up early media without another phone event");
+            cards.resetSession();
+            check(!copy().media && !copy().trip,"reset clears cached source metadata");
             cards.track(track("Song"),false);check(!copy().media,"non-CarPlay media excluded");
             cards.track(track("Song"),true);
             long firstTrack=copy().trackRevision;
@@ -123,6 +131,17 @@ public final class MapCardsTest {
             Thread.sleep(1050);
             send(peer,CarplayBus.EVT_RGD_UPDATE,"time_remaining_seconds:n:90\n");
             check(copy().sampled==sampled,"duplicate replay never rejuvenates duration sample");
+            long receipt=System.currentTimeMillis()-60000;
+            String replay="route_state:n:1\ntime_remaining_seconds:n:90\ntime_remaining_sample_ms:n:"+receipt+"\n";
+            cards.resetSession();
+            send(peer,CarplayBus.EVT_RGD_UPDATE,replay);
+            check(copy().remaining==90 && Math.abs(copy().sampled-receipt/1000L)<=1,
+                "new consumer retains original native sample age");
+            sampled=copy().sampled;
+            send(peer,CarplayBus.EVT_RGD_UPDATE,replay);
+            check(copy().sampled==sampled,"full native replay preserves receipt time");
+            send(peer,CarplayBus.EVT_RGD_UPDATE,"time_remaining_seconds:n:90\ntime_remaining_sample_ms:n:invalid\n");
+            check(copy().remaining==-1,"invalid explicit sample cannot become a fresh duration");
             int old=bus.connectionGeneration();
             peer.close();peer=connect();
             check(!copy().media && !copy().trip,"receiver replacement drops all old metadata");
@@ -131,6 +150,11 @@ public final class MapCardsTest {
             check(!copy().trip,"old receiver callback rejected");
             cards.track(track("Last song"),true);
             cards.resetSession();check(!copy().media,"phone boundary clears track");
+            field(CarPlayApp.class,"phoneContext").set(null,null);
+            cards.track(track("Retired early song"),true);
+            cards.resetSession();
+            field(CarPlayApp.class,"phoneContext").set(null,phone);
+            check(!copy().media,"source departure fences pending early metadata");
             cards.stop();
             cards.track(track("Late song"),true);
             check(!copy().media,"late component callback rejected");

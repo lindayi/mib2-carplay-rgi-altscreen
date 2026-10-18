@@ -63,7 +63,7 @@ flowchart LR
 
     recv["recv tap: file-transfer reassembly"] --> q["1-slot queue<br/>(latest wins, lazy worker)"]
     q --> crc{"CRC32 == last?"}
-    crc -- "yes" --> skip["skip (duplicate)"]
+    crc -- "yes" --> skip["skip decode/write; announce fresh receipt"]
     crc -- "no" --> dim{"<= 4096 px/side<br/>and <= 8 Mpx?"}
     dim -- "no" --> rej["reject (no decode)"]
     dim -- "yes" --> dec["stb_image decode<br/>-> contain 256x256 -> PNG"]
@@ -71,6 +71,7 @@ flowchart LR
     gen -- "no" --> drop["drop (stale session)"]
     gen -- "yes" --> fs["atomic symlink swap<br/>/var/app/icab/tmp/37/coverart.png (tmpfs)"]
     fs --> ev["EVT_COVERART (crc, png_crc, sticky)"]
+    skip --> ev
 ```
 
 - **Pre-decode budget:** `stbi_info_from_memory` reads the header and
@@ -93,6 +94,10 @@ passive map-card renderer checks `png_crc` before decoding the fixed PNG path;
 the two checksums are not interchangeable. The additional field is computed on
 the decode worker only, after successful publication, and does not change the
 native Media screen's picture ID or original-image deduplication.
+Each newly received duplicate also republishes the saved PNG CRC, after checking
+the current Identify generation under the publication lock. This lets cards
+recover same-album artwork after a track change without another decode or write.
+It does not add a track ID or authorize reuse before a fresh artwork event.
 
 ## ⚙️ Java side
 

@@ -142,17 +142,21 @@ int main(void)
     assert(rgb && width == 256 && height == 256);
     assert(abs((int)rgb[0] - 120) <= 3 && abs((int)rgb[1] - 70) <= 3 && abs((int)rgb[2] - 20) <= 3);
     stbi_image_free(rgb);
+    int previous_writes = write_calls;
     assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
-    assert(notifications == 1); /* CRC dedup after successful publication */
+    assert(notifications == 2 && write_calls == previous_writes && g_coverart.images_found == 1);
+    assert(notified_png_crc == crc32_bytes(png, png_len));
+    assert(!save_artwork(jpeg, jpeg_len, recv_generation - 1));
+    assert(notifications == 2);
     coverart_reset_recv_stream();
     assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
-    assert(notifications == 2); /* Same artwork still belongs to a new receiver generation. */
+    assert(notifications == 3); /* Same artwork still belongs to a new receiver generation. */
     coverart_reset_recv_stream();
     reset_during_write = 1;
     assert(!maybe_handle_image(jpeg, jpeg_len, recv_generation));
-    assert(!reset_during_write && notifications == 2);
+    assert(!reset_during_write && notifications == 3);
     assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
-    assert(notifications == 3); /* A reset during disk I/O cannot publish old artwork. */
+    assert(notifications == 4); /* A reset during disk I/O cannot publish old artwork. */
     coverart_runtime_shutdown();
     puts("coverart_pipeline_test: real EXIF JPEG decode, Identify race, stale enqueue, EINTR/short write and PNG publication PASS");
     return 0;

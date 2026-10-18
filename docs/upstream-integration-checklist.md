@@ -132,7 +132,26 @@ has not been replaced or approved. No SD was written and no vehicle was tested.
 - [x] Update deployment instructions only when the replacement workflow passes
   its integration and fault tests.
 
-## Verification and delivery
+## Review follow-up: cards, replay and presentation
+
+- [x] Preserve early track/playback events until the matching session is ready.
+- [x] Announce repeated artwork receipt without decoding or writing twice.
+- [x] Clear absent native travel fields on destination/source replacement.
+- [x] Preserve duration receipt time through native cache and Java restart.
+- [x] Order deferred route-end publication before newer active evidence.
+- [x] Redraw idle-video overlays through the existing mirror owner; keep source
+  health counters separate and require successful swaps for cleanup/acknowledgement.
+- [x] Add a pinned, SIL-OFL Chinese card fallback with Simplified Chinese
+  letterforms, mixed-language scrolling and visible missing-glyph markers.
+- [x] Flatten the left frame corner from 32.2 to 26.1 degrees based on the owner
+  photo/native right-card reference, without moving its body or the RGI planes.
+- [x] Exercise native/Java cross-layer replay, concurrent route publication,
+  actual GLES pixels, CJK text, corner geometry, idle leases and QNX builds.
+- [ ] Stage and verify a clean-source review-fix package, then record and push it.
+- [ ] Vehicle acceptance: the new font, slope, idle overlays and replay fixes
+  still need parked checks. Do not reproduce a reboot while driving.
+
+## Original integration verification and delivery
 
 - [x] Add focused regressions that fail on the audited omissions.
 - [x] Run exact-stock Java 1.4 compilation, linkage and strict native-menu/weave

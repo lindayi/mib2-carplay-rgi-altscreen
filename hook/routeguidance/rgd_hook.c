@@ -46,6 +46,14 @@ static uint64_t now_monotonic_ms(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000);
 }
+static uint64_t now_realtime_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0 || ts.tv_sec < 0) {
+        LOG_WARN(LOG_MODULE, "Remaining-duration sample clock unavailable");
+        return 0;
+    }
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000);
+}
 
 /* Protects the debounce fields in g_rgd against the heartbeat tick
  * (rgd_periodic_tick, runs on bus heartbeat thread) racing with the
@@ -97,6 +105,7 @@ static struct {
 	    uint32_t seq_counter;
 	    uint32_t ver_counter;
     uint64_t route_generation; /* survives slot-version reuse at native route reset */
+    uint64_t remaining_sample_ms;
 	    uint16_t highest_list_index;  /* max iOS index ever seen in maneuver_list */
 	    /*
 	     * Lane guidance is keyed by iOS composedGuidanceEventIndex, not by
@@ -138,6 +147,9 @@ static struct {
 	    .highest_list_index = 0
 	};
 
+#define RGD_TRIP_FIELDS (RGD_UPD_ETA | RGD_UPD_TIME_REMAINING | RGD_UPD_DISTANCE_REMAINING | \
+                        RGD_UPD_DISTANCE_STRING | RGD_UPD_DISTANCE_UNITS | RGD_UPD_DEST_TIMEZONE)
+
 /* Forward declarations */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame);
 static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len, size_t max_len);
@@ -155,6 +167,7 @@ static void rgd_lazy_init(void);
 
 static void rgd_update_cache_reset(void) {
     memset(&g_rgd.update_cache, 0, sizeof(g_rgd.update_cache));
+    g_rgd.remaining_sample_ms = 0;
 }
 
 static void rgd_cancel_pending_zero_locked(const char* why, uint8_t active_state) {
@@ -201,7 +214,10 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     if (upd->present & RGD_UPD_ETA) c->eta = upd->eta;
     if (upd->present & RGD_UPD_DEST_TIMEZONE)
         c->destination_timezone_minutes = upd->destination_timezone_minutes;
-    if (upd->present & RGD_UPD_TIME_REMAINING) c->time_remaining = upd->time_remaining;
+    if (upd->present & RGD_UPD_TIME_REMAINING) {
+        c->time_remaining = upd->time_remaining;
+        g_rgd.remaining_sample_ms = now_realtime_ms();
+    }
     if (upd->present & RGD_UPD_DISTANCE_REMAINING) c->distance_remaining = upd->distance_remaining;
     if (upd->present & RGD_UPD_DISTANCE_STRING) memcpy(c->distance_string, upd->distance_string, sizeof(c->distance_string));
     if (upd->present & RGD_UPD_DISTANCE_UNITS) c->distance_units = upd->distance_units;
@@ -231,7 +247,8 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
             if (generation <= g_rgd.route_generation)
                 generation = g_rgd.route_generation + 1;
             g_rgd.route_generation = generation;
-            g_rgd.update_cache.present &= ~RGD_UPD_DEST_TIMEZONE;
+            g_rgd.update_cache.present &= ~RGD_TRIP_FIELDS;
+            g_rgd.remaining_sample_ms = 0;
             g_rgd.update_cache.destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
 		    g_rgd.current_list_present = false;
 		    g_rgd.current_list_count = 0;
@@ -461,12 +478,20 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
     rgd_update_t enriched = *upd;
-    if (((enriched.present & RGD_UPD_SOURCE_SUPPORTS_RG) && !enriched.source_supports_route_guidance)
-            || ((enriched.present & RGD_UPD_DESTINATION) && !(enriched.present & RGD_UPD_DEST_TIMEZONE)
+    bool boundary = ((enriched.present & RGD_UPD_SOURCE_SUPPORTS_RG) && !enriched.source_supports_route_guidance)
+            || ((enriched.present & RGD_UPD_SOURCE_NAME)
+            && (g_rgd.update_cache.present & RGD_UPD_SOURCE_NAME)
+            && strcmp(enriched.source_name, g_rgd.update_cache.source_name) != 0)
+            || ((enriched.present & RGD_UPD_DESTINATION)
             && (g_rgd.update_cache.present & RGD_UPD_DESTINATION)
-            && strcmp(enriched.destination, g_rgd.update_cache.destination) != 0)) {
-        enriched.present |= RGD_UPD_DEST_TIMEZONE;
-        enriched.destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
+            && strcmp(enriched.destination, g_rgd.update_cache.destination) != 0);
+    if (boundary) {
+        g_rgd.update_cache.present &= ~RGD_TRIP_FIELDS;
+        g_rgd.remaining_sample_ms = 0;
+        if (!(enriched.present & RGD_UPD_DEST_TIMEZONE)) {
+            enriched.present |= RGD_UPD_DEST_TIMEZONE;
+            enriched.destination_timezone_minutes = RGD_UNKNOWN_TIMEZONE;
+        }
     }
     rgd_update_cache_merge(&enriched);
     if (enriched.present & RGD_UPD_LANE_INDEX)
@@ -742,14 +767,18 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_int(b, "maneuver_state", upd->maneuver_state);
     if (present & RGD_UPD_DISTANCE_REMAINING)
         bus_text_uint(b, "dist_dest_m", upd->distance_remaining);
+    else bus_text_int(b, "dist_dest_m", -1);
     if (present & RGD_UPD_DIST_TO_MANEUVER)
         bus_text_uint(b, "dist_maneuver_m", upd->dist_to_maneuver);
     if (present & RGD_UPD_ETA)
         bus_text_uint(b, "eta_seconds", upd->eta);
+    else bus_text_int(b, "eta_seconds", -1);
     if (present & RGD_UPD_DEST_TIMEZONE)
         bus_text_int(b, "destination_timezone_minutes", upd->destination_timezone_minutes);
     if (present & RGD_UPD_TIME_REMAINING)
         bus_text_uint(b, "time_remaining_seconds", upd->time_remaining);
+    else bus_text_int(b, "time_remaining_seconds", -1);
+    bus_text_uint(b, "time_remaining_sample_ms", g_rgd.remaining_sample_ms);
     if (present & RGD_UPD_CURRENT_ROAD)
         bus_text_str(b, "current_road", upd->current_road);
     if (present & RGD_UPD_DESTINATION)
@@ -1406,7 +1435,8 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
  * that path reads/writes g_rgd.update_cache without synchronisation.
  * Instead emit a self-contained minimal bus frame (route_state=0,
  * maneuver_count=0) directly, which is exactly what Java needs to see
- * for "route ended".  bus_send_text() is itself thread-safe.
+ * for "route ended". Keep the debounce lock through its nonblocking enqueue:
+ * an accepted active update must not be followed by this older timeout.
  *
  * Idempotent: re-emitting state=0 to a Java side that already saw it
  * is a no-op (Java's RG handler short-circuits identical states). */
@@ -1432,13 +1462,11 @@ void rgd_periodic_tick(void) {
     }
     uint64_t elapsed = now - g_rgd.state_zero_started_ms;
 
-    /* Window expired — claim the emission.  Mark fields before
-     * unlocking so a concurrent handler doesn't re-do the same work. */
+    /* Claim and enqueue under the same lock used to accept active evidence. */
     g_rgd.emitted_route_state = 0;
     g_rgd.state_zero_started_ms = 0;
     g_rgd.state_zero_deadline_ms = 0;
     g_rgd.state_zero_from_reroute = false;
-    pthread_mutex_unlock(&g_rgd_debounce_lock);
 
     LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
              (unsigned long long)elapsed);
@@ -1452,6 +1480,7 @@ void rgd_periodic_tick(void) {
     bus_text_int(b, "route_state", 0);
     bus_text_int(b, "maneuver_count", 0);
     bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
 }
 
 /* Called lazily on first message — now only used to mark initialization

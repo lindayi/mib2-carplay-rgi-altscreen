@@ -27,6 +27,7 @@ static uint64_t texture_epoch;
 static uint64_t image_serial,texture_serial,preview_started;
 static unsigned image_width=VC_PANEL_WIDTH+32,preview_frame;
 static int state;
+static int shown;
 static mascot_graphics graphics;
 static EGLContext context=EGL_NO_CONTEXT;
 static uint64_t wall_ms(void) {
@@ -128,6 +129,12 @@ void vc_overlay_context_lost(void *destroyed) {
     memset(&graphics,0,sizeof(graphics));context=EGL_NO_CONTEXT;texture_revision=0;texture_epoch=0;
     frame_expiry=0;state=0;pthread_mutex_unlock(&mutex);
 }
+int vc_overlay_needs_frame(void) {
+    pthread_mutex_lock(&mutex);
+    int needed=shown || (current.page.count && mono_ms()<deadline);
+    pthread_mutex_unlock(&mutex);
+    return needed;
+}
 void vc_overlay_draw(vc_panel_frame *frame) {
     frame->drawn=0;
     /* The worker holds this only to exchange metadata/buffers, never during I/O or painting. */
@@ -146,6 +153,7 @@ void vc_overlay_draw(vc_panel_frame *frame) {
 }
 void vc_overlay_presented(const vc_panel_frame *frame,int success) {
     pthread_mutex_lock(&mutex);
+    if(success)shown=frame->drawn;
     /* A newer request during swap does not undo the older frame actually presented. */
     if(frame->drawn && success && current.epoch==frame->epoch && frame->revision<=current.revision
             && current.page.count && mono_ms()<deadline) {

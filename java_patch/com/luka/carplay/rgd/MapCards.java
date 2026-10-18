@@ -18,22 +18,27 @@ public final class MapCards implements CarplayBus.Observer {
     private int trackDuration=-1;
     private int zone=RouteGuidance.State.UNKNOWN_TIMEZONE;
     private String destination,source,title="",artist="",album="",playback="";
+    private TrackDataChangedEvent pendingTrack;
+    private PlaybackInfoChangedEvent pendingPlayback;
+    private int pendingTrackGeneration=-1,pendingPlaybackGeneration=-1;
 
     public void start() {
-        synchronized(this){running=true;reset(-1);}
+        synchronized(this){running=true;resetSession();}
         synchronized(MapCards.class){active=this;}
         CarplayBus bus=CarplayBus.getInstance();
         bus.addObserver(CarplayBus.EVT_RGD_UPDATE,this);
         bus.addObserver(CarplayBus.EVT_COVERART,this);
     }
     public void stop() {
-        synchronized(this){running=false;reset(-1);}
+        synchronized(this){running=false;resetSession();}
         CarplayBus bus=CarplayBus.getInstance();
         bus.removeObserver(CarplayBus.EVT_RGD_UPDATE,this);
         bus.removeObserver(CarplayBus.EVT_COVERART,this);
         synchronized(MapCards.class){if(active==this)active=null;}
     }
-    public synchronized void resetSession(){reset(-1);}
+    public synchronized void resetSession(){
+        reset(-1);pendingTrack=null;pendingPlayback=null;
+    }
     private void clearTrip() {
         meters=baseline=-1;eta=remaining=sampled=-1;destination=null;
         zone=RouteGuidance.State.UNKNOWN_TIMEZONE;
@@ -50,11 +55,25 @@ public final class MapCards implements CarplayBus.Observer {
         if(!running || generation<0 || generation!=CarplayBus.getInstance().connectionGeneration()
                 || !CarPlayApp.isSessionConnected())return false;
         if(connection!=generation)reset(generation);
+        if(pendingTrack!=null) {
+            if(pendingTrackGeneration<0 || pendingTrackGeneration==generation)applyTrack(pendingTrack);
+            pendingTrack=null;
+        }
+        if(pendingPlayback!=null) {
+            if(pendingPlaybackGeneration<0 || pendingPlaybackGeneration==generation)applyPlayback(pendingPlayback);
+            pendingPlayback=null;
+        }
         return true;
     }
     public synchronized void track(TrackDataChangedEvent track,boolean carplay) {
         int generation=CarplayBus.getInstance().connectionGeneration();
-        if(!carplay || !accept(generation))return;
+        if(!running || !carplay)return;
+        if(!accept(generation)) {
+            pendingTrack=track;pendingTrackGeneration=generation;return;
+        }
+        applyTrack(track);
+    }
+    private void applyTrack(TrackDataChangedEvent track) {
         String nextTitle=clean(track.getTitle()),nextArtist=clean(track.getArtist()),nextAlbum=clean(track.getAlbum());
         if(!title.equals(nextTitle) || !artist.equals(nextArtist) || !album.equals(nextAlbum)
                 || trackDuration!=track.getDuration()) {
@@ -65,7 +84,13 @@ public final class MapCards implements CarplayBus.Observer {
     }
     public synchronized void playback(PlaybackInfoChangedEvent info,boolean carplay) {
         int generation=CarplayBus.getInstance().connectionGeneration();
-        if(!carplay || !accept(generation))return;
+        if(!running || !carplay)return;
+        if(!accept(generation)) {
+            pendingPlayback=info;pendingPlaybackGeneration=generation;return;
+        }
+        applyPlayback(info);
+    }
+    private void applyPlayback(PlaybackInfoChangedEvent info) {
         PlaybackInfoChangedEvent.PlaybackState state=info.getState();
         playback=state==PlaybackInfoChangedEvent.PlaybackState.PLAYING?"Playing":
             state==PlaybackInfoChangedEvent.PlaybackState.PAUSED?"Paused":
@@ -109,7 +134,8 @@ public final class MapCards implements CarplayBus.Observer {
                 Log.w("MapCards","invalid remaining duration");
                 value=-1;
             }
-            if(value!=remaining){remaining=value;sampled=remaining>=0?nowSeconds:-1;}
+            sampled=RouteGuidance.remainingSampleSeconds(data,value,remaining,sampled,nowSeconds);
+            remaining=sampled>=0?value:-1;
         }
         if(data.has("destination_timezone_minutes")) {
             int value=data.num("destination_timezone_minutes",RouteGuidance.State.UNKNOWN_TIMEZONE);
@@ -150,8 +176,8 @@ public final class MapCards implements CarplayBus.Observer {
     }
     synchronized Snapshot copy(int generation,boolean phone,boolean mediaEnabled,boolean tripEnabled) {
         Snapshot out=new Snapshot();
-        if(!running || generation<0 || !phone || connection!=generation) {
-            reset(generation);return out;
+        if(!running || generation<0 || !phone || !accept(generation)) {
+            reset(-1);return out;
         }
         out.connection=generation;
         out.media=mediaEnabled && (title.length()!=0 || artist.length()!=0);

@@ -349,7 +349,12 @@ static void frame_tests(void) {
     }
     assert(!cards_inside(0,0) && cards_inside(0,44) && cards_inside(115,255));
     assert(!frame[pixel_index(-6,-6)+3]);
-    assert(frame[pixel_index(20,31)+3]>0 && frame[pixel_index(20,31)+3]<255);
+    assert(frame[pixel_index(19,34)+3]>0 && frame[pixel_index(19,34)+3]<255);
+    int upper=0,lower=0;
+    while(frame[pixel_index(upper,6)+3]<240)upper++;
+    while(frame[pixel_index(lower,36)+3]<240)lower++;
+    double slope=30.0/(upper-lower);
+    assert(slope>.47 && slope<.51);
     unsigned prior=255;
     for(int x=230;x<=233;x++) {
         const unsigned char *p=frame+pixel_index(x,100);
@@ -388,7 +393,7 @@ static void frame_tests(void) {
         r.media=i<4;strcpy(r.text[2],headings[i%4]);
         assert(!cards_paint(&geometry,&r,NULL,zero,with));
         minx=230;maxx=0;miny=44;maxy=0;
-        for(int y=0;y<44;y++)for(int x=70;x<230;x++) {
+        for(int y=0;y<44;y++)for(int x=90;x<230;x++) {
             const unsigned char *p=with+pixel_index(x,y);
             if(p[0]<210 || p[1]<210 || p[2]<210)continue;
             if(x<minx)minx=x;
@@ -397,7 +402,7 @@ static void frame_tests(void) {
             if(y>maxy)maxy=y;
         }
         assert(maxx>minx && maxy>miny);
-        assert(abs(minx+maxx-299)<=2 && abs(miny+maxy-43)<=2);
+        assert(abs(minx+maxx-319)<=2 && abs(miny+maxy-43)<=2);
     }
     assert(allocations==before && cards_crc32(frame,CARDS_IMAGE_BYTES)==crc);
 }
@@ -638,7 +643,16 @@ int main(void) {
     cards_request unsupported=r;strcpy(unsupported.text[0],"\xf0\x9f\x98\x80");
     assert(cards_paint(&painter,&unsupported,NULL,zero,bitmap)==1);
     unsupported.text[0][0]=0;assert(!cards_paint(&painter,&unsupported,NULL,zero,other));
-    assert(!memcmp(bitmap,other,sizeof(bitmap)));
+    assert(memcmp(bitmap,other,sizeof(bitmap)));
+    cards_request chinese=r;
+    strcpy(chinese.text[0],"\xe4\xb8\xad\xe6\x96\x87 Chinese \xe7\xb9\x81\xe9\xab\x94\xe9\x9f\xb3\xe6\xa8\x82\xe6\xad\x8c\xe6\x9b\xb2");
+    strcpy(chinese.text[1],"\xe5\x91\xa8\xe6\x9d\xb0\xe5\x80\xab Jay Chou");
+    assert(!cards_paint(&painter,&chinese,NULL,zero,bitmap));
+    assert(memcmp(bitmap,other,sizeof(bitmap)));
+    cards_scroll chinese_scroll=cards_scroll_at(&chinese,NULL,5000);
+    assert(chinese_scroll.title>0);
+    assert(!cards_paint(&painter,&chinese,NULL,chinese_scroll,other));
+    assert(memcmp(bitmap,other,sizeof(bitmap)));
     scroll_tests(&painter,r);
     cards_painter_destroy(&painter);
 
@@ -677,6 +691,23 @@ int main(void) {
     mono+=100;wall+=100;r.expires=wall+4000;write_control(&r);cards_overlay_poll();cards_overlay_draw(0);
     assert(uploads==uploaded);
     no_gl(1);
+    chinese.expires=wall+4000;write_control(&chinese);cards_overlay_poll();
+    assert(cards_overlay_needs_frame());
+    clear();cards_overlay_draw(0);assert(eglSwapBuffers(d,surface));cards_overlay_presented(1);
+    assert(!cards_overlay_needs_frame());bounds(1,1,0,0,1440,455);capture("chinese-mixed");
+    chinese.media=chinese.trip=0;write_control(&chinese);cards_overlay_poll();
+    assert(cards_overlay_needs_frame());
+    clear();cards_overlay_draw(0);cards_overlay_presented(0);
+    assert(cards_overlay_needs_frame());
+    assert(eglSwapBuffers(d,surface));cards_overlay_presented(1);
+    assert(!cards_overlay_needs_frame());bounds(0,0,0,0,1440,455);
+    chinese.media=chinese.trip=1;write_control(&chinese);cards_overlay_poll();
+    clear();cards_overlay_draw(0);assert(eglSwapBuffers(d,surface));cards_overlay_presented(1);
+    mono+=CARDS_WORKER_LEASE_MS+1;wall+=CARDS_WORKER_LEASE_MS+1;
+    assert(cards_overlay_needs_frame());
+    clear();cards_overlay_draw(0);assert(eglSwapBuffers(d,surface));cards_overlay_presented(1);
+    assert(!cards_overlay_needs_frame());bounds(0,0,0,0,1440,455);
+    r.expires=wall+4000;
     for(unsigned flags=0;flags<4;flags++) {
         r.media=flags&1;r.trip=(flags>>1)&1;write_control(&r);cards_overlay_poll();clear();
         if(flags)cards_overlay_draw(0);else no_gl(0);

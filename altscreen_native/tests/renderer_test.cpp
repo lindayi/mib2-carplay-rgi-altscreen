@@ -82,6 +82,7 @@ int main() {
         ClusterVideoDisplay presenter;
         Mhi2qBackendConfig cfg = {1440, 455, 3, false};
         assert(presenter.init(cfg));
+        assert(!presenter.present_overlay_frame());
         unsigned char nv12[12];
         memset(nv12, 16, 8); memset(nv12 + 8, 128, 4);
         VideoFrame frame;
@@ -100,6 +101,14 @@ int main() {
         fail_swap = true;
         assert(!presenter.present_frame(frame));
         assert(swap_attempts == 4 && presenter.frame_count() == 2);
+        assert(!presenter.present_overlay_frame());
+        assert(presenter.frame_count() == 2 && presenter.overlay_frame_count() == 0);
+        fail_swap = false;
+        for(int i=0;i<4;i++)assert(presenter.present_overlay_frame());
+        assert(swap_attempts == 9 && presenter.frame_count() == 2 && presenter.overlay_frame_count() == 4);
+        unsigned char sample[4];
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]<3 && sample[1]<3 && sample[2]<3 && sample[3]==255);
     }
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroyContext(display, context); eglDestroySurface(display, surface);

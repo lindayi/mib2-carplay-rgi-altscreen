@@ -8,6 +8,7 @@ typedef struct {
 } vc_panel_request;
 int vc_panel_decode(char *text,uint64_t now,unsigned pid,vc_panel_request *request);
 void vc_overlay_poll(void);
+int vc_overlay_needs_frame(void);
 typedef struct { uint64_t epoch; unsigned revision; int drawn; } vc_panel_frame;
 void vc_overlay_draw(vc_panel_frame *frame);
 void vc_overlay_presented(const vc_panel_frame *frame,int success);

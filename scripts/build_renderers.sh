@@ -91,7 +91,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
       -L/tmp -l:libEGL.so.1 -l:libGLESv2.so.1 -lm
   exports=$(arm-unknown-nto-qnx6.5.0eabi-nm -D --defined-only /src/build/libcarplay_mascot.so |
       awk "\$2==\"T\" && \$3!~/^(_init|_fini|_btext)$/ {print \$3}" | sort | tr "\n" " ")
-  [ "$exports" = "eglDestroyContext eglSwapBuffers " ] || { echo "Unexpected mascot exports: $exports"; exit 1; }
+  [ "$exports" = "carplay_overlay_frame_interval_ms eglDestroyContext eglSwapBuffers " ] || { echo "Unexpected mascot exports: $exports"; exit 1; }
 
   echo "--- verify (ARM ELF, no emutls) ---"
   for b in maneuver_render libcarplay_mascot.so; do
@@ -106,4 +106,5 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 echo ""
 echo "Done:"
 cp "$PROJECT_DIR/maneuver_render/LICENSE.DEJAVU" "$PROJECT_DIR/build/LICENSE.DEJAVU"
+cp "$PROJECT_DIR/map_cards/LICENSE.OFL" "$PROJECT_DIR/build/LICENSE.CARD-CJK"
 ls -lh "$PROJECT_DIR/build/maneuver_render"

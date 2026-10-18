@@ -14,6 +14,8 @@
 #include <time.h>
 #include <unistd.h>
 
+extern "C" unsigned carplay_overlay_frame_interval_ms(void) __attribute__((weak));
+
 static volatile sig_atomic_t g_stop = 0;
 static StateSnapshotPublisher g_state_publisher;
 static const unsigned kNoFramePollUs = 5000u;
@@ -175,6 +177,7 @@ static void publish_displayable_state(const ClusterVideoDisplay &display,
                     "manager=%s\n"
                     "first_present=%d\n"
                     "presented_frames=%lu\n"
+                    "overlay_frames=%lu\n"
                     "generation=%u\n"
                     "sequence=%u\n"
                     "h264_packets=%u\n"
@@ -192,6 +195,7 @@ static void publish_displayable_state(const ClusterVideoDisplay &display,
                     manager,
                     display.first_frame_presented() ? 1 : 0,
                     display.frame_count(),
+                    display.overlay_frame_count(),
                     (unsigned)generation,
                     (unsigned)sequence,
                     (unsigned)h264_packets,
@@ -1128,6 +1132,7 @@ int main(int argc, char **argv) {
     unsigned long long stats_start = monotonic_us();
     unsigned long long next_ownership_probe_us = monotonic_us() + 500000ULL;
     unsigned long long next_layout_probe_us = monotonic_us() + 50000ULL;
+    unsigned long long last_present_us = monotonic_us();
 
     while (!g_stop) {
         const unsigned long long frame_start = monotonic_us();
@@ -1169,6 +1174,7 @@ int main(int argc, char **argv) {
                         "stopping_safely=1\n");
                 break;
             }
+            last_present_us = monotonic_us();
         } else {
             ++failures;
             const unsigned long long idle_now = monotonic_us();
@@ -1209,8 +1215,14 @@ int main(int argc, char **argv) {
                         (unsigned)source.generation());
             }
 
-            /* No fixed ~3s auto-exit: freeze the last frame and let the
-             * stop script / signal own teardown. */
+            unsigned interval = carplay_overlay_frame_interval_ms ?
+                carplay_overlay_frame_interval_ms() : 0;
+            if (interval && idle_now >= last_present_us &&
+                    idle_now - last_present_us >= (unsigned long long)interval * 1000ULL) {
+                if (!display.present_overlay_frame()) break;
+                last_present_us = monotonic_us();
+            }
+            /* Local redraws never increment source-presentation health counters. */
             usleep(kNoFramePollUs);
             continue;
         }

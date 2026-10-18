@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 ClusterVideoDisplay::ClusterVideoDisplay()
-    : ready_(false), first_frame_presented_(false), frame_count_(0) {
+    : ready_(false), first_frame_presented_(false), frame_count_(0), overlay_frame_count_(0) {
 }
 
 ClusterVideoDisplay::~ClusterVideoDisplay() {
@@ -59,6 +59,17 @@ bool ClusterVideoDisplay::present_frame(const VideoFrame &frame) {
         return false;
     }
     return present_uploaded_frame();
+}
+
+bool ClusterVideoDisplay::present_overlay_frame() {
+    if (!ready_ || !first_frame_presented_) return false;
+    renderer_.draw();
+    if (!backend_.swap()) {
+        fprintf(stderr, "display: PHASE=EGL_SWAP_FAILED present=local_overlay\n");
+        return false;
+    }
+    ++overlay_frame_count_;
+    return true;
 }
 
 bool ClusterVideoDisplay::present_logo_frame(const unsigned char *rgba,
@@ -122,4 +133,5 @@ void ClusterVideoDisplay::shutdown() {
     ready_ = false;
     first_frame_presented_ = false;
     frame_count_ = 0;
+    overlay_frame_count_ = 0;
 }

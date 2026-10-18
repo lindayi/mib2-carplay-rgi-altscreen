@@ -16,6 +16,8 @@ static EGLDisplay display;
 static EGLSurface surface;
 static unsigned version=1;
 static unsigned preview;
+static unsigned (*redraw_interval)(void);
+static unsigned long long last_idle_frame;
 static unsigned long long now(void) {
     struct timeval t;gettimeofday(&t,NULL);return (unsigned long long)t.tv_sec*1000+t.tv_usec/1000;
 }
@@ -49,7 +51,10 @@ static void await(unsigned revision,int state,int renew) {
     unsigned long long end=now()+3000;
     do {
         if(renew)publish(getpid(),600);
-        frame();
+        unsigned interval=redraw_interval();
+        if(interval && now()-last_idle_frame>=interval) {
+            frame();last_idle_frame=now();
+        }
         if(status(revision,state))return;
         usleep(15000);
     } while(now()<end);
@@ -66,6 +71,8 @@ static void advance_during_swap(void) {
 }
 int main(int argc,char **argv) {
     assert(argc==3 && access("/.dockerenv",F_OK)==0);
+    redraw_interval=(unsigned (*)(void))dlsym(RTLD_DEFAULT,"carplay_overlay_frame_interval_ms");
+    assert(redraw_interval);
     setenv("ALT111_MIRROR_BASE_READY_FILE","/tmp/vc-panel-ready",1);
     display=eglGetDisplay(EGL_DEFAULT_DISPLAY);assert(eglInitialize(display,NULL,NULL));
     EGLint attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,
@@ -80,6 +87,7 @@ int main(int argc,char **argv) {
     publish(getpid(),600);usleep(150000);unchanged();
     FILE *f=fopen("/tmp/vc-panel-ready","w");assert(f);fclose(f);
     await(1,1,1);
+    assert(redraw_interval()==100);
     glReadPixels(0,0,WIDTH,HEIGHT,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
     unsigned changed=0;
     for(unsigned y=0;y<HEIGHT;y++)for(unsigned x=0;x<WIDTH;x++) {

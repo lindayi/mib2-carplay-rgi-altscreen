@@ -29,6 +29,8 @@ for name in ("libcarplay_altscreen.so", "carplay-alt111-mirror-display"):
         dynsym = readelf("--dyn-syms", path)
         assert re.search(r"\bGLOBAL\s+DEFAULT\s+UND\s+eglSwapBuffers\b", dynsym), dynsym
         assert "eglSwapBuffers" in readelf("-r", path), "Missing interposable EGL swap relocation"
+        assert re.search(r"\bWEAK\s+DEFAULT\s+UND\s+carplay_overlay_frame_interval_ms\b", dynsym), dynsym
+        assert "carplay_overlay_frame_interval_ms" in readelf("-r", path), "Missing optional overlay query relocation"
         undefined = [symbol for symbol in undefined
                      if symbol not in {"__aeabi_uidivmod", "__aeabi_ldivmod"}]
     assert not any(re.match(r"(__atomic|__sync|__aeabi|__gnu|__tls|__cxa|_Unwind|_Z)",

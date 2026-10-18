@@ -113,6 +113,16 @@ Host test: `tests/rgd_tlv_test.c` (run by `scripts/run_tests.sh`).
 
 ## 🔄 Route generation
 
+Native full snapshots send `-1` for unknown destination distance, ETA and remaining
+duration. A changed destination or source clears cached travel fields before
+merging the new packet, so an omitted field cannot restore the previous Trip.
+The additive `time_remaining_sample_ms` bus field is the native realtime receipt
+of an explicit duration update, not the time a full snapshot is replayed.
+Java translates its age to the BAP formatting clock. An invalid explicit stamp
+clears duration; timestamp-less legacy packets retain changed-value sampling.
+The route-zero debounce lock covers the timeout's nonblocking bus enqueue, so a
+new active update cannot be followed by the older deferred zero.
+
 `rgd_maneuver_map_reset` (native route reset) stamps a new `route_generation` from the monotonic clock
 (strictly increasing, so it survives a hook restart while Java stays alive). Every snapshot and the
 disconnect clear carry it; Java clears route and lane caches when it changes, so a new route that

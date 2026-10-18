@@ -584,15 +584,25 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   soft shadow. Mirror the outline, not the lighting direction. The six-pixel
   transparent pad is texture space, not a position shift: draw its 242x268 image
   at `(113,64)` so the frame remains at `(119,70)`. No per-scroll-frame blur or
-  extra EGL swaps. Both Off removes the frame and shadow; single-section layouts
+  overlay-owned EGL swaps. Both Off removes the frame and shadow; single-section layouts
   retain the same frame. Center header ink in the flat cap, not its baseline.
+- The later owner photo exposes an overly steep outer corner. Use a 90-pixel
+  run with the unchanged 44-pixel cap height (26.1 degrees), not the old 70-pixel
+  run. Share the contour across clipping, coverage, bevel and shadow; recenter
+  the title in the remaining flat cap. This approximates the native right card
+  from the photo, not a calibrated physical-border angle. Keep body/placement fixed.
+- Card CJK SC is a card-only SIL OFL fallback generated from hash-pinned Noto Sans
+  CJK SC. Its 29,487 BMP glyphs use 4,430,153 read-only bytes and no decoded heap
+  atlas. Keep the generator, source hash and font license with distributions.
+  Missing glyphs become a visible square with a diagnostic, never a blank mixed
+  title. The maneuver footer retains its separate font/unsupported-text policy.
 - Keep Trip's heading separate from its smaller Estimated progress caption,
   directly above the bar and aligned with the ETA/time left edge. Unknown
   progress hides both caption and bar. Fit long-value fallback rows above the
   caption; never use the black lower base as extra text space behind Audi's dial.
 - Overflow title/artist scroll independently at 20 pixels/second with 1.8-second
   endpoint pauses, clipped per line. Advance on the existing worker's monotonic
-  clock; repaint only changed content/offsets, without extra EGL swaps. `CARDS3`
+  clock; repaint only changed content/offsets, without overlay-owned swaps. `CARDS3`
   carries an observed-track revision so album-only or transport-clipped label
   changes can reset both lines, unlike artwork/playback/Trip updates. It is not a
   phone track ID. Re-enabling media and lease/readiness recovery reset scrolling.
@@ -609,6 +619,23 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   The original `crc` is over the source JPEG/PNG, not the converted output.
   Cards validate the additive `png_crc` over the published PNG bytes; never
   substitute the original CRC or let Java/GL callbacks decode artwork.
+- Storage deduplication must not suppress a fresh artwork receipt event; repeat
+  the cached PNG CRC under the generation/publication lock without decoding again.
+  Pending early media belongs to its receiver generation (or the first eligible
+  receiver if none exists yet); source departure discards it.
+- Native destination/source boundaries clear absent travel fields before full
+  snapshot merge. Emit explicit unknown values so consumers cannot restore old
+  ETA/distance/duration. `time_remaining_sample_ms` is the original realtime
+  receipt, retained on replay; translate its age to BAP UTC, never refresh it
+  from duplicate snapshots. Invalid explicit timestamps clear duration.
+- Deferred route-zero acceptance and its nonblocking bus enqueue share the
+  debounce lock. A thread-safe queue alone does not prevent an older timeout
+  from overtaking a newly accepted active route.
+- Source-idle overlay redraws belong to the mirror's one presentation loop,
+  through an I/O-free weak overlay query. Changed cards/expiry/VC acknowledgement
+  use at most 10 Hz; an active mascot permits a 33 ms interval. Clear only after
+  successful swap. Count cached redraws separately from source presentation so
+  local animation cannot hide stalled phone video from recovery.
 - Only the settings worker publishes bounded `CARDS3` snapshots on `/ramdisk`,
   tied to mirror PID, receiver generation and expiry. Native workers read/paint;
   render callbacks must remain I/O-free. Passive cards never own inputs.

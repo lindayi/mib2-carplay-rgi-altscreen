@@ -106,6 +106,7 @@ static uint32_t recv_generation = 1;
 /* Module state */
 static struct {
     uint32_t last_crc;
+    uint32_t last_png_crc;
     uint32_t last_generation;
     int images_found;
     int slot;           /* ping-pong: 0 or 1 */
@@ -405,6 +406,7 @@ static int write_png_file(const uint8_t* data, size_t len, uint32_t generation,
 
     g_coverart.slot = new_slot;
     g_coverart.last_crc = crc;
+    g_coverart.last_png_crc = png_crc;
     g_coverart.last_generation = generation;
     g_coverart.images_found++;
     write_coverart_notify(crc, png_crc);
@@ -471,11 +473,17 @@ static int save_artwork(const uint8_t* data, size_t len, uint32_t generation) {
     /* CRC check for deduplication */
     uint32_t crc = crc32_bytes(data, len);
     pthread_mutex_lock(&worker_mutex);
-    int same_image = crc == g_coverart.last_crc && generation == g_coverart.last_generation;
-    pthread_mutex_unlock(&worker_mutex);
-    if (same_image) {
+    if (generation != worker_generation || worker_shutdown) {
+        pthread_mutex_unlock(&worker_mutex);
+        return 0;
+    }
+    if (crc == g_coverart.last_crc && generation == g_coverart.last_generation) {
+        /* A repeated transfer can be the new track's first artwork notification. */
+        write_coverart_notify(crc, g_coverart.last_png_crc);
+        pthread_mutex_unlock(&worker_mutex);
         return 1;  /* Same image, already saved */
     }
+    pthread_mutex_unlock(&worker_mutex);
 
     /* Dump raw JPEG if enabled */
     dump_raw_jpeg(data, len, g_coverart.images_found + 1);

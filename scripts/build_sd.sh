@@ -68,6 +68,7 @@ mkdir -p "$OUT"
 (cd "$SRC" && tar --exclude=.DS_Store --exclude='._*' -cf - .) | (cd "$OUT" && tar -xf -)
 python3 "$PROJECT_DIR/tools/final_script_checksum.py" "$OUT" --update
 cp "$PROJECT_DIR/maneuver_render/LICENSE.DEJAVU" "$OUT/LICENSE.DEJAVU"
+cp "$PROJECT_DIR/map_cards/LICENSE.OFL" "$OUT/LICENSE.CARD-CJK"
 rm -f "$OUT/SHA256SUMS-SD.list"
 
 ALTS_LIB=Toolbox/carplay_alt_screen/universal/libcarplay_altscreen.so

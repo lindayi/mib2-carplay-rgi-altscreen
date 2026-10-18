@@ -129,6 +129,16 @@ static void initialize(void) {
     if(error)fprintf(stderr,"MASCOT=WORKER_ERROR code=%d\n",error);
     else pthread_detach(thread);
 }
+static int presented_mascot;
+__attribute__((visibility("default")))
+unsigned carplay_overlay_frame_interval_ms(void) {
+    pthread_mutex_lock(&lock);
+    int active=selected>0 && monotonic_ms()<control_deadline;
+    int clearing=presented_mascot;
+    pthread_mutex_unlock(&lock);
+    if(active)return 33;
+    return clearing || vc_overlay_needs_frame() || cards_overlay_needs_frame()?100:0;
+}
 __attribute__((visibility("default")))
 EGLBoolean eglSwapBuffers(EGLDisplay display,EGLSurface surface) {
     pthread_once(&once,initialize);
@@ -163,6 +173,10 @@ EGLBoolean eglSwapBuffers(EGLDisplay display,EGLSurface surface) {
     }
     EGLBoolean result=real_swap(display,surface);
     vc_overlay_presented(&frame,result==EGL_TRUE);
+    cards_overlay_presented(result==EGL_TRUE);
+    if(result==EGL_TRUE) {
+        pthread_mutex_lock(&lock);presented_mascot=choice!=0;pthread_mutex_unlock(&lock);
+    }
     return result;
 }
 __attribute__((visibility("default")))

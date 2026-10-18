@@ -72,5 +72,7 @@ void cards_speed_paint(const cards_painter *painter,const cards_speed *speed,
 /* Poll only on the existing native control worker; draw never reads files or paints. */
 void cards_overlay_poll(void);
 void cards_overlay_draw(int menu_visible);
+int cards_overlay_needs_frame(void);
+void cards_overlay_presented(int success);
 void cards_overlay_context_lost(void *destroyed);
 #endif

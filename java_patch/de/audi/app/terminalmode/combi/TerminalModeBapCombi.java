@@ -147,8 +147,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
              * ACTIVATING / ACTIVE) report carplay=true, so this only fires on a genuine drop.  onDeactivate()
              * is idempotent (no-op unless active), so it is safe.  It also releases the cluster pin
              * (ScreenModule.isConnected()), so the stock map and the View button work again. */
+            if (!tmdevice.isCarplayDevice()) this.this$0.mapCards.resetSession();
             if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isSessionConnected()) {
-                this.this$0.mapCards.resetSession();
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();

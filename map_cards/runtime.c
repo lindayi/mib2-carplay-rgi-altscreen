@@ -31,6 +31,9 @@ static cards_speed painted_speed;
 static mascot_graphics speed_graphics;
 static GLint speed_viewport[4];
 static unsigned speed_wide;
+static int shown_card,shown_speed,drawn_card,drawn_speed;
+static uint64_t shown_image,shown_speed_image,drawn_image,drawn_speed_image;
+static unsigned shown_wide,drawn_wide;
 
 static uint64_t mono_ms(void) {
     struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);
@@ -119,7 +122,7 @@ void cards_overlay_poll(void) {
             error="PAINTER_ALLOCATION_ERROR";diagnostic(0,error,0);
         } else {
             unsigned omitted=cards_paint(&painter,&request,&artwork,scroll,buffers[back]);
-            if(omitted)diagnostic(2,"UNSUPPORTED_TEXT_OMITTED",omitted);
+            if(omitted)diagnostic(2,"MISSING_GLYPH_REPLACED",omitted);
             painted=request;painted_scroll=scroll;
         }
     }
@@ -144,8 +147,26 @@ void cards_overlay_poll(void) {
     speed_wide=request.speed.wide;
     pthread_mutex_unlock(&mutex);
 }
+int cards_overlay_needs_frame(void) {
+    pthread_mutex_lock(&mutex);
+    uint64_t now=mono_ms();
+    int card=now<deadline,speed=now<speed_deadline;
+    int needed=card!=shown_card || speed!=shown_speed ||
+        (card && image_serial!=shown_image) ||
+        (speed && (speed_serial!=shown_speed_image || speed_wide!=shown_wide));
+    pthread_mutex_unlock(&mutex);
+    return needed;
+}
+void cards_overlay_presented(int success) {
+    if(!success)return;
+    pthread_mutex_lock(&mutex);
+    shown_card=drawn_card;shown_speed=drawn_speed;
+    shown_image=drawn_image;shown_speed_image=drawn_speed_image;shown_wide=drawn_wide;
+    pthread_mutex_unlock(&mutex);
+}
 void cards_overlay_draw(int menu_visible) {
     pthread_mutex_lock(&mutex);
+    drawn_card=drawn_speed=0;
     uint64_t now=mono_ms();
     if((deadline && now>=deadline) || (speed_deadline && now>=speed_deadline))lease_expired=1;
     int card=now<deadline,speed=now<speed_deadline;
@@ -164,13 +185,15 @@ void cards_overlay_draw(int menu_visible) {
         int refresh=texture_serial!=image_serial || memcmp(viewport,texture_viewport,sizeof(viewport));
         good=mascot_draw_image_at(&graphics,buffers[front],CARDS_IMAGE_WIDTH,CARDS_IMAGE_HEIGHT,
                                  CARDS_X-CARDS_SHADOW_PAD,CARDS_TOP-CARDS_SHADOW_PAD,refresh);
-        if(good){texture_serial=image_serial;memcpy(texture_viewport,viewport,sizeof(viewport));}
+        if(good){texture_serial=image_serial;memcpy(texture_viewport,viewport,sizeof(viewport));
+            drawn_card=1;drawn_image=image_serial;}
     }
     if(speed) {
         int refresh=speed_texture_serial!=speed_serial || memcmp(viewport,speed_viewport,sizeof(viewport));
         int result=mascot_draw_image_at(&speed_graphics,speed_buffers[speed_front],SPEED_WIDTH,SPEED_HEIGHT,
             speed_wide?SPEED_X_WIDE:SPEED_X_INSET,SPEED_Y,refresh);
-        if(result){speed_texture_serial=speed_serial;memcpy(speed_viewport,viewport,sizeof(viewport));}
+        if(result){speed_texture_serial=speed_serial;memcpy(speed_viewport,viewport,sizeof(viewport));
+            drawn_speed=1;drawn_speed_image=speed_serial;drawn_wide=speed_wide;}
         good=good && result;
     }
     graphics_error=!good;
@@ -181,6 +204,7 @@ void cards_overlay_context_lost(void *destroyed) {
     if(context==destroyed) {
         memset(&graphics,0,sizeof(graphics));context=EGL_NO_CONTEXT;texture_serial=0;
         memset(&speed_graphics,0,sizeof(speed_graphics));speed_texture_serial=0;
+        shown_image=shown_speed_image=0;
     }
     pthread_mutex_unlock(&mutex);
 }

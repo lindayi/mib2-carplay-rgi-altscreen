@@ -182,9 +182,17 @@ caption and bar.
 Cards share one fixed RGI-inspired frame. At 1440x455 its bounds are
 `(119,70), 230x256`, measured from the top-left. The extra 20 pixels of width
 extend left, keeping the preceding frame's map-facing edge at x349. Its upper
-outer shoulder slopes inward over 70 pixels to a 44-pixel-high cap. The title's
+outer shoulder slopes inward over 90 pixels to a 44-pixel-high cap. The title's
 actual glyph bounds are centered within that flat cap, including Paused/Stopped
 and the Trip-only heading.
+
+The later owner photo shows that the previous 70-pixel run was too steep.
+The new 90-pixel run gives a 26.1-degree corner instead of 32.2 degrees,
+approximating the mirrored native right-card slope in that photo. Size,
+position, body rows and cap height stay unchanged; the heading is recentered
+in the shorter flat cap. This corrects the painted outline, its clipping,
+bevel and shadow together. Camera perspective and the curved physical border
+prevent an exact vehicle-angle claim; confirm the result while parked.
 
 The content body retains alpha 220/255. The shaded cap, bevel and rectangular
 black lower base are opaque; there is **no software-drawn circular cutout**.
@@ -234,9 +242,36 @@ logs an explicit error; there is no partial-success fallback. GL callbacks do no
 I/O. The control file contains media metadata: diagnostics summary reports only
 its presence, not its contents. **CONTROL_PUBLISHED is not presentation proof.**
 The native worker's render lease is at most one second; a stalled worker cannot
-keep cards alive merely because video continues. No additional EGL swaps or
-mirror telemetry are generated. Renderer errors are throttled in the existing
+keep cards alive merely because video continues. When phone video is idle, the
+mirror's existing presentation loop can redraw its cached video for changed
+cards, expiry cleanup or VC presentation acknowledgements, at most every 100 ms.
+An active map mascot permits a 33 ms interval. Unchanged static cards and all-Off
+need no idle redraw. The overlay itself never swaps. Cached redraws have a
+separate counter and never count as new source presentation for recovery.
+Renderer errors are throttled in the existing
 mirror log, included only in the private full export.
+
+Card text uses the existing DejaVu font with a bundled **Card CJK SC** fallback
+derived from pinned Noto Sans CJK SC Regular under SIL OFL 1.1. It has 29,487
+additional BMP glyphs, including common Simplified/Traditional Chinese, with
+Simplified Chinese letterforms. It does not translate text or change Audi fonts.
+Unsupported characters use a visible square and a bounded diagnostic, rather
+than hiding the entire mixed-language field. The maneuver-footer font policy
+is unchanged.
+
+The fallback uses 4,430,153 bytes of read-only coverage and metrics, including
+3,781,439 bytes of packed four-bit coverage. It allocates no additional decoded
+atlas. Generate it with `tools/generate_card_font.py` and
+`tools/card-font-requirements.txt`; the generator checks the source font hash.
+Keep `map_cards/LICENSE.OFL` with derived data and `LICENSE.CARD-CJK` in packages.
+
+Early CarPlay track/playback events wait for a matching receiver connection;
+source departure clears them. Repeated artwork transfers still announce receipt
+after native storage deduplication. A changed track still clears old artwork:
+there is no phone track ID on artwork events. Native Trip snapshots clear old
+travel fields at destination/source boundaries and retain the original duration
+receipt time across cached replay. These fixes address reproduced host defects;
+they do not establish the cause of every reported in-car omission or reboot.
 
 For parked acceptance, enable each card separately and then both. Check play,
 pause, track/artwork changes, route start/stop and receiver reconnect. Check long

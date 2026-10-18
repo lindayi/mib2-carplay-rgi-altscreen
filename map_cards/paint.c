@@ -1,10 +1,11 @@
 #include "cards.h"
 #include "../maneuver_render/route_font_data.h"
+#include "cjk_font_data.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 
-enum { SHOULDER=70,HEADER_HEIGHT=44,FOOTER_TOP=200,
+enum { SHOULDER=90,HEADER_HEIGHT=44,FOOTER_TOP=200,
        CONTENT_LEFT=12,CONTENT_RIGHT=CARDS_WIDTH-12,CONTENT_WIDTH=CARDS_WIDTH-24 };
 static void frame_paint(unsigned char *rgba);
 
@@ -33,7 +34,24 @@ static const route_glyph_t *glyph(uint32_t cp) {
         size_t mid=low+(high-low)/2;
         if(route_glyphs[mid].cp<cp)low=mid+1;else high=mid;
     }
-    return low<sizeof(route_glyphs)/sizeof(route_glyphs[0]) && route_glyphs[low].cp==cp?route_glyphs+low:NULL;
+    if(low<sizeof(route_glyphs)/sizeof(route_glyphs[0]) && route_glyphs[low].cp==cp)return route_glyphs+low;
+    low=0;high=sizeof(cards_cjk_glyphs)/sizeof(cards_cjk_glyphs[0]);
+    while(low<high) {
+        size_t mid=low+(high-low)/2;
+        if(cards_cjk_glyphs[mid].cp<cp)low=mid+1;else high=mid;
+    }
+    return low<sizeof(cards_cjk_glyphs)/sizeof(cards_cjk_glyphs[0]) &&
+        cards_cjk_glyphs[low].cp==cp?cards_cjk_glyphs+low:NULL;
+}
+static const route_glyph_t *display_glyph(uint32_t cp) {
+    const route_glyph_t *g=glyph(cp);
+    return g?g:glyph(0x25a1);
+}
+static unsigned glyph_alpha(const cards_painter *painter,const route_glyph_t *g,unsigned x,unsigned y) {
+    if(g->y!=CARDS_CJK_ROW)return painter->font[(g->y+y)*ROUTE_FONT_WIDTH+g->x+x];
+    unsigned index=y*g->w+x;
+    unsigned value=cards_cjk_coverage[cards_cjk_offsets[g->x]+index/2];
+    return (index&1?value&15:value>>4)*17;
 }
 static int supported(const char *text) {
     while(*text) {
@@ -123,7 +141,7 @@ static float text_left(const char *text,float scale) {
     while(*text) {
         uint32_t cp;
         if(!cards_utf8_next(&text,&cp))break;
-        const route_glyph_t *g=glyph(cp);
+        const route_glyph_t *g=display_glyph(cp);
         if(g){if(advance+g->left*scale<left)left=advance+g->left*scale;advance+=g->advance*scale/64.f;}
     }
     return floorf(left);
@@ -133,7 +151,7 @@ static int text_width(const char *text,float scale) {
     while(*text) {
         uint32_t cp;
         if(!cards_utf8_next(&text,&cp))break;
-        const route_glyph_t *g=glyph(cp);
+        const route_glyph_t *g=display_glyph(cp);
         if(g) {
             float edge=advance+(g->left+g->w)*scale;
             if(edge>right)right=edge;
@@ -154,10 +172,8 @@ cards_scroll cards_scroll_at(const cards_request *request,const cards_art *art,u
     cards_scroll out={0};
     if(!request->media)return out;
     media_layout layout=media_areas(request,art);
-    if(supported(request->text[0]))
-        out.title=cards_scroll_offset(text_width(request->text[0],layout.title_scale)-layout.title.w,elapsed);
-    if(supported(request->text[1]))
-        out.artist=cards_scroll_offset(text_width(request->text[1],layout.artist_scale)-layout.artist.w,elapsed);
+    out.title=cards_scroll_offset(text_width(request->text[0],layout.title_scale)-layout.title.w,elapsed);
+    out.artist=cards_scroll_offset(text_width(request->text[1],layout.artist_scale)-layout.artist.w,elapsed);
     return out;
 }
 static void text(const cards_painter *painter,canvas *rgba,const char *s,
@@ -168,7 +184,7 @@ static void text(const cards_painter *painter,canvas *rgba,const char *s,
     while(*s) {
         uint32_t cp;
         if(!cards_utf8_next(&s,&cp))break;
-        const route_glyph_t *g=glyph(cp);
+        const route_glyph_t *g=display_glyph(cp);
         if(!g)break;
         float next=advance+g->advance*scale/64.f;
         if(shorten && next>available)break;
@@ -179,7 +195,7 @@ static void text(const cards_painter *painter,canvas *rgba,const char *s,
                 float fx=sx-ix,fy=sy-iy;
                 for(unsigned yy=0;yy<2;yy++)for(unsigned xx=0;xx<2;xx++)
                     if(ix+xx<g->w && iy+yy<g->h)
-                        alpha+=painter->font[(g->y+iy+yy)*ROUTE_FONT_WIDTH+g->x+ix+xx]*
+                        alpha+=glyph_alpha(painter,g,ix+xx,iy+yy)*
                             (xx?fx:1-fx)*(yy?fy:1-fy);
                 int x=area.x+(int)(advance+g->left*scale)+dx-offset;
                 int y=area.y+(int)(g->top*scale)+dy;
@@ -201,7 +217,7 @@ static void header(const cards_painter *painter,canvas *rgba,const char *label) 
     while(*s) {
         uint32_t cp;
         if(!cards_utf8_next(&s,&cp))break;
-        const route_glyph_t *g=glyph(cp);
+        const route_glyph_t *g=display_glyph(cp);
         if(!g)break;
         if(g->w && g->h) {
             int x=(int)(advance+g->left);
@@ -223,8 +239,8 @@ static unsigned paint_cards(const cards_painter *painter,const cards_request *re
     const char *labels[CARDS_TEXT_FIELDS];
     for(unsigned i=0;i<CARDS_TEXT_FIELDS;i++) {
         int visible=i<3?request->media:request->trip;
-        labels[i]=visible && supported(request->text[i])?request->text[i]:"";
-        if(visible && request->text[i][0] && !labels[i][0])omitted|=1u<<i;
+        labels[i]=visible?request->text[i]:"";
+        if(visible && !supported(request->text[i]))omitted|=1u<<i;
     }
     if(!request->media && !request->trip)return 0;
     memcpy(rgba->pixels,painter->frame,CARDS_IMAGE_BYTES);

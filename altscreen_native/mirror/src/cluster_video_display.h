@@ -13,6 +13,7 @@ public:
 
     bool init(const Mhi2qBackendConfig &cfg);
     bool present_frame(const VideoFrame &frame);
+    bool present_overlay_frame();
     bool present_logo_frame(const unsigned char *rgba, int width, int height);
     bool present_logo_fade_frame(const VideoFrame &frame, float logo_opacity);
     void release_logo();
@@ -28,6 +29,7 @@ public:
         return backend_.sample_window_state(state);
     }
     unsigned long frame_count() const { return frame_count_; }
+    unsigned long overlay_frame_count() const { return overlay_frame_count_; }
 
 private:
     ClusterVideoDisplay(const ClusterVideoDisplay &);
@@ -40,6 +42,7 @@ private:
     bool ready_;
     bool first_frame_presented_;
     unsigned long frame_count_;
+    unsigned long overlay_frame_count_;
 };
 
 #endif

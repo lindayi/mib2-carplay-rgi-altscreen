@@ -36,6 +36,7 @@ c = r'''
 #include "framework/bus.h"
 #include <assert.h>
 static uint64_t now_monotonic_ms(void) { return 100; }
+static uint64_t now_realtime_ms(void) { return 100000; }
 '''+native_state+'\n'+reset+r'''
 static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) { (void)idx; (void)create; return -1; }
 '''+text_writer+'\n'+slot_writer+'\n'+write_mask+'\n'+merge+r'''
@@ -80,6 +81,19 @@ static void sample(const char *path,int which) {
     g_rgd.slot_ver[0]=(which==0 || which==3)?1:34;write_slot_data_keys(&b,0,&m);assert(!b.overflow);
     FILE *f=fopen(path,"wb");assert(f);assert(fwrite(text,1,b.len,f)==b.len);fclose(f);
 }
+static void travel_sample(const char *directory,int which) {
+    uint8_t raw[512]={0};size_t n=6;char path[1024];
+    n=num(raw,n,RGD_TLV_ROUTE_GUIDANCE_STATE,1,1);
+    if(which==0) {
+        n=num(raw,n,RGD_TLV_TIME_REMAINING,900,8);
+        n=num(raw,n,RGD_TLV_DISTANCE_REMAINING,10000,4);
+        n=field(raw,n,RGD_TLV_DESTINATION_NAME,(const uint8_t*)"First",5);
+    } else n=field(raw,n,RGD_TLV_DESTINATION_NAME,(const uint8_t*)"Second",6);
+    raw[0]=raw[1]=0x40;write_be16(raw+2,n);write_be16(raw+4,0x5201);
+    rgd_update_t update;assert(rgd_parse_update(raw,n,&update));
+    snprintf(path,sizeof(path),"%s/travel-%d.txt",directory,which);clock_output=path;
+    write_bus_update_partial(&update);clock_output=NULL;
+}
 static void clock_sample(const char *directory,const char *name,int offset,int mode) {
     uint8_t raw[512]={0};size_t n=6;char path[1024];
     n=num(raw,n,RGD_TLV_ETA,1735688700,8);
@@ -120,6 +134,8 @@ int main(int argc,char **argv) {
     destination.source_supports_route_guidance=1;write_bus_update_partial(&destination);
     clock_sample(argv[5],"new-generation",0,3);
     assert(!(g_rgd.update_cache.present&RGD_UPD_DEST_TIMEZONE));
+    travel_sample(argv[5],0);
+    travel_sample(argv[5],1);
     return 0;
 }
 '''
@@ -162,6 +178,21 @@ public class NativeInputProbe {
         if(state(reset).routeGeneration!=101 || state(reset).mVer[0]!=2
                 || state(reset).mAfterRoad[0]!=null || state(reset).mJunctionAngles[0]!=null)
             throw new AssertionError("native reset generation not received");
+        String directory=Paths.get(args[0]).getParent().toString();
+        RouteGuidance travel=new RouteGuidance();
+        parse(travel,directory+"/travel-0.txt");
+        RouteGuidance.State t=state(travel);
+        Method utc=BAPBridge.class.getDeclaredMethod("getUtcMillis");utc.setAccessible(true);
+        long utcSeconds=((Long)utc.invoke(null)).longValue()/1000L;
+        if(t.timeRemainingSeconds!=900 || t.distDestM!=10000 ||
+                utcSeconds-t.timeRemainingSampleSeconds<60)
+            throw new AssertionError("new Java consumer refreshed an old native duration sample");
+        long sample=t.timeRemainingSampleSeconds;
+        parse(travel,directory+"/travel-0.txt");
+        if(t.timeRemainingSampleSeconds!=sample)throw new AssertionError("native replay reset sample age");
+        parse(travel,directory+"/travel-1.txt");
+        if(t.timeRemainingSeconds!=-1 || t.distDestM!=-1 || t.etaSeconds!=-1)
+            throw new AssertionError("destination-only native snapshot restored old travel data");
         System.out.println("Native RGI contract: source sentinel, slot replacement, same-clock route reset and identical clean HUD descriptors PASS");
     }
 }

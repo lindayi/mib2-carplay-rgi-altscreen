@@ -898,6 +898,20 @@ public class RouteGuidance implements CarplayBus.Listener {
      * Parsing
      * ============================================================ */
 
+    static long remainingSampleSeconds(CarplayBus.Data data,long value,long previous,
+                                       long sampled,long nowSeconds) {
+        if(value<0)return -1;
+        if(data.has("time_remaining_sample_ms")) {
+            long stamp=data.num64("time_remaining_sample_ms",-1),now=System.currentTimeMillis();
+            if(stamp<=0 || stamp>now+1000) {
+                Log.w(TAG,"invalid remaining-duration sample time; clearing duration");
+                return -1;
+            }
+            return nowSeconds-Math.max(0L,now/1000L-stamp/1000L);
+        }
+        return value==previous && sampled>=0?sampled:nowSeconds;
+    }
+
     private void parse(CarplayBus.Data d) {
         // Dirty means pending publication, not just changed in this frame.
         // Keep failed HUD/renderer updates across subsequent distance-only deltas.
@@ -1138,9 +1152,12 @@ public class RouteGuidance implements CarplayBus.Listener {
         }
         if (d.has("time_remaining_seconds")) {
             long v = d.num64("time_remaining_seconds", -1);
-            if (v != state.timeRemainingSeconds) {
+            long sample=remainingSampleSeconds(d,v,state.timeRemainingSeconds,
+                state.timeRemainingSampleSeconds,BAPBridge.getUtcMillis()/1000L);
+            if(sample<0)v=-1;
+            if (v != state.timeRemainingSeconds || sample != state.timeRemainingSampleSeconds) {
                 state.timeRemainingSeconds = v;
-                state.timeRemainingSampleSeconds = v >= 0L ? BAPBridge.getUtcMillis() / 1000L : -1L;
+                state.timeRemainingSampleSeconds = sample;
                 state.markDirty(State.DIRTY_TIME_REMAINING);
             }
         }
