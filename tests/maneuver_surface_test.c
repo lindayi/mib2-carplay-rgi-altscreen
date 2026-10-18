@@ -1,7 +1,7 @@
 #define PLATFORM_QNX 1
 #include <assert.h>
 #include <stdint.h>
-#include "../maneuver_render/platform_qnx.c"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/platform_qnx.c"
 static unsigned creates, destroys, intervals, recreates;
 static int fail_interval, fail_bind, native_interval;
 static EGLSurface bound;

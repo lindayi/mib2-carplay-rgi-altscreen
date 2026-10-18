@@ -25,6 +25,40 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ## Resume here: workspace and source history
 
+### Canonical RGI baseline and source paths
+
+- Q5 development remains on `q5-mu1316-build-fixes`; use temporary branches and
+  PRs into Q5. Do not change `main` or the GitHub fork relationship as a side
+  effect of source integration. The original integration branch was fast-forwarded
+  into Q5 at `b2133b9` and deleted after verifying both tips.
+- GPL RGI source now uses yuedizhibo's `Toolbox/carplay_alt_screen` layout:
+  `rgi_native/src` replaces root `hook`, `hmi/src` replaces `java_patch`,
+  `hmi/resources` replaces `java_resources`, and `rgi_renderer/src`, `common`,
+  `toolchain` replace the corresponding old renderer roots. Historical paths
+  below refer to those earlier locations. The independent PolyForm
+  `altscreen_native/hook` did not move.
+- Java uses upstream `com.luka.carplay.routeguidance`, not `.rgd`. Update direct
+  imports, reflection/ASM names, tests and resource paths together; do not compile
+  a second legacy package or substitute the opaque upstream baseline JAR.
+- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins all 106 upstream source files.
+  The 12 explicit integration replacements are not claimed as identical upstream
+  behavior. In particular, keep MU1316 context roles, the single zoom sender,
+  NavigationJobs model writes, and SI-owned supervision until an explicit
+  migration reconciles their contracts. Never silently omit a changed adapter
+  or newly added upstream file during synchronization.
+- `tools/yuedizhibo_baseline.py check` verifies complete upstream inventory and
+  raw blob hashes. `plan` uses the pinned upstream blob as the merge base, current
+  source as ours, and the fetched revision as theirs. It writes only a new
+  ignored build directory; conflicts, additions/deletions and changed replacements
+  require review. The live source and pin never advance automatically.
+- Python 3.9+ and Git are needed for the baseline tool/tests. The native test
+  image now includes Git; local `mib2-rgi-baseline-test` also adds it to the
+  existing FFmpeg-capable image. Compare runtime artifact names separately from
+  source paths: installed `maneuver_render` and `/tmp/maneuver_render.log` did
+  not acquire the new source-directory prefix.
+- See `docs/upstream-baseline.md`. This is a component baseline with documented
+  local deltas, not a merge of every upstream file or a whole-fork reparenting.
+
 ### Source integration candidate: 2026-10-18
 
 - Prefer upstream implementation with local additions and narrow MU1316 adapters.

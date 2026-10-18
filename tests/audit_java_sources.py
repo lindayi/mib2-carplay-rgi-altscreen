@@ -10,8 +10,8 @@ from java_reference import normalize_class_literals
 project, reference, output = map(Path, sys.argv[1:])
 output.mkdir(parents=True, exist_ok=True)
 inventory = []
-for source in sorted((project / "java_patch").rglob("*.java")):
-    relative = source.relative_to(project / "java_patch")
+for source in sorted((project / "Toolbox/carplay_alt_screen/hmi/src").rglob("*.java")):
+    relative = source.relative_to(project / "Toolbox/carplay_alt_screen/hmi/src")
     stock = reference / relative
     entry = {"path": str(relative), "replacement": stock.is_file()}
     if stock.is_file():

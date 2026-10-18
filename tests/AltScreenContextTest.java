@@ -106,7 +106,7 @@ public final class AltScreenContextTest implements InvocationHandler {
             }
         }
 
-        static final class Renderer extends com.luka.carplay.rgd.RendererServer {
+        static final class Renderer extends com.luka.carplay.routeguidance.RendererServer {
             boolean framed;int peer=1;
             public boolean connect(){return true;}
             public boolean isReady(){return true;}
@@ -119,7 +119,7 @@ public final class AltScreenContextTest implements InvocationHandler {
         }
 
         void rendererBinding()throws Exception {
-            com.luka.carplay.rgd.BAPBridge bridge=new com.luka.carplay.rgd.BAPBridge();
+            com.luka.carplay.routeguidance.BAPBridge bridge=new com.luka.carplay.routeguidance.BAPBridge();
             Renderer renderer=new Renderer();
             field(bridge.getClass(),"initialized").setBoolean(bridge,true);
             field(bridge.getClass(),"bapSessionStarted").setBoolean(bridge,true);

@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;

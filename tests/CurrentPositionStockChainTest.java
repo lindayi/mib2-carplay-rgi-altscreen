@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import com.luka.carplay.framework.Log;
 import de.audi.app.combi.bap.app.navi.AppConnectorNavi;
@@ -46,7 +46,7 @@ public final class CurrentPositionStockChainTest {
         Capture capture = (Capture) unsafe.allocateInstance(Capture.class);
         Module module = (Module) unsafe.allocateInstance(Module.class); module.capture = capture;
         AppConnectorNavi sender = (AppConnectorNavi) unsafe.allocateInstance(AppConnectorNavi.class);
-        Constructor log = Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        Constructor log = Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         log.setAccessible(true);
         set(sender, "logChannel", log.newInstance()); set(sender, "logChannelFrequent", log.newInstance());
         set(sender, "moduleFsg", module);

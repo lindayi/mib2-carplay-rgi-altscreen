@@ -44,7 +44,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   CC=arm-unknown-nto-qnx6.5.0eabi-gcc
   NM=arm-unknown-nto-qnx6.5.0eabi-nm
   READELF=arm-unknown-nto-qnx6.5.0eabi-readelf
-  cd /src/hook
+  cd /src/Toolbox/carplay_alt_screen/rgi_native/src
   SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c \
         framework/iap2_protocol.c framework/hook_framework.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/jpeg_safety.c coverart/coverart_stream.c coverart/coverart_hook.c \
@@ -54,11 +54,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
         main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. $SRCS -o /src/build/libcarplay_hook.so -Wl,--gc-sections \
-      -Wl,--version-script=/src/hook/carplay_hook.exports.map -lz -lsocket
+      -Wl,--version-script=/src/Toolbox/carplay_alt_screen/rgi_native/src/carplay_hook.exports.map -lz -lsocket
   # The LD_PRELOAD ABI is an exact allowlist: hidden-by-default compilation plus
   # the version script, checked against what actually landed in .dynsym.
   awk "/global:/{g=1;next} /local:/{g=0} g{gsub(/[;[:space:]]/,\"\"); if(length) print}" \
-      /src/hook/carplay_hook.exports.map | sort > /tmp/exports_expected
+      /src/Toolbox/carplay_alt_screen/rgi_native/src/carplay_hook.exports.map | sort > /tmp/exports_expected
   $NM -D --defined-only /src/build/libcarplay_hook.so | awk "NF >= 3 { print \$3 }" | sort > /tmp/exports_actual
   diff -u /tmp/exports_expected /tmp/exports_actual || { echo "REJECTED: dynamic exports differ from the allowlist"; exit 1; }
   # emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).

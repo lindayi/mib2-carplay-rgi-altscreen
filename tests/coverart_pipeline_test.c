@@ -9,9 +9,9 @@
 #include <assert.h>
 static int test_compress(Bytef *, uLongf *, const Bytef *, uLong, int);
 #define compress2 test_compress
-#include "../hook/coverart/coverart_hook.c"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_hook.c"
 #undef compress2
-#include "../hook/framework/iap2_protocol.h"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.h"
 
 static pthread_mutex_t pause_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pause_cond = PTHREAD_COND_INITIALIZER;

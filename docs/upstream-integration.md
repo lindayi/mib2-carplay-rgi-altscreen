@@ -1,5 +1,12 @@
 # Upstream integration: 2026-10-18
 
+**Later source-baseline migration:** the current GPL component paths and
+repeatable three-way update workflow are documented in
+[upstream-baseline.md](upstream-baseline.md). Old `hook`, `java_patch`, `.rgd`
+and `maneuver_render` paths below describe the historical integration/audit.
+They are not the current build roots. The historical artifact identities and
+vehicle-evidence limits below remain unchanged.
+
 This candidate targets only `MHI2Q_US_AUG22_P5145 / MU1316`.
 It replaces the old AltScreen hook and mirror binaries with local source builds.
 It is **host-verified, not vehicle-verified**. No SD card was written during this

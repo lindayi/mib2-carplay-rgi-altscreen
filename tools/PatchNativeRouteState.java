@@ -45,7 +45,7 @@ public final class PatchNativeRouteState {
             hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
             hook.add(new VarInsnNode(Opcodes.ILOAD, 1));
             hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
-                "com/luka/carplay/rgd/NativeRouteStateOverlay", "nativeWrite", "(Ljava/lang/Object;Z)Z", false));
+                "com/luka/carplay/routeguidance/NativeRouteStateOverlay", "nativeWrite", "(Ljava/lang/Object;Z)Z", false));
             hook.add(new VarInsnNode(Opcodes.ISTORE, 1));
             m.instructions.insert(hook);
             targets++;

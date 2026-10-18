@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import com.luka.carplay.settings.Preferences;
 import com.luka.carplay.settings.Setting;

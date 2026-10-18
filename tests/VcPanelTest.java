@@ -58,7 +58,7 @@ public final class VcPanelTest {
             }
             return null;
         });
-        com.luka.carplay.rgd.GatedCombiService gate=new com.luka.carplay.rgd.GatedCombiService(
+        com.luka.carplay.routeguidance.GatedCombiService gate=new com.luka.carplay.routeguidance.GatedCombiService(
             (de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi)sink);
         gate.setRouteGuidanceBlocked(true);
         stockField(listener,"combiservice",gate);

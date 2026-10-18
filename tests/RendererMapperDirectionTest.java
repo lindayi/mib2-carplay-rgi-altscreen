@@ -2,8 +2,8 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
-import com.luka.carplay.rgd.ManeuverMapper;
-import com.luka.carplay.rgd.RendererMapper;
+import com.luka.carplay.routeguidance.ManeuverMapper;
+import com.luka.carplay.routeguidance.RendererMapper;
 
 public final class RendererMapperDirectionTest {
     private static RendererMapper.Mapping mapping(int type, int angle, int side) {

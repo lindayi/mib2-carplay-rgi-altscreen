@@ -1,5 +1,5 @@
-#include "../maneuver_render/frame_clock.h"
-#include "../common/log_stamp.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/frame_clock.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/common/log_stamp.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>

@@ -19,7 +19,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     com.luka.carplay.cluster.AltScreenLayoutLifecycleTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
-"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.routeguidance.RendererServerTransportTest
 
 # NAVSD INITIALIZING/READY must pass straight through the RGI gate
 # (the altscreen INITIALIZING takeover and AltScreenStartupTest do not apply here).
@@ -31,14 +31,14 @@ mkdir -p "$TEST_DIR/nav-init"
     "$PROJECT_DIR/tests/GatedCombiServiceInitStateTest.java"
 "$TEST_JDK/bin/java" \
     -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_FINAL" \
-    com.luka.carplay.rgd.GatedCombiServiceInitStateTest
+    com.luka.carplay.routeguidance.GatedCombiServiceInitStateTest
 
 # Exercise the actual lifecycle worker against controllable external modules.
 mkdir -p "$TEST_DIR/lifecycle"
 "$TEST_JDK/bin/javac" -encoding UTF-8 -d "$TEST_DIR/lifecycle" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/framework/ElapsedClock.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/Module.java" \
     "$PROJECT_DIR/tests/CarPlayAppLifecycleTest.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java" \

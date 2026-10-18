@@ -50,7 +50,7 @@ for f in $OWNED; do
     [ -e "$f" ] && rm -f "$f" && echo "  removed $f"
 done
 
-# renderer GL program-binary cache (common/gl_program_cache.h)
+# renderer GL program-binary cache (Toolbox/carplay_alt_screen/rgi_renderer/common/gl_program_cache.h)
 rm -rf /mnt/persist/var/app/luka_carplay_maneuver
 
 sync

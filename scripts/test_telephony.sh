@@ -14,7 +14,7 @@ CP="$STOCK:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osg
 ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm-tree-9.7.jar"
 rm -rf "$OUT/classes" "$OUT/tests" "$OUT/audit"
 mkdir -p "$OUT/classes" "$OUT/tests" "$OUT/audit"
-find "$ROOT/java_patch" -name '*.java' -print > "$OUT/sources.list"
+find "$ROOT/Toolbox/carplay_alt_screen/hmi/src" -name '*.java' -print > "$OUT/sources.list"
 javac -encoding UTF-8 -source 1.4 -target 1.4 -Xlint:-options \
     -cp "$CP" -d "$OUT/classes" @"$OUT/sources.list"
 (cd "$OUT/classes" && jar cf "$OUT/telephony.jar" com/luka/carplay/telephony \
@@ -32,8 +32,8 @@ fi
 if [ "$MODE" != java ]; then
 if command -v cc >/dev/null 2>&1; then
     cc -std=c99 -D_GNU_SOURCE -Wall -Wextra -Werror -pthread \
-        -I"$ROOT/hook" "$ROOT/tests/telephony/tel_test.c" \
-        "$ROOT/hook/framework/iap2_protocol.c" -o "$OUT/tel_test"
+        -I"$ROOT/Toolbox/carplay_alt_screen/rgi_native/src" "$ROOT/tests/telephony/tel_test.c" \
+        "$ROOT/Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c" -o "$OUT/tel_test"
     "$OUT/tel_test"
 else
     echo 'No host C compiler; run native telephony test in host C test image.' >&2

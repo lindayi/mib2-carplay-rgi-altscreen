@@ -1,5 +1,5 @@
 /* Exercise the production disconnect handler over real loopback TCP. */
-#include "../maneuver_render/server.c"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/server.c"
 #include <assert.h>
 #include <signal.h>
 

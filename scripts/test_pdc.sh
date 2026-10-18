@@ -32,9 +32,9 @@ CP="$TEST_DIR/stubs:$PATCH:$STOCK:$LIBS:$ASM"
 # not depend on a later HMI callback to release the presentation policy.
 mkdir -p "$TEST_DIR/lifecycle"
 "$JDK/bin/javac" -encoding UTF-8 -cp "$CP" -d "$TEST_DIR/lifecycle" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/framework/ElapsedClock.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java" \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/Module.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java" \

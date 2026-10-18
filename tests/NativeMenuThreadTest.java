@@ -47,7 +47,7 @@ public final class NativeMenuThreadTest {
                 }
             }
         }
-        Constructor<?> ctor=Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        Constructor<?> ctor=Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         ctor.setAccessible(true);Object log=ctor.newInstance();
         de.audi.atip.base.IFrameworkAccess fw=(de.audi.atip.base.IFrameworkAccess)Proxy.newProxyInstance(
             NativeMenuThreadTest.class.getClassLoader(),new Class[]{de.audi.atip.base.IFrameworkAccess.class},(p,m,a)->{

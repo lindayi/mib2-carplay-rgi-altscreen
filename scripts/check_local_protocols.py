@@ -46,19 +46,19 @@ def compare(c_path, java_path, mapping, shared=()):
         checks += 1
 
 
-compare("hook/framework/bus_protocol.h", "java_patch/com/luka/carplay/bus/CarplayBus.java", {
+compare("Toolbox/carplay_alt_screen/rgi_native/src/framework/bus_protocol.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java", {
     "BUS_TCP_PORT": "PORT", "BUS_MAGIC": "MAGIC", "BUS_HEADER_SIZE": "HEADER_SIZE",
     "BUS_MAX_PAYLOAD": "MAX_PAYLOAD", "BUS_FLAG_STICKY": "FLAG_STICKY",
     "BUS_FLAG_BINARY": "FLAG_BINARY", "BUS_FLAG_REPLAY": "FLAG_REPLAY",
     "ALT_SESSION_PAYLOAD_SIZE": "ALT_SESSION_PAYLOAD_SIZE",
 }, ("CMD_", "EVT_"))
-compare("hook/framework/bus.c", "java_patch/com/luka/carplay/bus/CarplayBus.java", {"MAX_TYPES": "MAX_TYPES"})
-compare("altscreen_native/integration.h", "java_patch/com/luka/carplay/cluster/AltScreenCluster.java", {
+compare("Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java", {"MAX_TYPES": "MAX_TYPES"})
+compare("altscreen_native/integration.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/AltScreenCluster.java", {
     "ALT_LOCAL_HMI_LEASE_MS": "HMI_LEASE_MS",
 })
-bus_limit = numeric(constants("hook/framework/bus.c")["MAX_TYPES"])
+bus_limit = numeric(constants("Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c")["MAX_TYPES"])
 bus_opcodes = {}
-for name, value in constants("hook/framework/bus_protocol.h").items():
+for name, value in constants("Toolbox/carplay_alt_screen/rgi_native/src/framework/bus_protocol.h").items():
     if name.startswith(("CMD_", "EVT_")):
         opcode = numeric(value)
         if opcode >= bus_limit:
@@ -66,25 +66,25 @@ for name, value in constants("hook/framework/bus_protocol.h").items():
         if opcode in bus_opcodes:
             raise SystemExit(f"Bus opcode collision: {name} and {bus_opcodes[opcode]}={value}")
         bus_opcodes[opcode] = name
-compare("maneuver_render/protocol.h", "java_patch/com/luka/carplay/rgd/RendererServer.java", {
+compare("Toolbox/carplay_alt_screen/rgi_renderer/src/protocol.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RendererServer.java", {
     "CR_TCP_PORT": "PORT", "CR_PKT_SIZE": "PKT_SIZE",
 }, ("CMD_", "EVT_", "MAN_FLAG_"))
-compare("maneuver_render/route_labels.h", "java_patch/com/luka/carplay/rgd/RouteLabels.java", {
+compare("Toolbox/carplay_alt_screen/rgi_renderer/src/route_labels.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RouteLabels.java", {
     "CR_LABEL_DISTANCE_BYTES": "DISTANCE_BYTES", "CR_LABEL_ROAD_BYTES": "ROAD_BYTES",
 })
 # ponytail: altscreen_render/AltscreenControlServer compare dropped (RGI-only fork has no altscreen).
-compare("vc_menu/panel.h", "java_patch/com/luka/carplay/settings/VcPanel.java", {
+compare("vc_menu/panel.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/settings/VcPanel.java", {
     "VC_PANEL_PREVIEW_PAGE": "PREVIEW_PAGE",
 })
-compare("map_cards/cards.h", "java_patch/com/luka/carplay/rgd/MapCards.java", {
+compare("map_cards/cards.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/MapCards.java", {
     "CARDS_TEXT_BYTES": "TEXT_BYTES",
 })
-compare("map_cards/cards.h", "java_patch/com/luka/carplay/core/SpeedBadge.java", {
+compare("map_cards/cards.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/SpeedBadge.java", {
     "SPEED_MAX_VALUE": "MAX_VALUE",
     "SPEED_MOVING_LEASE_MS": "MOVING_LEASE_MS",
     "SPEED_STOPPED_LEASE_MS": "STOPPED_LEASE_MS",
 })
-compare("map_cards/cards.h", "java_patch/com/luka/carplay/settings/MapCardControl.java", {
+compare("map_cards/cards.h", "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/settings/MapCardControl.java", {
     "CARDS_PROTOCOL_VERSION": "PROTOCOL_VERSION",
     "CARDS_MAX_SNAPSHOT": "MAX_SNAPSHOT", "CARDS_CONTROL_LEASE_MS": "CONTROL_LEASE_MS",
     "CARDS_TEXT_FIELDS": "TEXT_FIELDS",
@@ -104,6 +104,11 @@ with zipfile.ZipFile(jar) as archive:
     classes = [name for name in archive.namelist() if name.endswith(".class")]
     if not classes:
         raise SystemExit("Empty patch JAR")
+    if any(name.startswith("com/luka/carplay/rgd/") for name in classes):
+        raise SystemExit("Legacy RGI package remains in the shipping JAR")
+    for name in ("RouteGuidance", "BAPBridge", "RendererServer"):
+        if "com/luka/carplay/routeguidance/" + name + ".class" not in classes:
+            raise SystemExit("Missing upstream RGI class: " + name)
     for name in classes:
         magic, minor, major = struct.unpack(">IHH", archive.read(name)[:8])
         if magic != 0xCAFEBABE or (minor, major) != (0, 48):

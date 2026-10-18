@@ -44,7 +44,7 @@ cc -std=gnu99 -Wall -Wextra -Werror /src/tests/vc_panel_protocol_test.c /src/vc_
 /tmp/vc-panel-protocol /src/build/mmi-tests/vc-panel-control.txt
 java -cp /tmp:$CP com.luka.carplay.settings.VcPanelWorkerTest
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP com.luka.carplay.settings.MascotControlTest
-java -cp /tmp:$CP com.luka.carplay.rgd.MapCardsTest
+java -cp /tmp:$CP com.luka.carplay.routeguidance.MapCardsTest
 LD_PRELOAD=/tmp/qnx-tmp-contract.so java -cp /tmp:$CP com.luka.carplay.settings.MapCardControlTest /src/build/mmi-tests/map-cards-control.txt
 java -cp /tmp:$CP com.luka.carplay.settings.SettingsRuntimeTest
 bash /src/tests/settings_runtime_test.sh /src
@@ -52,8 +52,8 @@ bash /src/tests/volatile_state_test.sh /src
 bash /src/scripts/test_supervisor_lifecycle.sh
 mkdir -p /tmp/lifecycle
 javac -encoding UTF-8 -d /tmp/lifecycle \
-    /src/java_patch/com/luka/carplay/core/CarPlayApp.java /src/java_patch/com/luka/carplay/core/Module.java \
-    /src/java_patch/com/luka/carplay/framework/ElapsedClock.java \
+    /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/Module.java \
+    /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java \
     /src/tests/CarPlayAppLifecycleTest.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java \

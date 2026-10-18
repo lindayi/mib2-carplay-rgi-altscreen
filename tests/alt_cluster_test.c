@@ -1,4 +1,4 @@
-/* alt_cluster_test: the real hook/altcluster module against a fake libairplay
+/* alt_cluster_test: the real Toolbox/carplay_alt_screen/rgi_native/src/altcluster module against a fake libairplay
  * (alt_cluster_fake_airplay.c, a separate shared library).  Checks the session
  * tracking through the platform hooks, the exact command dictionaries and that
  * nothing is sent to a finalized session. */

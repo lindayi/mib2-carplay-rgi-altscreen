@@ -1,6 +1,6 @@
 /* GPL-3.0-only: regression of the actual telephony module and native ABI. */
 #define ENABLE_LOGGING 0
-#include "../../hook/telephony/tel_hook.c"
+#include "../../Toolbox/carplay_alt_screen/rgi_native/src/telephony/tel_hook.c"
 #include <assert.h>
 
 static unsigned injections;

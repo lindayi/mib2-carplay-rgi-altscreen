@@ -2,7 +2,7 @@ import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.core.FrameworkRef;
 import com.luka.carplay.core.ScreenModule;
-import com.luka.carplay.rgd.*;
+import com.luka.carplay.routeguidance.*;
 import de.audi.app.terminalmode.IContext;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;

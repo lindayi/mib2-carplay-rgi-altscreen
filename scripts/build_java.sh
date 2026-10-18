@@ -4,7 +4,7 @@
 #
 #   ./scripts/build_java.sh
 #
-# Input:  java_patch/   +   ../../Tools/jxe2jar   (stock jar + OSGi libs)
+# Input:  Toolbox/carplay_alt_screen/hmi/src/   +   ../../Tools/jxe2jar   (stock jar + OSGi libs)
 # Output: build/carplay_hook.jar
 #
 # Compiles against the owner's MU1316/P5145 stock JAR + OSGi, target 1.4,
@@ -24,14 +24,14 @@ TOOLS_DIR="$(cd "${TOOLS_DIR:-$PROJECT_DIR/../../Tools/jxe2jar}" && pwd)"
 STOCK_JAR_NAME=${STOCK_JAR:-MU1316-P5145-stock.jar}
 STOCK_JAR="$TOOLS_DIR/out/$STOCK_JAR_NAME"
 [ -f "$STOCK_JAR" ] || { echo "ERROR: $STOCK_JAR not found"; exit 1; }
-[ -d "$PROJECT_DIR/java_patch" ] || { echo "ERROR: java_patch/ not found"; exit 1; }
+[ -d "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src" ] || { echo "ERROR: Toolbox/carplay_alt_screen/hmi/src/ not found"; exit 1; }
 
 # Reproducible build identity is computed on the host (git lives here), passed into the container.
 BUILD_ID_RAW=${CARPLAY_BUILD_ID:-$(git -C "$PROJECT_DIR" describe --always --dirty 2>/dev/null || echo unknown)}
 BUILD_ID=$(printf '%s' "$BUILD_ID_RAW" | tr -cd 'A-Za-z0-9._-')
 
 echo "=== CarPlay Java Patch Build (Docker $IMG, stock $STOCK_JAR_NAME) ==="
-PACK_MOUNT="${MASCOT_PACK:-$PROJECT_DIR/java_resources}"
+PACK_MOUNT="${MASCOT_PACK:-$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/resources}"
 if [ -n "${MASCOT_PACK:-}" ]; then
   for f in catalog.json MascotCatalog.java mascots.rgba; do
     [ -s "$MASCOT_PACK/$f" ] || { echo "ERROR: missing mascot pack $f"; exit 1; }
@@ -47,7 +47,7 @@ docker run --rm \
   -e CUSTOM_MASCOT_PACK="${MASCOT_PACK:+1}" \
   "$IMG" bash -c '
   set -e
-  SRC=/src/java_patch
+  SRC=/src/Toolbox/carplay_alt_screen/hmi/src
   OUT=/src/build/java/classes
   OUTJAR=/src/build/carplay_hook.jar
   CP="/tools/out/$STOCK_JAR_NAME:/tools/libs/org.osgi.framework-1.10.0.jar:/tools/libs/org.osgi.util.tracker-1.5.4.jar"
@@ -72,7 +72,7 @@ docker run --rm \
 
   javac -source 1.4 -target 1.4 -cp "$CP" -sourcepath "$GEN:$SRC" -d "$OUT" -Xlint:-options @"$SRCLIST"
   # Compact generated metrics/Unicode tables (VC route text) live inside the jar.
-  cp -R /src/java_resources/. "$OUT/"
+  cp -R /src/Toolbox/carplay_alt_screen/hmi/resources/. "$OUT/"
   if [ -n "$CUSTOM_MASCOT_PACK" ]; then
     cp /mascot-pack/catalog.json "$OUT/com/luka/carplay/settings/mascot-catalog.json"
     cp "$GEN/com/luka/carplay/settings/MascotCatalog.java" "$OUT/com/luka/carplay/settings/mascot-catalog.java"
