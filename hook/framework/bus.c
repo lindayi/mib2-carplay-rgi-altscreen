@@ -43,9 +43,9 @@ DEFINE_LOG_MODULE(BUS);
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
 #define BUS_SHUTDOWN_WAIT_MS 2500
 /* Directly indexed events and commands. The highest current command is
- * CMD_ALT_RGI (0x0116); keep Java CarplayBus.MAX_TYPES in sync. */
+ * CMD_OEM_MAP_READY (0x0119); keep Java CarplayBus.MAX_TYPES in sync. */
 #define MAX_TYPES             0x0120
-#if CMD_ALT_RGI >= MAX_TYPES
+#if CMD_OEM_MAP_READY >= MAX_TYPES
 #error AltScreen command is outside the bus dispatch table
 #endif
 
@@ -620,9 +620,20 @@ static void release_connection(int fd, uint32_t gen) {
     pthread_mutex_unlock(&g_sock_write);
 }
 
+static void reconnect_wait(unsigned *delay_ms, bool received_frame) {
+    if (g_shutdown) return;
+    if (received_frame) *delay_ms = 100;
+    usleep(*delay_ms * 1000u);
+    if (!received_frame && *delay_ms < 2000) {
+        *delay_ms *= 2;
+        if (*delay_ms > 2000) *delay_ms = 2000;
+    }
+}
+
 static void* connector_main(void* arg) {
     (void)arg;
     LOG_INFO(LOG_MODULE, "connector thread started pid=%d -> %s:%d", (int)getpid(), BUS_TCP_HOST, BUS_TCP_PORT);
+    unsigned reconnect_delay_ms = 100;
 
     /* Outer loop: keep the link alive across Java HMI restarts. */
     while (!g_shutdown) {
@@ -638,7 +649,10 @@ static void* connector_main(void* arg) {
                 LOG_DEBUG(LOG_MODULE, "connect failed (%s), retrying in %d ms",
                           strerror(errno), backoff_ms);
                 usleep(backoff_ms * 1000);
-                if (backoff_ms < 2000) backoff_ms *= 2;
+                if (backoff_ms < 2000) {
+                    backoff_ms *= 2;
+                    if (backoff_ms > 2000) backoff_ms = 2000;
+                }
             }
         }
         if (g_shutdown) {
@@ -669,12 +683,14 @@ static void* connector_main(void* arg) {
         if (send_frame(fd, 0, false, &hello_frame) != 0) {
             LOG_WARN(LOG_MODULE, "direct HELLO failed fd=%d err=%s", fd, strerror(errno));
             close(fd);
+            reconnect_wait(&reconnect_delay_ms, false);
             continue;
         }
         LOG_INFO(LOG_MODULE, "direct HELLO sent fd=%d", fd);
 
         if (send_sync_snapshot(fd, 0, false) != 0) {
             close(fd);
+            reconnect_wait(&reconnect_delay_ms, false);
             continue;
         }
 
@@ -699,6 +715,7 @@ static void* connector_main(void* arg) {
         pthread_mutex_unlock(&g_lock);
         pthread_mutex_unlock(&g_sock_write);
 
+        bool received_frame = false;
         while (!g_shutdown) {
             bool still_current;
             pthread_mutex_lock(&g_lock);
@@ -712,8 +729,10 @@ static void* connector_main(void* arg) {
             if (read_frame(fd, gen) != 0) {
                 break;
             }
+            received_frame = true;
         }
         release_connection(fd, gen);
+        reconnect_wait(&reconnect_delay_ms, received_frame);
 
         if (!g_shutdown) {
             LOG_INFO(LOG_MODULE, "disconnect detected; will reconnect");
@@ -759,40 +778,13 @@ static void* timer_main(void* arg) {
 /* ============================================================
  * Lifecycle
  * ============================================================ */
-/* Crash diagnostic — mark which FATAL signal hit before the process dies.
- *
- * ASYNC-SIGNAL-SAFE ONLY.  The previous version called LOG_ERROR, which
- * grabs a pthread mutex + snprintf + open/write + strerror inside the
- * handler.  If the fault landed while any thread held g_log.lock (we log
- * constantly), the handler DEADLOCKED — the process hung instead of
- * dumping a core, which an external watchdog then SIGKILLs, masking the
- * very crash we were chasing.  Now: one write(2) of a fixed string, then
- * restore and re-raise into dio_manager's exact previous disposition. */
+/* QNX socket writes need SIGPIPE suppression. Fatal and lifecycle signals
+ * remain entirely owned by the stock receiver. */
 static spa_signal_guard_t g_signal_guard;
-
-static void bus_crash_handler(int sig) {
-    const char* msg;
-    switch (sig) {
-        case SIGSEGV: msg = "[hook] FATAL SIGSEGV in dio_manager\n"; break;
-        case SIGBUS:  msg = "[hook] FATAL SIGBUS in dio_manager\n";  break;
-        case SIGILL:  msg = "[hook] FATAL SIGILL in dio_manager\n";  break;
-        case SIGFPE:  msg = "[hook] FATAL SIGFPE in dio_manager\n";  break;
-        case SIGABRT: msg = "[hook] FATAL SIGABRT in dio_manager\n"; break;
-        default:      msg = "[hook] FATAL signal in dio_manager\n";  break;
-    }
-    size_t n = 0;                       /* inline (strlen is not async-signal-safe) */
-    while (msg[n]) n++;
-    (void)write(STDERR_FILENO, msg, n);
-    spa_signal_guard_chain(&g_signal_guard, sig);
-}
 
 static int bus_install_signal_policy(void)
 {
-    static const int fatalSignals[] = {
-        SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE
-    };
     struct sigaction action;
-    unsigned i;
 
     memset(&action, 0, sizeof(action));
     action.sa_handler = SIG_IGN;
@@ -800,16 +792,6 @@ static int bus_install_signal_policy(void)
     if (spa_signal_guard_install(&g_signal_guard, SIGPIPE, &action) != 0)
         return -1;
 
-    memset(&action, 0, sizeof(action));
-    action.sa_handler = bus_crash_handler;
-    sigemptyset(&action.sa_mask);
-    for (i = 0; i < sizeof(fatalSignals) / sizeof(fatalSignals[0]); ++i) {
-        if (spa_signal_guard_install(&g_signal_guard, fatalSignals[i],
-                                     &action) != 0) {
-            spa_signal_guard_restore(&g_signal_guard);
-            return -1;
-        }
-    }
     return 0;
 }
 
@@ -832,12 +814,8 @@ hook_result_t bus_init(void) {
 
     /* A peer reset during initial sync must not terminate dio_manager. Every
      * hook socket uses flags=0 because QNX io-pkt rejects MSG_NOSIGNAL, so the
-     * reversible policy ignores SIGPIPE while the bus is active. Diagnostic
-     * fault handlers chain to dio_manager's
-     * exact previous disposition.  ONLY fault signals — we must NOT hijack the
-     * host process's control signals (SIGTERM/INT/QUIT/HUP/USR1/USR2): those
-     * belong to dio_manager's own supervisor/shutdown logic, not to an injected
-     * library.  SIGKILL cannot be caught. */
+     * reversible policy ignores SIGPIPE while the bus is active. All fault
+     * and lifecycle signal dispositions remain owned by dio_manager. */
     if (bus_install_signal_policy() != 0) {
         LOG_ERROR(LOG_MODULE, "failed to install reversible signal policy errno=%d", errno);
         return HOOK_ERR_INIT;

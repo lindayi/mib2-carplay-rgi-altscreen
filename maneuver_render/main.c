@@ -464,8 +464,10 @@ int main(int argc, char **argv) {
         pthread_t watchdog;
         if (pthread_create(&watchdog, NULL, renderer_watchdog_main, NULL) == 0)
             pthread_detach(watchdog);
-        else
+        else {
             fprintf(stderr, "maneuver_render: progress watchdog create failed\n");
+            return 89;
+        }
     }
 
 #ifdef PLATFORM_QNX

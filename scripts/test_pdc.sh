@@ -35,6 +35,8 @@ mkdir -p "$TEST_DIR/lifecycle"
     "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
     "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java"
 "$JDK/bin/javac" -cp "$TEST_DIR/lifecycle:$TEST_DIR/test:$CP" -d "$TEST_DIR/test" \

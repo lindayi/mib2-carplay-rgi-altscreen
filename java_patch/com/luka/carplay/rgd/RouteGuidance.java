@@ -51,6 +51,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      * the cached presentation state on READY/FRAME_READY/death and on a bounded retry tick. */
     private final Object presentationLock = new Object();
     private Thread presentationThread;
+    private long lastPresentationStartMs;
     private boolean presentationWake;
     private boolean presentationDrivePending;
     private boolean infoPresentationRefreshPending;
@@ -377,11 +378,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             rendererViewportRefreshPending = false;
             desiredInfoPhase = defaultInfoPhase;
             infoReturnDeadline = 0L;
-            presentationThread = new Thread(new Runnable() {
-                public void run() { presentationLoop(generation); }
-            }, "carplay-rgi-presentation");
-            presentationThread.setDaemon(true);
-            presentationThread.start();
+            startPresentationWorkerLocked(generation);
         }
         com.luka.carplay.core.ScreenModule.setNavActive(false);
 
@@ -445,6 +442,49 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     public boolean isRunning() {
         return running;
+    }
+
+    /** Existing lifecycle worker owns retries; no extra timer and no settings reset. */
+    public synchronized void refreshServiceBindings() {
+        if (!running) return;
+        if (bap != null) bap.refreshClusterAccess();
+        synchronized (presentationLock) {
+            long now = System.currentTimeMillis();
+            if ((presentationThread == null || !presentationThread.isAlive())
+                    && (now < lastPresentationStartMs || now - lastPresentationStartMs >= 2000L)) {
+                presentationDrivePending = true;
+                rendererViewportRefreshPending = true;
+                infoPresentationRefreshPending = true;
+                presentationWake = true;
+                startPresentationWorkerLocked(++presentationGeneration);
+            }
+        }
+    }
+
+    private void startPresentationWorkerLocked(final int generation) {
+        lastPresentationStartMs = System.currentTimeMillis();
+        try {
+            presentationThread = new Thread(new Runnable() {
+                public void run() {
+                    try { presentationLoop(generation); }
+                    catch (Throwable t) {
+                        try { Log.e(TAG, "presentation worker failed; lifecycle monitor will retry", t); }
+                        catch (Throwable ignored) { }
+                    } finally {
+                        synchronized (presentationLock) {
+                            if (presentationThread == Thread.currentThread() && generation == presentationGeneration)
+                                presentationThread = null;
+                        }
+                    }
+                }
+            }, "carplay-rgi-presentation");
+            presentationThread.setDaemon(true);
+            presentationThread.start();
+        } catch (Throwable t) {
+            presentationThread = null;
+            try { Log.e(TAG, "presentation worker start failed; retry delayed", t); }
+            catch (Throwable ignored) { }
+        }
     }
 
     /** REPLACE mode: cancel stock nav + shut RG gate for the whole CarPlay session

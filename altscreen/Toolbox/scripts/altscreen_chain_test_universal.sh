@@ -97,6 +97,7 @@ INSTALLED_MARKER="$STATE_DIR/INSTALLED"
 PROBE_MARKER="$RUNTIME_STATE_DIR/fullchain_probe"
 FIREWALL_BEGIN="# BEGIN ALTSCREEN TYPE111 FIREWALL"
 FIREWALL_END="# END ALTSCREEN TYPE111 FIREWALL"
+. "$VOLUME/Toolbox/scripts/altscreen_firewall.sh" || fail "firewall helper unavailable"
 
 locate_first(){
     for cand in $1; do [ -e "$(p "$cand")" ] && { echo "$cand"; return 0; }; done
@@ -421,25 +422,8 @@ backup_universal_hook() (
     verify_universal_backup
 )
 
-strip_firewall_block(){
-    awk -v begin="$FIREWALL_BEGIN" -v end="$FIREWALL_END" '
-      $0==begin {if(inside||seen++)exit 9;inside=1;next}
-      $0==end {if(!inside)exit 9;inside=0;next}
-      !inside {print}
-      END{if(inside)exit 9}
-    ' "$1"
-}
-remove_legacy_firewall_rule() (
-    live=$(p "$LIVE_PF_CONF")
-    clean="$STATE_DIR/pf.clean.$$"
-    strip_firewall_block "$live" > "$clean" || return 1
-    if ! same_bytes "$clean" "$live"; then
-        stage_and_publish "$clean" "$live" 644 || { rm -f "$clean"; return 1; }
-    fi
-    rm -f "$clean" "$STATE_DIR/FIREWALL_PATCHED"
-    say "FIREWALL=TYPE111_RUNTIME_EXACT_PORT interface=carplay0 persistent_high_port_range=ABSENT"
-)
 restore_firewall() (
+    restore_firewall_variants || return 1
     [ -f "$FIREWALL_COMPLETE" ] || return 0
     verify_firewall_backup || return 1
     stage_and_publish "$FIREWALL_BACKUP_FILE" "$(p "$LIVE_PF_CONF")" 644 || return 1
@@ -524,6 +508,7 @@ cmd_install(){
     check_sources || { lock_release; return 1; }
     backup_originals || { say "FAIL: original backup failed"; lock_release; return 1; }
     backup_firewall || { say "FAIL: firewall backup failed"; lock_release; return 1; }
+    backup_firewall_variants || { say "FAIL: firewall variant backup failed"; lock_release; return 1; }
     backup_universal_hook || { say "FAIL: universal hook backup failed"; lock_release; return 1; }
     mount_rw "$(p /mnt/app)" || { lock_release; return 1; }; MR_APP=1
     mount_rw "$(p /mnt/system)" || { finish_mounts; lock_release; return 1; }; MR_SYS=1
@@ -544,7 +529,7 @@ cmd_install(){
         fi
         rm -f "$cfg"
     fi
-    if [ "${goto_fail:-0}" != 1 ]; then remove_legacy_firewall_rule || goto_fail=1; fi
+    if [ "${goto_fail:-0}" != 1 ]; then install_static_firewall_rules || goto_fail=1; fi
     if [ "${goto_fail:-0}" = 1 ]; then
         say "FAIL: universal deployment failed; restoring originals"
         restore_originals || say "WARN: rollback restore failed"
@@ -572,6 +557,7 @@ cmd_start(){
     [ ! -e "$RUNTIME_STATE_DIR/transaction.pending" ] || { say "FAIL: incomplete INSTALL or RESTORE"; lock_release; return 1; }
     verify_backup || { say "FAIL: original backup damaged"; lock_release; return 1; }
     verify_firewall_backup || { say "FAIL: firewall backup damaged"; lock_release; return 1; }
+    verify_firewall_variant_backup || { say "FAIL: firewall variant backup damaged"; lock_release; return 1; }
     [ -s "$UNIVERSAL_DST" ] || { say "FAIL: universal preload missing"; lock_release; return 1; }
     awk -v query="$UNIVERSAL_REL" -f "$PRELOAD_AWK" "$(p "$LIVE_JSON_SI")" >/dev/null || {
         say "FAIL: universal preload is not armed in carplay env"; lock_release; return 1; }
@@ -668,7 +654,11 @@ cmd_status(){
     for m in ARMED ACTIVE FORCE_START ARMED_IAP2; do [ -e "$RUNTIME_STATE_DIR/$m" ] && echo "MARKER $m=PRESENT" || echo "MARKER $m=ABSENT"; done
     echo "FIRMWARE_PROFILE=UNIVERSAL"
     echo "RESOLVER_POLICY=dynamic_symbols_plus_ELF_relocations fail_open=YES"
-    echo "FIREWALL_TYPE111=RUNTIME_EXACT_PORT persistent_high_port_range=ABSENT"
+    if grep -Fxq "$FIREWALL_STATIC_RULE" "$(p "$LIVE_PF_CONF")"; then
+        echo "FIREWALL_TYPE111=FIXED_6031 source=PERSISTENT_CONFIG effective_after_reboot=YES"
+    else
+        echo "FIREWALL_TYPE111=RUNTIME_EXACT_PORT persistent_fixed_rule=ABSENT"
+    fi
 }
 
 cmd_collect(){

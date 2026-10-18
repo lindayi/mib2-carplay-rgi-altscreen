@@ -61,6 +61,8 @@ static pthread_mutex_t g_lock;
 static pthread_once_t g_lock_once = PTHREAD_ONCE_INIT;
 static void* g_session;
 static uint32_t g_session_generation;
+static uint32_t g_published_session;
+static int g_session_published;
 
 static void alt_lock_init(void) {
     pthread_mutexattr_t attr;
@@ -195,16 +197,53 @@ static void alt_on_ui_context(uint16_t type, uint8_t flags, const uint8_t* paylo
     else          LOG_INFO(LOG_MODULE, "showUI %s", url);
 }
 
+static void alt_on_oem_map_ready(uint16_t type, uint8_t flags, const uint8_t* payload,
+                                  uint32_t len, void* ctx) {
+    typedef void (*ready_f)(int);
+    (void)type; (void)ctx;
+    if (!(flags & BUS_FLAG_BINARY) || len != 1 || !payload || payload[0] != 1) {
+        LOG_WARN(LOG_MODULE, "invalid OEM map readiness command");
+        return;
+    }
+    ready_f ready = (ready_f)dlsym(RTLD_DEFAULT, "altscreen_oem_map_ready");
+    if (ready) ready(1);
+    else LOG_WARN(LOG_MODULE, "OEM map readiness ignored: no source AltScreen preload");
+}
+
+static void alt_session_tick(void) {
+    typedef uint32_t (*generation_f)(void);
+    static generation_f generation;
+    static int missing_logged;
+    if (!generation) generation = (generation_f)dlsym(RTLD_DEFAULT, "altscreen_ui_session_generation");
+    if (!generation && !missing_logged) {
+        missing_logged = 1;
+        LOG_WARN(LOG_MODULE, "source AltScreen session readiness unavailable");
+    }
+    uint32_t current = generation ? generation() : 0;
+    alt_lock();
+    if (!g_session) current = 0;
+    if (!g_session_published || current != g_published_session) {
+        uint8_t payload[4] = { current >> 24, current >> 16, current >> 8, current };
+        if (bus_send(EVT_ALT_SESSION, BUS_FLAG_BINARY | BUS_FLAG_STICKY, payload, 4) == HOOK_OK) {
+            g_session_published = 1;
+            g_published_session = current;
+        }
+    }
+    alt_unlock();
+}
+
 static void alt_cluster_init(void) {
     if (!hook_process_is_dio_manager()) return;
     bus_on(CMD_ALT_ZOOM, alt_on_zoom, NULL);
     bus_on(CMD_ALT_UICTX, alt_on_ui_context, NULL);
+    bus_on(CMD_OEM_MAP_READY, alt_on_oem_map_ready, NULL);
     LOG_INFO(LOG_MODULE, "cluster commands ready (display %s)", ALT_CLUSTER_DISPLAY_UUID);
 }
 
 static void alt_cluster_shutdown(void) {
     bus_off(CMD_ALT_ZOOM);
     bus_off(CMD_ALT_UICTX);
+    bus_off(CMD_OEM_MAP_READY);
 }
 
 const hook_module_def_t alt_cluster_module_def = {
@@ -212,4 +251,5 @@ const hook_module_def_t alt_cluster_module_def = {
     .priority = HOOK_PRIORITY_LOW,
     .on_init = alt_cluster_init,
     .on_shutdown = alt_cluster_shutdown,
+    .on_tick = alt_session_tick,
 };

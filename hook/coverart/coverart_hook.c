@@ -106,6 +106,7 @@ static uint32_t recv_generation = 1;
 /* Module state */
 static struct {
     uint32_t last_crc;
+    uint32_t last_generation;
     int images_found;
     int slot;           /* ping-pong: 0 or 1 */
 } g_coverart = {
@@ -120,6 +121,7 @@ static pthread_cond_t worker_cond = PTHREAD_COND_INITIALIZER;
 static uint8_t* pending_data = NULL;     /* owned by queue */
 static size_t pending_len = 0;
 static int worker_started = 0;           /* guarded by worker_mutex */
+static int worker_starting = 0;
 static int worker_shutdown = 0;          /* guarded by worker_mutex */
 static int worker_exited = 0;            /* guarded by worker_mutex */
 
@@ -335,7 +337,9 @@ static int ensure_dir(const char* dir) {
  *   3. rename() temp symlink over coverart.png  (atomic on POSIX)
  *   4. Unlink old coverart_<old_slot>.png
  */
-static int write_png_file(const uint8_t* data, size_t len) {
+static void write_coverart_notify(uint32_t crc, uint32_t png_crc);
+static int write_png_file(const uint8_t* data, size_t len, uint32_t generation,
+                          uint32_t crc, uint32_t png_crc) {
     if (!real_write) {
         real_write = (WriteFunc)dlsym(RTLD_NEXT, "write");
     }
@@ -385,16 +389,27 @@ static int write_png_file(const uint8_t* data, size_t len) {
     }
 
     /* 3. Atomic swap: rename temp symlink over canonical path */
+    pthread_mutex_lock(&worker_mutex);
+    if (generation != worker_generation || worker_shutdown) {
+        pthread_mutex_unlock(&worker_mutex);
+        unlink(tmp_link);
+        unlink(new_path);
+        return -2;
+    }
     if (rename(tmp_link, COVERART_FILE) != 0) {
+        pthread_mutex_unlock(&worker_mutex);
         LOG_ERROR(LOG_MODULE, "rename(%s, %s) failed: %d", tmp_link, COVERART_FILE, errno);
         unlink(tmp_link);
         return -1;
     }
 
-    /* 4. Remove old slot file (ignore errors - may not exist on first run) */
-    unlink(old_path);
-
     g_coverart.slot = new_slot;
+    g_coverart.last_crc = crc;
+    g_coverart.last_generation = generation;
+    g_coverart.images_found++;
+    write_coverart_notify(crc, png_crc);
+    pthread_mutex_unlock(&worker_mutex);
+    unlink(old_path);
     return 0;
 }
 
@@ -455,7 +470,10 @@ static int save_artwork(const uint8_t* data, size_t len, uint32_t generation) {
 
     /* CRC check for deduplication */
     uint32_t crc = crc32_bytes(data, len);
-    if (crc == g_coverart.last_crc) {
+    pthread_mutex_lock(&worker_mutex);
+    int same_image = crc == g_coverart.last_crc && generation == g_coverart.last_generation;
+    pthread_mutex_unlock(&worker_mutex);
+    if (same_image) {
         return 1;  /* Same image, already saved */
     }
 
@@ -533,27 +551,27 @@ static int save_artwork(const uint8_t* data, size_t len, uint32_t generation) {
     }
     free(resized);
 
-    /* A slow decode from a retired Identify generation must never overwrite
-     * or notify the new session. Reset and publication share this lock. */
+    /* Check before bulk I/O, then recheck under the publication lock at rename. */
     pthread_mutex_lock(&worker_mutex);
-    if (generation != worker_generation) {
+    if (generation != worker_generation || worker_shutdown) {
         pthread_mutex_unlock(&worker_mutex);
         free(png);
         return 0;
     }
-    if (write_png_file(png, png_len) == 0) {
-        g_coverart.last_crc = crc;
-        g_coverart.images_found++;
+    pthread_mutex_unlock(&worker_mutex);
+    int result = write_png_file(png, png_len, generation, crc, crc32_bytes(png, png_len));
+    if (result == 0) {
         LOG_INFO(LOG_MODULE, "Saved PNG #%d: %s (%zu bytes)",
                  g_coverart.images_found, COVERART_FILE, png_len);
 
-        /* Write bus notification for Java watcher */
-        write_coverart_notify(crc, crc32_bytes(png, png_len));
+    } else if (result == -2) {
+        LOG_DEBUG(LOG_MODULE, "Discarded artwork from retired generation");
+        free(png);
+        return 0;
     } else {
         LOG_ERROR(LOG_MODULE, "Failed to write artwork");
     }
 
-    pthread_mutex_unlock(&worker_mutex);
     free(png);
     return 1;
 }
@@ -648,32 +666,22 @@ static void* coverart_worker_main(void* arg) {
  * worker frees it.  The worker is created lazily for the first complete
  * image.  Never fall back to inline decode: this function is called from the
  * stock NmeIAP2Link receive thread and blocking it can wedge the session. */
-static void enqueue_image_async(uint8_t* data, size_t len, uint32_t generation) {
-    int create_rc = 0;
-    int started_now = 0;
+static int enqueue_image_async(uint8_t* data, size_t len, uint32_t generation) {
+    int start_needed = 0;
 
-    if (!data) return;
+    if (!data) return 0;
 
     pthread_mutex_lock(&worker_mutex);
     if (worker_shutdown || generation != worker_generation) {
         pthread_mutex_unlock(&worker_mutex);
         free(data);
-        return;
+        return 0;
     }
 
-    if (!worker_started) {
+    if (!worker_started && !worker_starting) {
         worker_exited = 0;
-        create_rc = pthread_create(&worker_thread, NULL, coverart_worker_main, NULL);
-        if (create_rc != 0) {
-            pthread_mutex_unlock(&worker_mutex);
-            LOG_ERROR(LOG_MODULE,
-                      "Failed to start lazy cover-art worker rc=%d; dropping image to protect iAP2 receive thread",
-                      create_rc);
-            free(data);
-            return;
-        }
-        worker_started = 1;
-        started_now = 1;
+        worker_starting = 1;
+        start_needed = 1;
     }
 
     if (pending_data) {
@@ -686,8 +694,27 @@ static void enqueue_image_async(uint8_t* data, size_t len, uint32_t generation) 
     pthread_cond_signal(&worker_cond);
     pthread_mutex_unlock(&worker_mutex);
 
-    if (started_now)
-        LOG_INFO(LOG_MODULE, "Lazy joinable cover-art worker started");
+    return start_needed;
+}
+
+static void start_coverart_worker(void) {
+    pthread_t created;
+    int rc = pthread_create(&created, NULL, coverart_worker_main, NULL);
+    pthread_mutex_lock(&worker_mutex);
+    worker_starting = 0;
+    if (rc == 0) {
+        worker_thread = created;
+        worker_started = 1;
+    } else {
+        free(pending_data);
+        pending_data = NULL;
+        pending_len = 0;
+        worker_exited = 1;
+    }
+    pthread_cond_broadcast(&worker_cond);
+    pthread_mutex_unlock(&worker_mutex);
+    if (rc == 0) LOG_INFO(LOG_MODULE, "Lazy joinable cover-art worker started");
+    else LOG_ERROR(LOG_MODULE, "Cover-art worker creation failed rc=%d; retry on next image", rc);
 }
 
 /* NmeTransport::Recv seam — the sole cover-art input.  Fed by the framework's
@@ -695,6 +722,7 @@ static void enqueue_image_async(uint8_t* data, size_t len, uint32_t generation) 
  * FF 5A stream once so an on-unit run can verify the seam carries link frames. */
 static void handle_recv_stream(const uint8_t* buf, size_t len) {
     if (!buf || len == 0) return;
+    int start_needed = 0;
 
     pthread_mutex_lock(&recv_mutex);
     uint8_t* process_buf = NULL;
@@ -738,11 +766,12 @@ static void handle_recv_stream(const uint8_t* buf, size_t len) {
     }
 
     if (process_buf) {
-        enqueue_image_async(process_buf, process_len, generation);
+        start_needed = enqueue_image_async(process_buf, process_len, generation);
     }
     /* Preserve completion order through enqueue: a delayed older callback
      * cannot replace the newer pending image from a concurrent Recv. */
     pthread_mutex_unlock(&recv_mutex);
+    if (start_needed) start_coverart_worker();
 }
 
 static int coverart_callback_enter(void) {
@@ -876,16 +905,16 @@ static void coverart_runtime_shutdown(void) {
         pending_len = 0;
     }
     pthread_cond_signal(&worker_cond);
-    if (worker_started) {
-        thread_to_join = worker_thread;
+    if (worker_started || worker_starting) {
         worker_quiesced = worker_exited;
         wait_rc = 0;
         coverart_deadline_after_ms(&deadline, COVERART_WORKER_DRAIN_MS);
-        while (!worker_exited && wait_rc != ETIMEDOUT)
+        while ((worker_starting || !worker_exited) && wait_rc != ETIMEDOUT)
             wait_rc = pthread_cond_timedwait(&worker_cond, &worker_mutex,
                                              &deadline);
-        worker_quiesced = worker_exited;
-        join_worker = worker_quiesced;
+        worker_quiesced = !worker_starting && worker_exited;
+        join_worker = worker_quiesced && worker_started;
+        if (join_worker) thread_to_join = worker_thread;
     }
     pthread_mutex_unlock(&worker_mutex);
 

@@ -2,15 +2,18 @@
 
 **This personal fork's current package targets MHI2Q_US_AUG22_P5145 / MU1316 only.**
 It adds a native **Carplay Altscreen** entry under normal Navigation Settings.
-The menu's native display/input behavior and wireless-adapter bypass have not yet
-been tested on the car. Historical upstream reports below are not compatibility
-claims for this new menu build.
+This source-built candidate has not been tested in the car. Earlier local menu
+tests and historical upstream reports below do not validate this new runtime.
+Native source and the adapted V3.8 firewall helper are source-available
+noncommercial components, not OSI open source; see
+[integration and licensing](../docs/upstream-integration.md).
 
 This tree contains the SD-card package for Audi **MHI2Q** infotainment units, enabling the **native CarPlay AltScreen (secondary navigation video stream)** directly on the vehicle's **Virtual Cockpit**, integrated with full 3D turn-by-turn route guidance, steering-wheel map zoom, and vehicle marker centering.
 
-The core display pipeline, watermark removal, aspect-ratio correction, steering-wheel zoom, and RGI integration have been vehicle-validated.
+Earlier binary-based upstream releases reported working video, zoom and RGI.
+Those reports do not establish this source candidate's behavior.
 
-**Tested & confirmed working on:**
+**Historical upstream hardware report:**
 - **Vehicle:** Audi Q5 (FY) 2019
 - **Firmware Train:** `MHI2Q_ER_AUG22_P5092`
 - **MU Software:** `1329`
@@ -43,15 +46,17 @@ The core display pipeline, watermark removal, aspect-ratio correction, steering-
 This package integrates upstream **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)** and **[mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** with local improvements:
 
 - **CarPlay AltScreen on Virtual Cockpit:** Native secondary CarPlay stream (Apple Maps, Google Maps) drawn on displayable 3 (Context 81).
-- **Smooth 30 fps Cluster Video:** Upstream showed ~15 fps (the frame tap read back every second decoded frame; the mirror sidecar polled every 20 ms on a fixed 33 ms period). `build_sd.sh` patches both binaries (`tools/patch_altscreen_fps.py`); the cluster now shows 28-30 of the iPhone's 30 fps.
+- **Source-built V3.8 video:** Current Type111 transport and NV12/GLES mirror replace
+  the binary-only FPS patch. This candidate's on-vehicle frame rate is not yet measured.
 - **Steering-Wheel Roller Zoom:** Scrolling the left steering-wheel roller sends the factory AirPlay `changeMapZoomLevel` command to iOS (`CRSUIClusterZoomAction`), zooming the CarPlay cluster map directly (away = zoom out, towards = zoom in). The native map underneath continues to zoom simultaneously.
 - **Cluster Map Layout Selector (Marker Centering):** GEM menu provides four selectable layouts (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`). With no saved preference, the card defaults to the top; existing explicit choices survive upgrades. These iPhone layout requests may have different effects across navigation apps.
 - **Integrated Route Guidance (RGI):** Turn-by-turn 3D maneuver arrows, distance to turn, remaining time, route text, and HUD integration seamlessly composited over the CarPlay video stream in Display Context 81 (`{98, 101, 102, 3}`).
 - **Seamless Fallback:** If the AltScreen video stream is inactive or idle, `ScreenModule` automatically falls back to Context 80 (3D maneuver arrow over native Audi map) or Context 74.
 - **Natural 1:1 Aspect Ratio:** The mirror sidecar has been rebuilt with a 1:1 aspect ratio and clean bottom crop so that maps and road geometry display with natural proportions without horizontal or vertical stretching.
-- **Clean OEM Aesthetics:** Upstream promotional watermarks are completely removed (`watermark.rgba` is transparent). Startup splash uses an authentic Audi logo (`logo.rgba`) instead of third-party repository branding.
+- **No startup artwork dependency:** The source mirror stays blank until real video.
+  No logo, watermark or unused Window58 bridge is staged.
 - **Automatic Preload Merging:** `rgi_companion.sh` wires `CARPLAY_PRELOAD_EXTRA` in `smartphone_integrator.json` so the AltScreen universal preload and `libcarplay_hook.so` are cleanly merged for `dio_manager`.
-- **Safe State & Backups:** Stock configuration files are safely backed up in `MMI-Cockpit-Carplay/backup/`. `RESTORE ORIGINAL` cleanly restores the unit to factory state.
+- **State & Backups:** Original configuration files are backed up in `MMI-Cockpit-Carplay/backup/`. `RESTORE ORIGINAL` restores that backed-up configuration; it is not a factory reset.
 
 ---
 
@@ -63,10 +68,10 @@ Using the root build script (builds all native binaries, Java patches, pins JAR 
 
 ```sh
 # Build and stage files into build/sd/
-STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh
+STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
 
 # Or directly copy and verify onto the FAT32 SD card:
-SD=/Volumes/SD32 STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh
+SD=/Volumes/SD32 STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
 ```
 
 The SD card root will contain:
@@ -115,4 +120,6 @@ This action never restarts, stops, remounts or changes the installed system.
 - **Upstream AltScreen Project:** Developed by [yuedizhibo](https://github.com/yuedizhibo) and [Lanye-z](https://github.com/Lanye-z) ([MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)). Original material licensed under [PolyForm Noncommercial 1.0.0](LICENSE). Noncommercial use only; do not resell.
 - **Route Guidance Integration (RGI):** Developed by [luka-dev](https://github.com/luka-dev/mib2q-carplay-rgi).
 - **MIB2 High Toolbox:** Upstream tools and GEM scripting by [jilleb](https://github.com/jilleb/mib2-toolbox) under [MIT License](LICENSE.TOOLBOX-MIT).
-- **Mirror Runtime:** Independent license [LICENSE.MMI-MIRROR](Toolbox/carplay_alt_screen/mirror_display/release/LICENSE.MMI-MIRROR).
+- **Source-built native pair:** PolyForm Noncommercial and upstream additional
+  terms; original MMI Mirror attribution is also retained. See
+  [source provenance](../altscreen_native/PROVENANCE.md).

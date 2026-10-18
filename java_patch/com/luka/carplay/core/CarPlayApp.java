@@ -30,9 +30,10 @@ public final class CarPlayApp {
     public static final String BUILD_ID = "@BUILD_ID@";
 
     /* Modules, in start order. */
+    private static final RgdModule RGD_MODULE = new RgdModule();
     private static final Module[] MODULES = new Module[] {
-        new ScreenModule(), new RgdModule(), new SteeringWheelInputModule(),
-        new SpeedSourceDiagnostics()
+        new ScreenModule(), RGD_MODULE, new SteeringWheelInputModule(),
+        new SpeedSourceDiagnostics(), new com.luka.carplay.telephony.TelephonyModule()
     };
 
     private static final Object lock = new Object();
@@ -260,16 +261,32 @@ public final class CarPlayApp {
      * committing a full teardown; a re-activation within it drops the stale edge. */
     private static final long DEACTIVATE_DEBOUNCE_MS = 400L;
 
+    private static void refreshLifecycleServices(int generation, boolean wantActive) {
+        synchronized (lifecycleLock) {
+            boolean refreshRgd;
+            synchronized (lock) {
+                if (generation != lifecycleGeneration || generation != lifecycleAppliedGeneration
+                        || active != wantActive) return;
+                refreshRgd = wantActive && started[RGD_MODULE_INDEX];
+            }
+            ScreenNavStatusGate.retryPending(wantActive);
+            if (refreshRgd) RGD_MODULE.refreshServiceBindings();
+        }
+    }
+
     private static void lifecycleLoop() {
         while (true) {
             int generation;
             boolean wantActive;
+            boolean maintenance;
             IContext context;
             synchronized (lock) {
                 while (lifecycleAppliedGeneration == lifecycleGeneration) {
-                    try { lock.wait(); }
+                    try { lock.wait(1000L); }
                     catch (InterruptedException e) { /* persistent worker */ }
+                    if (lifecycleAppliedGeneration == lifecycleGeneration) break;
                 }
+                maintenance = lifecycleAppliedGeneration == lifecycleGeneration;
                 generation = lifecycleGeneration;
                 wantActive = active;
                 context = desiredContext;
@@ -280,7 +297,7 @@ public final class CarPlayApp {
                  * BAPBridge takeover teardown that then has to re-init — and if a dio reconnect
                  * lands mid-teardown the session collapses.  Wait briefly; if a newer edge
                  * arrives (the re-activation), drop this stale inactive edge and coalesce to it. */
-                if (!wantActive) {
+                if (!maintenance && !wantActive) {
                     long deadline = System.currentTimeMillis() + DEACTIVATE_DEBOUNCE_MS;
                     while (lifecycleGeneration == generation) {
                         long remaining = deadline - System.currentTimeMillis();
@@ -296,7 +313,8 @@ public final class CarPlayApp {
                 }
             }
             try {
-                applyLifecycle(generation, wantActive, context);
+                if (maintenance) refreshLifecycleServices(generation, wantActive);
+                else applyLifecycle(generation, wantActive, context);
             } catch (Throwable t) {
                 Log.e(TAG, "lifecycle apply failed generation=" + generation + ": " + t);
             }

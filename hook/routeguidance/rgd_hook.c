@@ -53,6 +53,9 @@ static uint64_t now_monotonic_ms(void) {
  * are tiny (a few stores + a read of monotonic time). */
 static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_rgd_start_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t request_generation;
+static uint64_t start_token, pending_start_token, pending_start_generation;
+static bool start_pending;
 
 /* Forward decl — implemented after rgd_update_t is in scope. */
 void rgd_periodic_tick(void);
@@ -330,7 +333,6 @@ static bool rgd_is_active_lane_index(uint16_t lane_idx) {
     if (!g_rgd.current_list_present) return false;
     for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
         int slot;
-        if (g_rgd.current_list[i] == lane_idx) return true;
         slot = rgd_find_slot_for_iap_index_no_touch(g_rgd.current_list[i]);
         if (slot < 0) continue;
         if ((g_rgd.slot_cache[slot].present & RGD_MAN_LINKED_LANE_INDEX) &&
@@ -412,11 +414,25 @@ static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) {
 
     int victim = -1;
     uint32_t best = UINT32_MAX;
-    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
-        if (rgd_is_active_lane_index(g_rgd.lane_slot_to_iap_idx[s])) continue;
-        if (g_rgd.lane_slot_seq[s] < best) {
-            best = g_rgd.lane_slot_seq[s];
-            victim = s;
+    /* Lane event IDs are independent of maneuver IDs. Prefer passed lane
+     * events so prefetched future lanes survive a long route (upstream V3.7Fix5). */
+    if (g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) {
+        for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+            if (g_rgd.lane_slot_to_iap_idx[s] >= g_rgd.update_cache.lane_guidance_index) continue;
+            if (rgd_is_active_lane_index(g_rgd.lane_slot_to_iap_idx[s])) continue;
+            if (g_rgd.lane_slot_seq[s] < best) {
+                best = g_rgd.lane_slot_seq[s];
+                victim = s;
+            }
+        }
+    }
+    if (victim < 0) {
+        for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+            if (rgd_is_active_lane_index(g_rgd.lane_slot_to_iap_idx[s])) continue;
+            if (g_rgd.lane_slot_seq[s] < best) {
+                best = g_rgd.lane_slot_seq[s];
+                victim = s;
+            }
         }
     }
     if (victim < 0) {
@@ -463,6 +479,7 @@ const hook_module_def_t rgd_module_def = {
     .on_state = rgd_state_handler,
     .on_transport_send = rgd_transport_handler,
     .on_shutdown = rgd_shutdown,
+    .on_tick = rgd_periodic_tick,
     .user_data = NULL
 };
 
@@ -771,36 +788,6 @@ static bool rgd_lane_slot_has_data(int slot) {
            (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS);
 }
 
-static bool rgd_prune_stale_lane_cache(void) {
-    int min_idx;
-    bool pruned = false;
-
-    if (!g_rgd.current_list_present) return false;
-    if (g_rgd.current_list_count == 0) return false;
-    if (g_rgd.last_route_state == RGD_STATE_REROUTING) return false;
-
-    min_idx = rgd_min_current_index();
-    if (min_idx < 0) return false;
-
-    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
-        uint16_t lane_idx = g_rgd.lane_slot_to_iap_idx[i];
-        if (lane_idx == 0xFFFF) continue;
-        if ((int)lane_idx >= min_idx) continue;
-        if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
-            g_rgd.update_cache.lane_guidance_index == lane_idx) {
-            continue;
-        }
-
-        LOG_DEBUG(LOG_MODULE, "Pruning stale lane guidance slot %d (idx %u < current min %d)",
-                  i, (unsigned)lane_idx, min_idx);
-        g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
-        g_rgd.lane_slot_seq[i] = 0;
-        g_rgd.lane_cache[i].present = 0;
-        pruned = true;
-    }
-    return pruned;
-}
-
 /*
  * Resolve linked-lane guidance references.
  * When a maneuver has RGD_MAN_LINKED_LANE_INDEX but no RGD_MAN_LANE_GUIDANCE,
@@ -993,16 +980,13 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
     bool have_extra_slot = (extra_man && extra_man->present != 0 &&
                             extra_slot >= 0 && extra_slot < MANEUVER_CACHE_SIZE);
     bool have_lane_cache = false;
-    bool pruned_lane_slots;
-
-    pruned_lane_slots = rgd_prune_stale_lane_cache();
 
     for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
         if (rgd_lane_slot_has_data(i)) {
             have_lane_cache = true;
         }
     }
-    if (present == 0 && !have_extra_slot && !have_lane_cache && !pruned_lane_slots) return;
+    if (present == 0 && !have_extra_slot && !have_lane_cache) return;
 
     /* NOTE on storage choice: a previous version used `static __thread`
      * 64K scratch to avoid per-snapshot malloc/free.  This crashed
@@ -1129,9 +1113,6 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         }
     }
 
-    if (rgd_prune_stale_lane_cache())
-        pruned_lane_slots = true;
-
     if (g_rgd.current_list_present) {
         if (g_rgd.current_list_count > 0) {
             char list_buf[128];
@@ -1194,9 +1175,11 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 }
 
 void rgd_clear_state(const char* reason) {
+    pthread_mutex_lock(&g_rgd_start_lock);
+    ++request_generation;
+    start_pending = false;
     g_rgd.active = false;
     g_rgd.sent_5203 = false;
-    pthread_mutex_lock(&g_rgd_start_lock);
     g_rgd.sent_5200 = false;
     g_rgd.got_520x = false;
     g_rgd.component_valid = false;
@@ -1235,10 +1218,32 @@ void rgd_clear_state(const char* reason) {
     LOG_INFO(LOG_MODULE, "State cleared: %s", reason ? reason : "unknown");
 }
 
+static void rgd_start_completion(uint64_t token, hook_result_t result) {
+    pthread_mutex_lock(&g_rgd_start_lock);
+    bool current = start_pending && token == pending_start_token &&
+        request_generation == pending_start_generation && g_rgd.component_valid;
+    if (current) {
+        start_pending = false;
+        if (result == HOOK_OK) {
+            ++g_rgd.start_5200_attempts;
+            g_rgd.sent_5200 = true;
+            g_rgd.active = true;
+            rgd_update_session_active();
+        } else {
+            g_rgd.last_5200_ms = 0;
+        }
+    }
+    pthread_mutex_unlock(&g_rgd_start_lock);
+    if (result != HOOK_OK)
+        LOG_WARN(LOG_MODULE, "0x5200 transport failed rc=%d current=%d", result, current);
+}
+
 hook_result_t rgd_request_updates(void) {
     uint64_t now = now_monotonic_ms();
     uint64_t retry_ms;
     unsigned int attempt;
+    uint64_t token;
+    uint16_t component;
 
     /* Serialize the transport callback and 1 Hz heartbeat.  Claim the retry
      * timestamp before injection so both threads cannot emit the same 0x5200. */
@@ -1247,7 +1252,7 @@ hook_result_t rgd_request_updates(void) {
         pthread_mutex_unlock(&g_rgd_start_lock);
         return HOOK_ERR_INIT;
     }
-    if (g_rgd.got_520x) {
+    if (g_rgd.got_520x || start_pending) {
         pthread_mutex_unlock(&g_rgd_start_lock);
         return HOOK_OK;
     }
@@ -1258,7 +1263,13 @@ hook_result_t rgd_request_updates(void) {
         return HOOK_OK;
     }
     g_rgd.last_5200_ms = now;
-    attempt = ++g_rgd.start_5200_attempts;
+    attempt = g_rgd.start_5200_attempts + 1;
+    token = ++start_token;
+    if (!token) token = ++start_token;
+    start_pending = true;
+    pending_start_token = token;
+    pending_start_generation = request_generation;
+    component = g_rgd.component_id;
     pthread_mutex_unlock(&g_rgd_start_lock);
 
     /*
@@ -1272,40 +1283,31 @@ hook_result_t rgd_request_updates(void) {
     size_t off = 0;
     size_t n = 0;
 
-    n = iap2_build_tlv_u16(tlv + off, sizeof(tlv) - off, RGD_START_TLV_COMPONENT_ID, g_rgd.component_id);
-    if (n == 0) return HOOK_ERR_PARAM;
+    n = iap2_build_tlv_u16(tlv + off, sizeof(tlv) - off, RGD_START_TLV_COMPONENT_ID, component);
+    if (n == 0) goto build_failed;
     off += n;
 
     n = iap2_build_tlv(tlv + off, sizeof(tlv) - off, RGD_START_TLV_SOURCE_NAME, NULL, 0);
-    if (n == 0) return HOOK_ERR_PARAM;
+    if (n == 0) goto build_failed;
     off += n;
 
     n = iap2_build_tlv(tlv + off, sizeof(tlv) - off, RGD_START_TLV_SOURCE_SUPPORTS_RG, NULL, 0);
-    if (n == 0) return HOOK_ERR_PARAM;
+    if (n == 0) goto build_failed;
     off += n;
 
     n = iap2_build_tlv(tlv + off, sizeof(tlv) - off, RGD_START_TLV_SUPPORTS_EXIT_INFO, NULL, 0);
-    if (n == 0) return HOOK_ERR_PARAM;
+    if (n == 0) goto build_failed;
     off += n;
 
-    hook_result_t res = hook_inject_message(IAP2_MSG_ROUTE_GUIDANCE_START, tlv, off);
-    if (res == HOOK_OK) {
-        pthread_mutex_lock(&g_rgd_start_lock);
-        g_rgd.sent_5200 = true;
-        pthread_mutex_unlock(&g_rgd_start_lock);
-        g_rgd.active = true;
-        rgd_update_session_active();
-        LOG_INFO(LOG_MODULE, "Sent 0x5200 attempt=%u (component=0x%04X, opts=source_name+source_supports_rg+exit_info)",
-                 attempt, g_rgd.component_id);
-    } else {
-        /* A transport failure was not a real attempt.  Make the next heartbeat
-         * retry immediately instead of waiting for the backoff interval. */
-        pthread_mutex_lock(&g_rgd_start_lock);
-        if (g_rgd.start_5200_attempts > 0) --g_rgd.start_5200_attempts;
-        g_rgd.last_5200_ms = 0;
-        pthread_mutex_unlock(&g_rgd_start_lock);
-    }
+    hook_result_t res = hook_inject_message_tracked(IAP2_MSG_ROUTE_GUIDANCE_START, tlv, off,
+                                                   rgd_start_completion, token);
+    if (res != HOOK_OK) rgd_start_completion(token, res);
+    else LOG_INFO(LOG_MODULE, "Queued 0x5200 candidate_attempt=%u component=0x%04X; awaiting stock transport",
+                  attempt, component);
     return res;
+build_failed:
+    rgd_start_completion(token, HOOK_ERR_PARAM);
+    return HOOK_ERR_PARAM;
 }
 
 hook_result_t rgd_stop_updates(void) {
@@ -1732,16 +1734,11 @@ static void rgd_lazy_init(void) {
     if (initialized) return;
     initialized = true;
     rgd_clear_state("init");
-    /* Wire the bus timer to drive our 1 Hz pending-zero flush. */
-    bus_set_periodic_tick(rgd_periodic_tick);
     LOG_INFO(LOG_MODULE, "Route Guidance module initialized");
 }
 
 void rgd_shutdown(void) {
-    /* Defensive: deregister our 1 Hz tick before tearing down state.
-     * Avoids a heartbeat-thread callback racing with a half-disposed
-     * RGD module during process shutdown. */
-    bus_set_periodic_tick(NULL);
+    /* The framework has drained the shared tick before module teardown. */
     /* Do not emit 0x5203 while dio_manager/DSI is already exiting.  A blocking
      * stock SendIAP2 here prevented the child from completing destruction and
      * SI eventually killed it as TIMEOUT_WATCHDOG. */

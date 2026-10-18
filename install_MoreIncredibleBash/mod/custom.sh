@@ -151,9 +151,9 @@ patch_dio() {
         case $line in
             *'##'*) new=$line ;;
             *'"MessagesSentByAccessory":['*']'*)
-                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203) ;;
+                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
-                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204) ;;
+                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204 0x4171) ;;
             *) new=$line ;;
         esac
         [ "$new" = "$line" ] || { line=$new; changed=1; }
@@ -162,8 +162,8 @@ patch_dio() {
     if [ "$sent" != 1 ] || [ "$recv" != 1 ]; then
         echo "  WARN dio_manager.json: lists sent=$sent recv=$recv (expected 1/1); left as-is"; rm -f "$tmp"; return 1
     fi
-    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
-    [ "$n" = 5 ] || { echo "  WARN dio_manager.json: only $n/5 IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
+    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0x4171; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
+    [ "$n" = 12 ] || { echo "  WARN dio_manager.json: only $n/12 RGI/telephony IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
     if [ "$changed" = 0 ]; then echo "  dio_manager.json IDs already registered"; rm -f "$tmp"; return 0; fi
     backup_once "$DIO" "$DIO.carplay-stock" || { rm -f "$tmp"; return 1; }
     chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance IDs registered"

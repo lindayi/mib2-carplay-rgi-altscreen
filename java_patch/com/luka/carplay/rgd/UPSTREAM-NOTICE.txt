@@ -1,0 +1,50 @@
+Selected Java RGI lifecycle adaptations
+=====================================
+
+Source: https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen
+Revision: 141e7ed
+Source directory: Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/
+
+Copyright (c) 2026 LuKa (@LuKa_dev), original Java HMI/RGI code.
+Copyright (c) 2026 yuedizhibo, additions and modifications in that project's
+GPL-3.0 components. These adaptations are licensed under GPL-3.0.
+The upstream component notice explicitly licenses Java HMI under GPL-3.0,
+separately from its PolyForm-licensed native second-screen programs.
+
+Adapted GatedCombiService's latest-OEM-state replay, ScreenNavStatusGate's
+NavigationJobs tickets/retry/retirement, BAPBridge's live ClusterService/KOMO
+binding, RouteGuidance's failed-worker recovery, NativeRouteStateOverlay,
+and the guarded host tool tools/PatchNativeRouteState.java.
+
+The native-state tool uses public ASM 9.7 and accepts only the SHA-256-pinned
+MU1316/P5145 stock DSIResponseContainer. It preserves all methods and injects
+one filter into the synchronized setRgActive(boolean) setter. Runtime output
+is class version 48. The overlay must ship with that weave; a source-only
+NativeRouteStateOverlay cannot observe stock native writes.
+
+The existing CarPlayApp lifecycle worker must call
+ScreenNavStatusGate.retryPending(active) even after disconnect for pending
+OEM replay, and RgdModule.refreshServiceBindings() for a started RGI module.
+Release writes run on NavigationJobs, never on preference/HMI callbacks.
+GatedCombiService is the single accepted Fct44/Fct54 forwarding point;
+the ScreenCombiBAPListener request methods must not duplicate layer callbacks.
+The VC-panel and speed-badge presentation observers remain registered there.
+
+Local behavior is intentionally retained: next-road footer, original maneuver
+thresholds, settings/defaults/Keep page policy, destination timezone, map cards,
+renderer options and ScreenModule's sole cluster-context ownership.
+Upstream LowerBarKomo is not used: this branch publishes the selected lower
+information page through BAPBridge's Fct19/20/22 path, not the independent
+upstream ClusterService.updateCurrentStreet/updateArrivalTime path. Adding it
+would introduce a second writer and change the chosen page semantics.
+
+Host verification: scripts/test_rgi_upstream.sh compiles fresh Java 1.4 output
+under build/rgi-upstream-tests, tests the exact woven native setter with strict
+verification, and exercises asynchronous gate replay, stale task tickets,
+service replacement and presentation-worker recovery. Reconstructed stock
+Navigation classes use the project's isolated -Xverify:none host-probe policy.
+No vendor baseline JAR is copied or substituted.
+
+Host success is not vehicle confirmation. Parked acceptance must cover native
+route changes during a CarPlay overlay, disconnect/restored Audi navigation,
+service-loss/reacquire, startup View eligibility and both custom info pages.

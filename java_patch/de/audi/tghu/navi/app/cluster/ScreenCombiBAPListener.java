@@ -12,8 +12,8 @@ import de.audi.tghu.navi.app.map.MapManager;
 /**
  * Stock BAP boundary for CarPlay KDK composition.
  *
- * VC's Fct44 (KDK visibility) and Fct54 (map presentation/stage) are forwarded to
- * the layer controller before stock acknowledges them.  The steering-wheel roller
+ * The service gate forwards accepted Fct44/Fct54 Status, including stock replay.
+ * The steering-wheel roller
  * (setMapScale) keeps zooming the head unit's own cluster map outside an acknowledged
  * VC panel; an owned panel reports unchanged scale instead. While
  * the AltScreen CarPlay video covers that map, each step also zooms the iPhone's
@@ -44,14 +44,6 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
         );
     }
 
-    /** Apply the accepted stock state before its Status acknowledgement. This boundary
-     * also covers internal supplementary visibility changes and initial Status replay,
-     * which bypass the two-argument BAP request setter. */
-    protected void updateMapVisibility() {
-        com.luka.carplay.cluster.ClusterLayerController.onVcVisibility(this.supplementaryMapViewVisible);
-        super.updateMapVisibility();
-    }
-
     public void setMapScale(int steps) {
         if(com.luka.carplay.settings.VcPanel.scale(steps)) {
             updateMapScale();
@@ -65,7 +57,6 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
     public void setMapPresentation(boolean largeMapView, boolean leftMenu, boolean rightMenu) {
         com.luka.carplay.framework.Log.i("VcInput","BAP_PRESENTATION large="+largeMapView
             +" left_menu="+leftMenu+" right_menu="+rightMenu+" input_owner=UNVERIFIED");
-        com.luka.carplay.cluster.ClusterLayerController.onVcPresentation(largeMapView);
         super.setMapPresentation(largeMapView, leftMenu, rightMenu);
         com.luka.carplay.cluster.AltScreenCluster.onPresentation(largeMapView);
     }

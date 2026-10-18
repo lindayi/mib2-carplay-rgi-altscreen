@@ -1,6 +1,7 @@
 MMI Cockpit CarPlay AltScreen + RGI SD Package
 
-This personal native-MMI menu package requires MHI2Q_US_AUG22_P5145 / MU1316.
+This source-built candidate requires MHI2Q_US_AUG22_P5145 / MU1316.
+It has passed host checks, but has not been verified in the vehicle.
 The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
 No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.
 Optional mascots: Carplay Altscreen -> Overlay appearance -> Map mascot ->
@@ -9,7 +10,8 @@ They animate inside the bottom of the cluster
 map, above the separate information bar; not on the main MMI or Audi native map.
 The reference artwork is included for this owner's private use, not licensed here
 for redistribution. Host graphics tests are not QNX or vehicle validation.
-Native-menu rendering, controls and wireless-adapter behavior need in-car validation.
+The new runtime, native-menu controls and wireless-adapter behavior need a new
+in-car trial. Earlier local menu tests do not validate this source candidate.
 Owner report (2026-09-27, last prepared test card cb64eee): navigation text and
 distance work. Google Maps centering is intermittent and can regress on later
 routes; the top-card preset is not a confirmed centering fix. This report does not
@@ -31,8 +33,7 @@ validate the later native-menu or recovery additions.
 5. This fork targets the owner's Q5 2020 P5145/MU1316 only. Earlier upstream builds
    were tested on Audi Q5 FY 2019, MHI2Q_ER_AUG22_P5092, MU1329.
    - Display video is rendered at 1:1 aspect ratio with clean bottom crop (no distortion).
-   - Watermarks are completely removed (transparent overlay).
-   - Startup screen displays the Audi logo (logo.rgba) for ~2 seconds.
+   - No logo or watermark assets are used. The mirror waits for actual video.
    - Steering-wheel roller zooms CarPlay map and native map simultaneously.
    - Four Cluster map layout presets are available in GEM. Maneuver card on top
      is the default when no preference is saved; upgrades preserve explicit choices.
@@ -41,8 +42,9 @@ validate the later native-menu or recovery additions.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.
    Cold boots do not require the SD card to remain inserted once installed.
    The SD card holds stock backups and diagnostic logs; always retain your backup card.
-8. Temporary runtime files are written to /tmp. Configuration file replacements are
-   performed atomically with .carplay-stock backups maintained.
+8. Atomic volatile snapshots use /ramdisk. Ordinary bounded logs use /tmp.
+   Configuration replacements retain their original backups. Applicable firewall
+   variants also have separate, checksum-verified original backups.
 9. EXPORT DIAGNOSTICS ONLY (no restore) saves a summary and bounded private logs to
    MMI-Cockpit-Carplay/logs/exports/. It does not stop, restart or restore anything.
    Raw logs may contain destinations/device details; review them before sharing.
@@ -52,6 +54,8 @@ validate the later native-menu or recovery additions.
     restart; USB and the main CarPlay process are not reset. Unknown/idle telemetry
     does not trigger recovery. Retry exhaustion withdraws stale video readiness.
 
-Earlier upstream releases reported on-vehicle display, aspect-ratio, zoom and route
-guidance results. Those reports do not validate the newer native menu, alignment
-reapplication, customization or mascot additions on this owner's vehicle.
+The native hook/mirror and adapted V3.8 firewall helper are source-available under
+PolyForm Noncommercial plus upstream additional terms, not OSI open source.
+Notices and license texts are in Toolbox/carplay_alt_screen/mirror_display/release.
+They do not grant rights to redistribute private mascot artwork.
+Earlier vehicle reports do not validate this source-built candidate.

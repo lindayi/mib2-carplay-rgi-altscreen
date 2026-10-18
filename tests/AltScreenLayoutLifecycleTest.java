@@ -46,6 +46,15 @@ public final class AltScreenLayoutLifecycleTest {
         out.writeInt(payload.length); out.write(payload); out.flush();
         check(delivered.await(3, TimeUnit.SECONDS), "route callback must return without I/O");
     }
+    private static void nativeSession(Socket peer, int epoch) throws Exception {
+        delivered = new CountDownLatch(1);
+        DataOutputStream out = new DataOutputStream(peer.getOutputStream());
+        out.writeInt(CarplayBus.MAGIC); out.writeInt(1);
+        out.writeShort(CarplayBus.EVT_ALT_SESSION);
+        out.writeByte(CarplayBus.FLAG_STICKY | CarplayBus.FLAG_BINARY); out.writeByte(0);
+        out.writeInt(4); out.writeInt(epoch); out.flush();
+        check(delivered.await(3, TimeUnit.SECONDS), "native session readiness delivery");
+    }
     private static void expect(Socket peer, String url) throws Exception {
         DataInputStream in = new DataInputStream(peer.getInputStream());
         check(in.readInt() == CarplayBus.MAGIC, "command magic"); in.readInt();
@@ -84,6 +93,11 @@ public final class AltScreenLayoutLifecycleTest {
                 delivered.countDown();
             }
         });
+        bus.on(CarplayBus.EVT_ALT_SESSION, new CarplayBus.Listener() {
+            public void onFrame(int type, int flags, byte[] payload, int len) {
+                delivered.countDown();
+            }
+        });
         Socket peer = null;
         try {
             bus.start();
@@ -92,10 +106,25 @@ public final class AltScreenLayoutLifecycleTest {
                 check(System.nanoTime() < end, "start bus"); Thread.sleep(1);
             }
             AltScreenCluster.start();
-            AltScreenCluster.setVideoReady(true);
             AltScreenCluster.flushLayout();
             peer = connect();
+            AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
+            AltScreenCluster.flushLayout(); quiet(peer, "OEM readiness alone cannot send startup UI");
+            nativeSession(peer, 0);
+            AltScreenCluster.flushLayout(); quiet(peer, "unusable native session cannot start UI");
+            AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), false);
+            nativeSession(peer, 0xFEDCBA98);
+            AltScreenCluster.flushLayout(); quiet(peer, "native session alone cannot bypass OEM readiness");
+            AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
             flush(peer, TOP);
+            for (int i = 0; i < 5; i++) {
+                nativeSession(peer, 0xFEDCBA98);
+                AltScreenCluster.setStartupAllowed(bus.connectionGeneration(), true);
+                AltScreenCluster.flushLayout();
+            }
+            quiet(peer, "successful startup request must not repeat on native replay or worker ticks");
+            AltScreenCluster.setVideoReady(true);
+            AltScreenCluster.flushLayout(); quiet(peer, "initial video edge coalesces with startup request");
             route(peer, "route_generation:n:100\nroute_state:n:1\nsource_name:s:Google Maps\n");
             flush(peer, TOP);
             for (int i = 0; i < 50; i++) {

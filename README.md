@@ -3,8 +3,14 @@
 **Personal-fork target:** Audi Q5 2020, `MHI2Q_US_AUG22_P5145`, MU1316, iPhone/CarPlay.
 The new native-MMI menu is guarded to this unit's reconstructed stock HMI class.
 Other firmware examples and vehicle reports below describe upstream history, not
-additional supported targets for this fork. The native menu has not yet been
-visually or operationally verified on the head unit.
+additional supported targets for this fork. Earlier native-menu builds have owner
+confirmation; the new source-integration candidate requires a new vehicle trial.
+
+**Source integration:** Allemon `1289981` and compatible yuedizhibo V3.8 changes are
+integrated. The AltScreen hook and mirror now build from source, with one local
+RGI implementation and the existing custom controls. The native components are
+**source-available under noncommercial terms**, not unrestricted open source.
+See [merge decisions, licensing and evidence](docs/upstream-integration.md).
 
 For project scope, tested build commands, deployment rules and investigation
 lessons, start with [AGENTS.md](AGENTS.md).
@@ -100,14 +106,16 @@ features below follow it automatically.
 
 - **AltScreen: CarPlay cluster video on the Virtual Cockpit.** Renders the second-screen CarPlay video
   stream (Apple Maps full cluster map) directly inside the Audi Virtual Cockpit via displayable 3.
-- **Smooth 30 fps cluster video.** Upstream AltScreen showed ~15 fps: its frame tap read back only
-  every second decoded frame, and the mirror sidecar polled every 20 ms on a fixed 33 ms period.
-  The SD build patches both binaries, so the cluster shows 28-30 of the iPhone's 30 fps
-  (car-verified, `MIRROR_PRESENT_FPS` in STATUS).
+- **Source-built V3.8 cluster video.** Uses the current transport/decoder fixes and
+  NV12-to-GLES conversion, without patching opaque frame-rate constants.
+  Actual frame rate on this MU1316 candidate still requires vehicle measurement.
 - **Corrected aspect ratio (no distortion).** The mirror sidecar was rebuilt with corrected 1:1 aspect ratio
   geometry (clean bottom crop) so the CarPlay cluster video is not stretched or squashed on the Virtual Cockpit.
-- **Clean OEM look (watermark removed & Audi logo).** Upstream promotional watermarks are removed
-  (transparent overlay), and the startup screen uses a clean Audi logo (`logo.rgba`) instead of third-party branding.
+- **No startup branding or watermark assets.** The source mirror waits for actual
+  video; a startup logo cannot be mistaken for video readiness.
+- **CarPlay telephony integration.** Bounded calls, recents, favorites and communication
+  updates use the existing bus, with native Bluetooth restoration and OEM emergency
+  priority. Vehicle handoff behavior is not yet confirmed for this candidate.
 - **Turn-by-turn route guidance + 3D maneuver renderer.** Real-time 3D maneuver arrow, lane guidance,
   distance to turn, remaining distance and arrival time. When AltScreen video is active, `ScreenModule`
   automatically selects **Display Context 81** (`{98, 101, 102, 3}`), compositing the custom 3D
@@ -201,6 +209,7 @@ features below follow it automatically.
 | Path | Purpose |
 | --- | --- |
 | `hook/` | Shipping native `libcarplay_hook.so` source |
+| `altscreen_native/` | Separate source-available Type111 hook and NV12/GLES mirror, licenses and provenance |
 | `java_patch/` | The only supported Java patch source |
 | `java_resources/` | Resources packed into the jar (VC glyph-width / Unicode table `vc-text.bin`) |
 | `maneuver_render/` | GLES maneuver overlay renderer (C, plus the C++11 `scene/` engine) |
@@ -210,7 +219,7 @@ features below follow it automatically.
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. custom scripts that install / remove a staged release / collect logs |
 | `altscreen/` | AltScreen SD tree (CarPlay video on the VC) with RGI wired into its installer; `scripts/build_sd.sh` turns it into a card |
 | `deploy/altscreen/` | The AltScreen variant of the SI carplay child (`CARPLAY_PRELOAD_EXTRA`) |
-| `tools/` | AltScreen 30 fps binary patches (`patch_altscreen_fps.py`) and the cluster H.264 dump analyser |
+| `tools/` | Guarded stock-Java weaving, asset tools and H.264 analysis; old FPS patcher retained only as history |
 | `scripts/` | Docker build entry points (Java / hook / renderer / SD card) and host test runners |
 | `tests/` | Host tests (C, Java, Python) for the hook, Java bridge and renderer |
 | `toolchain/qnx65-abi/` | QNX Screen ABI headers used only for cross-compilation |
@@ -287,7 +296,13 @@ LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # + raw RGD packet hex dumps
 
 `altscreen/` holds the [MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)
 SD tree (CarPlay's instrument-cluster video on the Virtual Cockpit) with this project's route
-guidance wired into its installer. One command builds everything and stages a ready card:
+guidance wired into its installer. Build the additional native image first:
+
+```sh
+docker build -t mib2-altscreen-native:local -f altscreen_native/Dockerfile altscreen_native
+```
+
+Then build the complete candidate:
 
 ```sh
 STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh            # -> build/sd/
@@ -304,9 +319,9 @@ video); without it route guidance falls back to ctx 80 over the stock map
 The steering-wheel roller zooms the CarPlay cluster map as it zooms the native one
 ([steering-wheel](docs/input/steering-wheel.md)); the GEM menu's **Cluster map layout** entries pick
 the iPhone's cluster presentation (applied on the next phone connect).
-The build also patches AltScreen's `libcarplay_altscreen.so` and mirror sidecar for 30 fps
-cluster video (`tools/patch_altscreen_fps.py`; each patch checks the exact upstream binary first);
-`ALTSCREEN_FULL_FPS=0` ships them unchanged. GEM **Dump cluster video to SD (diagnostic)** saves
+The build compiles AltScreen's hook and mirror from `altscreen_native/`, then
+checks the source manifest and binary hashes. `ALTSCREEN_FULL_FPS` is retired.
+GEM **Dump cluster video to SD (diagnostic)** saves
 the last ~4 MB of the cluster H.264 stream to `MMI-Cockpit-Carplay/logs/h264/`;
 `python3 tools/h264_ring_analyze.py <file>` shows what the iPhone sent.
 End-to-end check of the package (needs an AltScreen stock backup from a unit):
@@ -317,13 +332,14 @@ also exercises interrupted restore, cleanup failures, and retry recovery. Restor
 verifies the stock launcher configuration before removing the RGI runtime; failed
 cleanup retains the recovery scripts and pending transaction for a retry.
 
-#### Key enhancements over upstream AltScreen:
-- **30 fps instead of 15:** the frame tap reads back every decoded frame and the mirror sidecar polls every 4 ms with a one-vsync minimum period (binary patches applied by `build_sd.sh`).
+#### Integrated AltScreen features:
+- **Source-native video pipeline:** current V3.8 transport/decoder code, with local
+  UI ownership and source-level checks instead of binary patches.
 - **Steering-wheel cluster map zoom:** Each roller click sends `changeMapZoomLevel` directly to iOS via AirPlay (`CRSUIClusterZoomAction`); scrolling away zooms out, scrolling towards zooms in.
 - **Cluster map layout selector (vehicle marker centering):** GEM menu provides four selectable layouts (`original AltScreen`, `maneuver card on top (default)`, `maneuver card on the right`, `no ETA`) to balance map layout and vehicle marker centering without obscuring navigation.
 - **Corrected aspect ratio & projection:** Instead of stretching or squashing the image, the mirror sidecar is rebuilt with a 1:1 aspect ratio and clean bottom crop so that maps and road geometry display with natural proportions.
-- **Removed watermarks:** Upstream advertising and promotional text watermarks are removed (`watermark.rgba` is completely transparent).
-- **OEM Audi startup logo:** Replaced third-party repository startup branding with an authentic Audi logo (`logo.rgba`).
+- **No startup artwork:** No logo or watermark asset is required or staged. Only
+  actual video presentation can establish readiness.
 - **Seamless RGI companion:** The integrated `rgi_companion.sh` automatically wires both the AltScreen universal preload and `libcarplay_hook.so` via `CARPLAY_PRELOAD_EXTRA` without clobbering the environment.
 
 ### Tests
@@ -337,13 +353,14 @@ Host-only, no unit needed:
 ./scripts/test_maneuver_native.sh # renderer engine + lanes (macOS, ASan/UBSan)
 ```
 
-The Java suites need the stock MU1316 jar and JDK under `../../Tools/jxe2jar`. Full toolchain,
+The Java suites need the stock MU1316 JAR and JDK, selected through `TOOLS_DIR`
+and `STOCK_JAR`. Full toolchain,
 threading, boot and the complete test list live in the knowledge base - see
 [`docs/architecture.md`](docs/architecture.md).
 
 ## 🚀 Deployment
 
-**Compatibility & Tested Hardware:**
+**Historical upstream hardware report (not this source candidate):**
 - **Confirmed & verified working on:**
   - **Vehicle:** Audi Q5 (FY) 2019
   - **Firmware Release:** `MHI2Q_ER_AUG22_P5092`

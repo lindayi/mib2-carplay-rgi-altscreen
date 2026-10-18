@@ -47,6 +47,9 @@ public final class CarplayBus {
     public static final int EVT_SYNC_END    = 0x0003;
     public static final int EVT_COVERART    = 0x0010;
     public static final int EVT_RGD_UPDATE  = 0x0020;
+    public static final int EVT_TEL_LISTS   = 0x0040;
+    public static final int EVT_ALT_SESSION = 0x0031;
+    public static final int EVT_TEL_COMM    = 0x0041;
 
     /* commands Java -> hook (mirror bus_protocol.h) */
     public static final int CMD_SYNC_REQ       = 0x0100;   /* replay all sticky state       */
@@ -55,6 +58,8 @@ public final class CarplayBus {
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
     public static final int CMD_ALT_UICTX      = 0x0115;   /* UTF-8 maps:/car/instrumentcluster URL -> showUI */
     public static final int CMD_ALT_RGI        = 0x0116;   /* [u8 0=off 1=on] confirmed RGI presentation */
+    public static final int CMD_TEL            = 0x0117;
+    public static final int CMD_OEM_MAP_READY  = 0x0119;
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);

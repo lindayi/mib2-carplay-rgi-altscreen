@@ -17,6 +17,7 @@ static pthread_mutex_t pause_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pause_cond = PTHREAD_COND_INITIALIZER;
 static int pause_encode, reached_encode, resume_encode;
 static int notifications, interrupt_write, write_calls;
+static int reset_during_write;
 static uint32_t notified_source_crc, notified_png_crc;
 static uint8_t jpeg[4096];
 static size_t jpeg_len;
@@ -69,7 +70,13 @@ static int test_compress(Bytef *out, uLongf *out_len, const Bytef *in, uLong len
 }
 static ssize_t short_write(int fd, const void *data, size_t len)
 {
+    assert(pthread_mutex_trylock(&worker_mutex) == 0);
+    pthread_mutex_unlock(&worker_mutex);
     ++write_calls;
+    if (reset_during_write) {
+        reset_during_write = 0;
+        coverart_reset_recv_stream();
+    }
     if (interrupt_write) { interrupt_write = 0; errno = EINTR; return -1; }
     return write(fd, data, len > 17 ? 17 : len);
 }
@@ -137,6 +144,15 @@ int main(void)
     stbi_image_free(rgb);
     assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
     assert(notifications == 1); /* CRC dedup after successful publication */
+    coverart_reset_recv_stream();
+    assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
+    assert(notifications == 2); /* Same artwork still belongs to a new receiver generation. */
+    coverart_reset_recv_stream();
+    reset_during_write = 1;
+    assert(!maybe_handle_image(jpeg, jpeg_len, recv_generation));
+    assert(!reset_during_write && notifications == 2);
+    assert(maybe_handle_image(jpeg, jpeg_len, recv_generation));
+    assert(notifications == 3); /* A reset during disk I/O cannot publish old artwork. */
     coverart_runtime_shutdown();
     puts("coverart_pipeline_test: real EXIF JPEG decode, Identify race, stale enqueue, EINTR/short write and PNG publication PASS");
     return 0;

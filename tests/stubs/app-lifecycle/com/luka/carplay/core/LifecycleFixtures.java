@@ -13,14 +13,14 @@ abstract class LifecycleTestModule implements Module {
         } catch (Exception e) { throw new AssertionError(e); }
     }
     static final Object gate = new Object();
-    static final int[] starts = new int[4], stops = new int[4];
+    static final int[] starts = new int[5], stops = new int[5];
     static int blockIndex = -1, entered = -1;
     static boolean released;
     static volatile boolean badLockOrder;
     final int index;
     LifecycleTestModule(int i) { index = i; }
     public String name() { return "lifecycle-test-" + index; }
-    private void checkLock() {
+    static void checkLock() {
         if (Thread.holdsLock(stateLock())) {
             badLockOrder = true;
             throw new AssertionError("external module called under state lock");
@@ -49,14 +49,17 @@ abstract class LifecycleTestModule implements Module {
     static int count(int index) { synchronized (gate) { return starts[index]; } }
 }
 final class ScreenModule extends LifecycleTestModule { ScreenModule() { super(0); } }
-final class RgdModule extends LifecycleTestModule { RgdModule() { super(1); } }
+final class RgdModule extends LifecycleTestModule {
+    static volatile int refreshes;
+    RgdModule() { super(1); }
+    public void refreshServiceBindings() { checkLock(); refreshes++; }
+}
 final class SteeringWheelInputModule extends LifecycleTestModule { SteeringWheelInputModule() { super(2); } }
 final class SpeedSourceDiagnostics extends LifecycleTestModule { SpeedSourceDiagnostics() { super(3); } }
-final class FrameworkRef {
-    static volatile boolean failNext;
-    FrameworkRef(IContext context) {
-        if (failNext) { failNext = false; throw new IllegalStateException("injected framework failure"); }
+final class ScreenNavStatusGate {
+    static volatile int inactiveRetries;
+    static void retryPending(boolean active) {
+        LifecycleTestModule.checkLock();
+        if (!active) inactiveRetries++;
     }
-    boolean isReady() { return true; }
-    IFrameworkAccess framework() { return null; }
 }

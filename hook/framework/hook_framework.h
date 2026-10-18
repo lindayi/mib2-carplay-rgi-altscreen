@@ -90,6 +90,7 @@ typedef struct {
      * are stopped. */
     void (*on_init)(void);
     void (*on_shutdown)(void);
+    void (*on_tick)(void); /* One shared 1 Hz worker; no socket/file/stock-call waits. */
 
     /* Raw NmeTransport::Recv link bytes, and a session-boundary reset fired on
      * a new Identify so partial reassembly cannot cross sessions. */
@@ -187,6 +188,10 @@ const hook_module_def_t* hook_framework_module_at(size_t index);
  * copies FF5A state, or blocks the caller in stock transport code. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t len);
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len);
+typedef void (*hook_inject_completion_fn)(uint64_t token, hook_result_t result);
+hook_result_t hook_inject_message_tracked(uint16_t msgid, const uint8_t* payload,
+                                         size_t payload_len, hook_inject_completion_fn completion,
+                                         uint64_t token);
 
 /* State Query */
 bool hook_is_ready(void);

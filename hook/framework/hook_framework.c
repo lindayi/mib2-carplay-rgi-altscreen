@@ -97,6 +97,8 @@ typedef struct inject_item_s {
     uint16_t len;
     uint8_t link_session;
     uint32_t generation;
+    hook_inject_completion_fn completion;
+    uint64_t token;
 } inject_item_t;
 
 static pthread_mutex_t g_inject_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -112,6 +114,7 @@ static bool g_inject_exited;
 
 static pthread_once_t g_fw_lock_once = PTHREAD_ONCE_INIT;
 static pthread_once_t g_modules_once = PTHREAD_ONCE_INIT;
+static pthread_mutex_t g_module_tick_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void init_fw_lock_once(void) {
     pthread_mutex_init(&g_fw.lock, NULL);
@@ -119,6 +122,20 @@ static void init_fw_lock_once(void) {
 
 static void ensure_fw_lock_init(void) {
     pthread_once(&g_fw_lock_once, init_fw_lock_once);
+}
+
+static void tick_modules(void) {
+    bool active;
+    pthread_mutex_lock(&g_module_tick_lock);
+    pthread_mutex_lock(&g_fw.lock);
+    active = g_fw.initialized && !g_fw.shutting_down;
+    pthread_mutex_unlock(&g_fw.lock);
+    if (active) {
+        for (int i = 0; i < g_fw.module_count; i++)
+            if (g_fw.modules[i].active && g_fw.modules[i].def.on_tick)
+                g_fw.modules[i].def.on_tick();
+    }
+    pthread_mutex_unlock(&g_module_tick_lock);
 }
 
 /* Nothing here may run from an ELF constructor.  On QNX 6.5 the old module
@@ -130,19 +147,19 @@ static void init_modules_once(void) {
     for (i = 0; i < hook_module_table_count; i++) {
         const hook_module_def_t* def = hook_module_table[i];
         if (!def) continue;
-        hook_framework_register_module(def);
+        if (hook_framework_register_module(def) != HOOK_OK) continue;
         if (def->on_init) def->on_init();
     }
+    bus_set_periodic_tick(tick_modules);
 }
 
-/* Reverse table order, so a module always tears down before the ones it was
- * initialised after.  Runs before the injection worker and the bus stop, which
- * is what lets a module still publish a final bus message here. */
+/* Reverse priority order. The injection worker and bus stop afterward, so
+ * modules can still publish their final events here. */
 static void shutdown_modules(void) {
     size_t i;
-    for (i = hook_module_table_count; i-- > 0;) {
-        const hook_module_def_t* def = hook_module_table[i];
-        if (def && def->on_shutdown) def->on_shutdown();
+    for (i = (size_t)g_fw.module_count; i-- > 0;) {
+        hook_module_t* module = &g_fw.modules[i];
+        if (module->active && module->def.on_shutdown) module->def.on_shutdown();
     }
 }
 
@@ -203,12 +220,23 @@ static void* inject_worker_main(void* arg) {
                      "Dropped stale semantic frame gen=%u session=%u len=%u",
                      (unsigned)item.generation, (unsigned)item.link_session,
                      (unsigned)item.len);
+            if (item.completion) item.completion(item.token, HOOK_ERR_INIT);
             continue;
         }
 
         /* No hook/framework lock is held across the stock synchronous call. */
         ret = send_iap2(iap, (int)item.link_session, item.frame, (int)item.len);
         release_iap(iap);
+        if (item.completion) {
+            bool current;
+            pthread_mutex_lock(&g_fw.lock);
+            current = !g_fw.shutting_down && g_fw.initialized &&
+                g_fw.ctx.inject.valid && g_fw.ctx.inject.generation == item.generation &&
+                g_fw.ctx.inject.link_session == item.link_session;
+            pthread_mutex_unlock(&g_fw.lock);
+            item.completion(item.token, !current ? HOOK_ERR_INIT :
+                            ret == 0 ? HOOK_OK : HOOK_ERR_IO);
+        }
         if (ret != 0) {
             LOG_WARN(LOG_MODULE,
                      "Stock ICinemoIAP::SendIAP2 failed session=%u len=%u rc=%d",
@@ -230,7 +258,8 @@ static void* inject_worker_main(void* arg) {
 
 static hook_result_t inject_worker_enqueue(const uint8_t* frame, size_t frame_len,
                                            uint8_t link_session,
-                                           uint32_t generation) {
+                                           uint32_t generation, hook_inject_completion_fn completion,
+                                           uint64_t token) {
     hook_result_t result = HOOK_OK;
 
     pthread_mutex_lock(&g_inject_lock);
@@ -254,6 +283,8 @@ static hook_result_t inject_worker_enqueue(const uint8_t* frame, size_t frame_le
                 item->len = (uint16_t)frame_len;
                 item->link_session = link_session;
                 item->generation = generation;
+                item->completion = completion;
+                item->token = token;
                 g_inject_tail = (g_inject_tail + 1u) % INJECT_QUEUE_CAPACITY;
                 ++g_inject_count;
                 pthread_cond_signal(&g_inject_cond);
@@ -646,7 +677,10 @@ void hook_framework_shutdown(void) {
      * reachable only from the framework destructor.  Each module's own path is
      * independently bounded; the bus is still alive here so a module may
      * publish a final message. */
+    bus_set_periodic_tick(NULL);
+    pthread_mutex_lock(&g_module_tick_lock);
     shutdown_modules();
+    pthread_mutex_unlock(&g_module_tick_lock);
 
     /* No module may enqueue another stock transport call after the terminal
      * state above.  Bound the only already-running synchronous SendIAP2. */
@@ -747,7 +781,8 @@ const hook_module_def_t* hook_framework_module_at(size_t index) {
 }
 
 /* Send an additional iAP2 frame without consuming the stock carrier. */
-hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
+static hook_result_t hook_inject_frame_tracked(const uint8_t* frame, size_t frame_len,
+                                              hook_inject_completion_fn completion, uint64_t token) {
     uint8_t link_session;
     uint32_t generation;
     hook_result_t queued;
@@ -777,7 +812,7 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
     generation = g_fw.ctx.inject.generation;
     pthread_mutex_unlock(&g_fw.lock);
 
-    queued = inject_worker_enqueue(frame, frame_len, link_session, generation);
+    queued = inject_worker_enqueue(frame, frame_len, link_session, generation, completion, token);
     if (queued != HOOK_OK) {
         LOG_WARN(LOG_MODULE,
                  "Semantic injection queue rejected session=%u gen=%u len=%zu rc=%d",
@@ -787,11 +822,20 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
     return queued;
 }
 
-hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len) {
+hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
+    return hook_inject_frame_tracked(frame, frame_len, NULL, 0);
+}
+
+hook_result_t hook_inject_message_tracked(uint16_t msgid, const uint8_t* payload, size_t payload_len,
+                                         hook_inject_completion_fn completion, uint64_t token) {
     uint8_t frame[512];
     size_t frame_len = iap2_build_frame(frame, sizeof(frame), msgid, payload, payload_len);
     if (frame_len == 0) return HOOK_ERR_PARAM;
-    return hook_inject_frame(frame, frame_len);
+    return hook_inject_frame_tracked(frame, frame_len, completion, token);
+}
+
+hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len) {
+    return hook_inject_message_tracked(msgid, payload, payload_len, NULL, 0);
 }
 
 bool hook_is_ready(void) {
@@ -844,6 +888,9 @@ HOOK_EXPORT int CinemoCreateIAP(void* args) {
     pthread_mutex_lock(&g_fw.lock);
     old_iap = g_fw.cinemo_iap;
     old_owner_pid = g_fw.cinemo_iap_owner_pid;
+    if (old_iap != new_iap || old_owner_pid != (int)getpid()) {
+        if (!++g_fw.ctx.inject.generation) ++g_fw.ctx.inject.generation;
+    }
     g_fw.cinemo_iap = new_iap;
     g_fw.cinemo_iap_owner_pid = (int)getpid();
     if (g_fw.ctx.inject.linked)
@@ -1064,7 +1111,7 @@ HOOK_EXPORT int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array
  * mode onto every process write. Left to libc directly. */
 
 /* No LD_PRELOAD constructor.  hook_framework_init() — and therefore module registration,
- * logging, bus_init() and its process-wide fault handlers — must NOT run during
+ * logging and bus_init() — must NOT run during
  * dio_manager's dlopen/link, before dio has initialised itself.  Every hooked Cinemo/NME
  * boundary lazily calls hook_framework_init() on its first invocation, so all hook-owned
  * work starts on the first real iAP2 call. */

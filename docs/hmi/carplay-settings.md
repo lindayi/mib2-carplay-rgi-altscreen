@@ -420,8 +420,9 @@ preference validation and takes the existing disabled safe path, with an error;
 an in-range reordered ID otherwise refers to the new artwork at that position.
 Source GIFs, derived artwork and SHA256 provenance stay in
 private inputs/ignored build output, not Git. No redistribution license for the
-current modified atlas has been established. The binary-only mirror is not rebuilt or
-represented as fully source-audited.
+current modified atlas has been established. The V3.8 candidate now builds its
+mirror from source under upstream's noncommercial terms. That does not grant
+rights to the private artwork or establish vehicle validation.
 
 **Artwork redistribution review, 2026-09-29**
 

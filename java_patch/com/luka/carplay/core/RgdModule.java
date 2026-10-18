@@ -23,6 +23,11 @@ final class RgdModule implements Module {
 
     public String name() { return "rgd"; }
 
+    /** Called on CarPlayApp's lifecycle worker, never an HMI/BAP callback. */
+    void refreshServiceBindings() {
+        if (rg != null) rg.refreshServiceBindings();
+    }
+
     public boolean start(FrameworkRef fw) {
         if (fw == null || !fw.isReady()) return false;             /* framework not up → retry */
         if (!ScreenModule.isPlatformSupported(fw)) {

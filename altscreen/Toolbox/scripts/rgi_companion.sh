@@ -144,9 +144,9 @@ patch_dio(){
         case $line in
             *'##'*) new=$line ;;
             *'"MessagesSentByAccessory":['*']'*)
-                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203) ;;
+                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
-                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204) ;;
+                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204 0x4171) ;;
             *) new=$line ;;
         esac
         [ "$new" = "$line" ] || { line=$new; changed=1; }
@@ -155,11 +155,11 @@ patch_dio(){
     if [ "$sent" != 1 ] || [ "$recv" != 1 ]; then
         rm -f "$tmp"; echo "dio_manager.json lists sent=$sent recv=$recv (expected 1/1)"; return 1
     fi
-    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
-    [ "$n" = 5 ] || { rm -f "$tmp"; echo "dio_manager.json has $n/5 IDs after edit"; return 1; }
+    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0x4171; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
+    [ "$n" = 12 ] || { rm -f "$tmp"; echo "dio_manager.json has $n/12 RGI/telephony IDs after edit"; return 1; }
     if [ "$changed" = 0 ]; then rm -f "$tmp"; echo "RGI_DIO_IDS=ALREADY_REGISTERED"; return 0; fi
     chmod 644 "$tmp" && mv -f "$tmp" "$DIO" || { rm -f "$tmp"; return 1; }
-    echo "RGI_DIO_IDS=REGISTERED 0x5200..0x5204"
+    echo "RGI_DIO_IDS=REGISTERED 0x5200..0x5204 telephony=415B,415C,415D,415F,4160,4170,4171"
 }
 
 remove_files(){

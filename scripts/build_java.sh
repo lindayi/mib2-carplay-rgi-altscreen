@@ -82,6 +82,8 @@ docker run --rm \
   ASM="/tools/tools/uninline/lib/asm-9.7.jar:/tools/tools/uninline/lib/asm-tree-9.7.jar"
   javac -cp "$ASM" -d "$GEN" /src/tools/PatchNavigationSettings.java
   java -cp "$GEN:$ASM" PatchNavigationSettings "/tools/out/$STOCK_JAR_NAME" "$OUT"
+  javac -cp "$ASM" -d "$GEN" /src/tools/PatchNativeRouteState.java
+  java -cp "$GEN:$ASM" PatchNativeRouteState "/tools/out/$STOCK_JAR_NAME" "$OUT"
   (cd "$OUT" && jar cf "$OUTJAR" .)
   rm -rf /src/build/java
 '

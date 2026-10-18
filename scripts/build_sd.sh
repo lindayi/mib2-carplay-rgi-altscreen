@@ -6,7 +6,6 @@
 #   STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh              # build all, stage build/sd/
 #   SKIP_BUILD=1 ./scripts/build_sd.sh                           # reuse build/ artifacts
 #   SD=/Volumes/SD32 STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh   # also sync onto the card
-#   ALTSCREEN_FULL_FPS=0 ./scripts/build_sd.sh                   # stock AltScreen video binaries (15 fps)
 #
 # Inputs:  altscreen/   the AltScreen SD tree (scripts, mirror sidecar, universal preload,
 #                       GEM menu, MIB2 Toolbox) with @CARPLAY_JAR_SIZE@/@CARPLAY_JAR_CKSUM@
@@ -37,11 +36,23 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     STOCK_JAR="${STOCK_JAR:-}" bash "$PROJECT_DIR/scripts/build_java.sh"
     bash "$PROJECT_DIR/scripts/build_hook.sh"
     bash "$PROJECT_DIR/scripts/build_renderers.sh"
+    bash "$PROJECT_DIR/scripts/build_altscreen.sh"
 fi
 for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
     "$PROJECT_DIR/build/libcarplay_mascot.so"; do
     [ -s "$f" ] || { echo "ERROR: missing build artifact $f"; exit 1; }
 done
+NATIVE="$PROJECT_DIR/build/altscreen"
+if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
+[ -s "$NATIVE/SOURCES.sha256" ] && [ -s "$NATIVE/ELF_CHECKS.txt" ] || {
+    echo "ERROR: source-built AltScreen provenance is missing; run scripts/build_altscreen.sh"; exit 1;
+}
+(cd "$PROJECT_DIR" && $MSHA -c "$NATIVE/SOURCES.sha256" >/dev/null) || {
+    echo "ERROR: AltScreen sources changed after compilation; rebuild before staging"; exit 1;
+}
+(cd "$NATIVE" && $MSHA -c SHA256SUMS >/dev/null) || {
+    echo "ERROR: source-built AltScreen artifact checksums failed"; exit 1;
+}
 
 PACK_TEMP=$(mktemp -d)
 trap 'rm -rf "$PACK_TEMP"' EXIT
@@ -59,31 +70,37 @@ python3 "$PROJECT_DIR/tools/final_script_checksum.py" "$OUT" --update
 cp "$PROJECT_DIR/maneuver_render/LICENSE.DEJAVU" "$OUT/LICENSE.DEJAVU"
 rm -f "$OUT/SHA256SUMS-SD.list"
 
-# AltScreen reads back only every second decoded cluster frame and its mirror sidecar
-# polls every 20 ms with a fixed 33 ms period (30 fps in, 15-22 fps on the VC);
-# tools/patch_altscreen_fps.py fixes both binaries.
 ALTS_LIB=Toolbox/carplay_alt_screen/universal/libcarplay_altscreen.so
 ALTS_MIRROR_DIR=Toolbox/carplay_alt_screen/mirror_display/release
-if [ "${ALTSCREEN_FULL_FPS:-1}" = 1 ]; then
-    for f in "$ALTS_LIB" "$ALTS_MIRROR_DIR/carplay-alt111-mirror-display"; do
-        python3 "$PROJECT_DIR/tools/patch_altscreen_fps.py" "$SRC/$f" "$OUT/$f" >/dev/null
-    done
-    # Keep the sidecar's own checksum list true to what ships.
-    if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
-    new_sum=$(cd "$OUT/$ALTS_MIRROR_DIR" && $MSHA carplay-alt111-mirror-display | cut -d' ' -f1)
-    sed -e "s/^[0-9a-f]\{64\}  carplay-alt111-mirror-display\$/$new_sum  carplay-alt111-mirror-display/" \
-        "$OUT/$ALTS_MIRROR_DIR/SHA256SUMS" > "$OUT/$ALTS_MIRROR_DIR/SHA256SUMS.tmp"
-    mv "$OUT/$ALTS_MIRROR_DIR/SHA256SUMS.tmp" "$OUT/$ALTS_MIRROR_DIR/SHA256SUMS"
-    (cd "$OUT/$ALTS_MIRROR_DIR" && $MSHA -c SHA256SUMS >/dev/null) \
-        || { echo "ERROR: mirror SHA256SUMS does not match the patched sidecar"; exit 1; }
-    ALTS_FPS="30 fps (every frame read back, 4 ms sidecar poll)"
-else
-    ALTS_FPS="stock (15 fps)"
+if [ -n "${ALTSCREEN_FULL_FPS:-}" ]; then
+    echo "ERROR: ALTSCREEN_FULL_FPS is retired; source V3.8 replaces the binary-only patch"; exit 1
 fi
+mkdir -p "$(dirname "$OUT/$ALTS_LIB")"
+cp "$NATIVE/libcarplay_altscreen.so" "$OUT/$ALTS_LIB"
+cp "$NATIVE/carplay-alt111-mirror-display" "$NATIVE/SOURCES.sha256" "$NATIVE/ELF_CHECKS.txt" \
+    "$OUT/$ALTS_MIRROR_DIR/"
+for name in NOTICE.md LICENSE.POLYFORM-NONCOMMERCIAL-1.0.0.md LICENSE.ADDITIONAL-TERMS.md PROVENANCE.md; do
+    cp "$PROJECT_DIR/altscreen_native/$name" "$OUT/$ALTS_MIRROR_DIR/$name"
+done
+cat > "$OUT/$ALTS_MIRROR_DIR/BUILD_INFO.txt" <<'EOF'
+release_binary_status=SOURCE_BUILT_PRIVATE111_V38
+vehicle_validation=REQUIRED
+upstream_commit=141e7ed33775af02a5af0b8616ee3c6250eea997
+source_build_id=carplay-private111-mu1316-source-v3.8-java-placement
+source_manifest=SOURCES.sha256
+rgd_owner=LOCAL_SINGLE_IMPLEMENTATION
+cluster_context_owner=JAVA_SCREENMODULE
+EOF
+chmod 755 "$OUT/$ALTS_LIB" "$OUT/$ALTS_MIRROR_DIR/carplay-alt111-mirror-display"
+ALTS_FPS="source V3.8 NV12/GLES (vehicle validation required)"
 cp "$PROJECT_DIR/build/libcarplay_mascot.so" "$PACK_TEMP/mascots.rgba" "$OUT/$ALTS_MIRROR_DIR/"
 chmod 755 "$OUT/$ALTS_MIRROR_DIR/libcarplay_mascot.so"
-if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
-(cd "$OUT/$ALTS_MIRROR_DIR"; $MSHA libcarplay_mascot.so mascots.rgba >> SHA256SUMS; $MSHA -c SHA256SUMS >/dev/null)
+(cd "$OUT/$ALTS_MIRROR_DIR"
+ $MSHA -c SHA256SUMS >/dev/null
+ $MSHA carplay-alt111-mirror-display BUILD_INFO.txt SOURCES.sha256 ELF_CHECKS.txt \
+    NOTICE.md LICENSE.POLYFORM-NONCOMMERCIAL-1.0.0.md LICENSE.ADDITIONAL-TERMS.md PROVENANCE.md \
+    libcarplay_mascot.so mascots.rgba >> SHA256SUMS
+ $MSHA -c SHA256SUMS >/dev/null)
 
 # RGI native half, installed by Toolbox/scripts/rgi_companion.sh from AltScreen INSTALL.
 mkdir -p "$OUT/$RGI_DIR"

@@ -8,11 +8,14 @@ Toolbox/carplay_alt_screen/mirror_display/release/BUILD_INFO.txt
 Toolbox/carplay_alt_screen/mirror_display/release/LICENSE.MMI-MIRROR
 Toolbox/carplay_alt_screen/mirror_display/release/SHA256SUMS
 Toolbox/carplay_alt_screen/mirror_display/release/carplay-alt111-mirror-display
-Toolbox/carplay_alt_screen/mirror_display/release/libscreen_id_bridge.so
-Toolbox/carplay_alt_screen/mirror_display/release/logo.rgba
 Toolbox/carplay_alt_screen/mirror_display/release/start_vehicle.sh
 Toolbox/carplay_alt_screen/mirror_display/release/stop_vehicle.sh
-Toolbox/carplay_alt_screen/mirror_display/release/watermark.rgba
+Toolbox/carplay_alt_screen/mirror_display/release/SOURCES.sha256
+Toolbox/carplay_alt_screen/mirror_display/release/ELF_CHECKS.txt
+Toolbox/carplay_alt_screen/mirror_display/release/NOTICE.md
+Toolbox/carplay_alt_screen/mirror_display/release/LICENSE.POLYFORM-NONCOMMERCIAL-1.0.0.md
+Toolbox/carplay_alt_screen/mirror_display/release/LICENSE.ADDITIONAL-TERMS.md
+Toolbox/carplay_alt_screen/mirror_display/release/PROVENANCE.md
 Toolbox/carplay_alt_screen/rgi/carplay_child.json
 Toolbox/carplay_alt_screen/rgi/carplay_cleanup.sh
 Toolbox/carplay_alt_screen/rgi/carplay_monitor.sh
@@ -31,6 +34,7 @@ Toolbox/scripts/altscreen_boot_diag.sh
 Toolbox/scripts/altscreen_chain_test.sh
 Toolbox/scripts/altscreen_chain_test_known.sh
 Toolbox/scripts/altscreen_chain_test_universal.sh
+Toolbox/scripts/altscreen_firewall.sh
 Toolbox/scripts/altscreen_live_diag.sh
 Toolbox/scripts/altscreen_persistent_diag.sh
 Toolbox/scripts/altscreen_preload.awk

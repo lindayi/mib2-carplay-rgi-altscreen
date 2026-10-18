@@ -121,6 +121,11 @@ public final class ScreenModule implements Module {
 
     /** Poll the AltScreen markers; only the switch worker calls this, never under LOCK. */
     private static void refreshAltScreenVideo() {
+        OemMapStartupGate.setActive(connected && videoAllowed);
+        OemMapStartupGate.tick();
+        int startupConnection = com.luka.carplay.bus.CarplayBus.getInstance().connectionGeneration();
+        com.luka.carplay.cluster.AltScreenCluster.setStartupAllowed(startupConnection,
+            OemMapStartupGate.isPublished(startupConnection));
         boolean ready = com.luka.carplay.cluster.AltScreenVideo.isReady();
         boolean changed;
         synchronized (LOCK) {
@@ -302,6 +307,7 @@ public final class ScreenModule implements Module {
          * makes stale-worker races impossible (no per-session worker to outlive its session). */
         synchronized (LOCK) {
             connected = false;
+            OemMapStartupGate.setActive(false);
             navActive = false;
             altScreenVideo = false;
             navHidePending = false;

@@ -53,9 +53,15 @@ compare("hook/framework/bus_protocol.h", "java_patch/com/luka/carplay/bus/Carpla
 }, ("CMD_", "EVT_"))
 compare("hook/framework/bus.c", "java_patch/com/luka/carplay/bus/CarplayBus.java", {"MAX_TYPES": "MAX_TYPES"})
 bus_limit = numeric(constants("hook/framework/bus.c")["MAX_TYPES"])
+bus_opcodes = {}
 for name, value in constants("hook/framework/bus_protocol.h").items():
-    if name.startswith(("CMD_", "EVT_")) and numeric(value) >= bus_limit:
-        raise SystemExit(f"Bus dispatch table cannot register {name}={value}")
+    if name.startswith(("CMD_", "EVT_")):
+        opcode = numeric(value)
+        if opcode >= bus_limit:
+            raise SystemExit(f"Bus dispatch table cannot register {name}={value}")
+        if opcode in bus_opcodes:
+            raise SystemExit(f"Bus opcode collision: {name} and {bus_opcodes[opcode]}={value}")
+        bus_opcodes[opcode] = name
 compare("maneuver_render/protocol.h", "java_patch/com/luka/carplay/rgd/RendererServer.java", {
     "CR_TCP_PORT": "PORT", "CR_PKT_SIZE": "PKT_SIZE",
 }, ("CMD_", "EVT_", "MAN_FLAG_"))

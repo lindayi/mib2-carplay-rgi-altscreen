@@ -15,6 +15,28 @@ static int fail_alloc_at, alloc_calls;
 static int fail_send_at_byte = -1, sent_bytes, failed_send, sends_after_failure;
 static int send_calls;
 
+static void stock_fault_handler(int signal_number) { (void)signal_number; }
+
+static void preserve_stock_signal_policy(void) {
+    const int faults[] = {SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE};
+    struct sigaction previous[5], current, custom, old_pipe;
+    memset(&custom, 0, sizeof(custom));
+    custom.sa_handler = stock_fault_handler;
+    sigemptyset(&custom.sa_mask);
+    for (unsigned i = 0; i < 5; ++i)
+        assert(sigaction(faults[i], &custom, &previous[i]) == 0);
+    assert(sigaction(SIGPIPE, NULL, &old_pipe) == 0);
+    assert(bus_install_signal_policy() == 0);
+    for (unsigned i = 0; i < 5; ++i) {
+        assert(sigaction(faults[i], NULL, &current) == 0);
+        assert(current.sa_handler == stock_fault_handler);
+        assert(sigaction(faults[i], &previous[i], NULL) == 0);
+    }
+    spa_signal_guard_restore(&g_signal_guard);
+    assert(sigaction(SIGPIPE, NULL, &current) == 0);
+    assert(current.sa_handler == old_pipe.sa_handler);
+}
+
 static void *test_malloc(size_t len) {
     if (fail_alloc_at && ++alloc_calls == fail_alloc_at) return NULL;
     return malloc(len);
@@ -162,6 +184,7 @@ static void reused_descriptor(void) {
 }
 
 int main(void) {
+    preserve_stock_signal_policy();
     alarm(15); /* fail a stuck reconnect test instead of hanging the suite */
     signal(SIGPIPE, SIG_IGN);
     cache_allocation_failure();

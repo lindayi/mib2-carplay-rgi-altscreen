@@ -72,18 +72,8 @@ if [ -f "$MIRROR_PID" ]; then
 fi
 [ "$MIRROR_RUNNING" = 1 ] && echo "DIRECT_DISPLAY_SIDECAR=RUNNING pid=$PID" || echo "DIRECT_DISPLAY_SIDECAR=NOT_RUNNING"
 [ -x "$MIRROR/carplay-alt111-mirror-display" ] && echo "DIRECT_DISPLAY_BINARY=INSTALLED" || echo "DIRECT_DISPLAY_BINARY=MISSING"
-if [ -s "$MIRROR/logo.rgba" ]; then
-    echo "SECOND_SCREEN_LOGO=INSTALLED"
-else
-    echo "SECOND_SCREEN_LOGO=MISSING"
-    [ "$STATUS_RC" -ne 0 ] || STATUS_RC=1
-fi
-if [ -s "$MIRROR/watermark.rgba" ]; then
-    echo "SECOND_SCREEN_WATERMARK=INSTALLED asset=TRANSPARENT_DISABLED"
-else
-    echo "SECOND_SCREEN_WATERMARK=MISSING"
-    [ "$STATUS_RC" -ne 0 ] || STATUS_RC=1
-fi
+echo "SECOND_SCREEN_LOGO=NOT_USED source_mirror_waits_for_real_video=YES"
+echo "SECOND_SCREEN_WATERMARK=NOT_USED"
 
 HOOK_LOG=""
 for candidate in "$DEVICE_ROOT/tmp/MMI-Cockpit-Carplay.altscreen_hook.log" "$DEVICE_ROOT/tmp/altscreen_hook.log"; do

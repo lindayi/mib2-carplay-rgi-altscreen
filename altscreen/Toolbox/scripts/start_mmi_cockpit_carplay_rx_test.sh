@@ -71,8 +71,6 @@ jar_valid || {
 
 [ -x "$MIRROR/carplay-alt111-mirror-display" ] || { echo "FAIL: direct-display sidecar binary missing"; exit 1; }
 [ -x "$MIRROR_START" ] || { echo "FAIL: direct-display sidecar launcher missing"; exit 1; }
-[ -s "$MIRROR/logo.rgba" ] || { echo "FAIL: second-screen logo asset missing"; exit 1; }
-[ -s "$MIRROR/watermark.rgba" ] || { echo "FAIL: watermark asset missing (kept as a placeholder, rendered fully transparent)"; exit 1; }
 
 STARTUP=""
 for candidate in "$DEVICE_ROOT/mnt/system/etc/boot/startup.sh" "$DEVICE_ROOT/etc/boot/startup.sh"; do

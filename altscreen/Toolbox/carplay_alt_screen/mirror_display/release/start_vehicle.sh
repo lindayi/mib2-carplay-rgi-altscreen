@@ -30,9 +30,6 @@ elif [ -x "$ROOT/carplay-alt111-mirror-display" ]; then
 else
   BIN="$ROOT/release/carplay-alt111-mirror-display"
 fi
-ALT111_LOGO_ASSET="${ALT111_LOGO_ASSET:-$ROOT/logo.rgba}"
-ALT111_WATERMARK_ASSET="${ALT111_WATERMARK_ASSET:-$ROOT/watermark.rgba}"
-export ALT111_LOGO_ASSET ALT111_WATERMARK_ASSET
 
 TMP_ROOT="${ALT111_MIRROR_TMP_ROOT:-/tmp}"
 PIDFILE="$TMP_ROOT/MMI-Cockpit-Carplay.mirror.pid"

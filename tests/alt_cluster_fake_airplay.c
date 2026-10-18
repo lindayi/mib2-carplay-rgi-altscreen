@@ -22,6 +22,12 @@ int fake_live_objects;
 int fake_platform_init_calls;
 int fake_platform_fini_calls;
 int fake_send_calls;
+int fake_oem_ready_calls;
+uint32_t fake_ui_session_generation;
+uint32_t altscreen_ui_session_generation(void) { return fake_ui_session_generation; }
+void altscreen_oem_map_ready(int ready) {
+    if (ready == 1) fake_oem_ready_calls++;
+}
 void* fake_last_session;
 char fake_last_request[1024];
 

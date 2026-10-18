@@ -25,6 +25,40 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ## Resume here: workspace and source history
 
+### Source integration candidate: 2026-10-18
+
+- `integrate-upstreams-20261018` merges Allemon `1289981`; PR 7's checksum fix
+  is included. PR 14 is not: its `0x0117` night command collides with `CMD_TEL`
+  and its delayed mode sends are not session-safe.
+- Native V3.8 source is pinned at yuedizhibo `141e7ed`. The owner accepted
+  PolyForm Noncommercial plus additional terms, not an unrestricted open-source
+  claim. Keep `altscreen_native` separate from GPL RGI/Java and stage its notices.
+  Do not import upstream's incomplete baseline Java JAR.
+- `scripts/build_altscreen.sh` builds the hook/mirror in a Linux volume using
+  `mib2-altscreen-native:local`. Staging verifies both binaries and the source
+  manifest from that same compilation snapshot. No old FPS binary patch,
+  logo/watermark or Window58 bridge is deployed.
+- Preserve one UI/zoom/context/placement owner. Native UI policy is disabled;
+  Java still owns contexts and physical placement. Startup waits for both OEM
+  readiness and `EVT_ALT_SESSION` (u32 BE epoch, zero unavailable). Send the cached
+  URL before first video, coalesce that video edge, and never timer-resend success.
+- Shared native module `on_tick` callbacks use one framework dispatcher. Drain
+  it before module shutdown; do not overwrite the bus timer from a module.
+  Tracked iAP2 completion rechecks generation after the actual stock send.
+- `PatchNativeRouteState` hash-guards the stock synchronized setter before
+  preserving real DSI updates under the temporary CarPlay overlay. Keep this
+  weave in Java builds and its strict verification tests.
+- Accepted Fct44/Fct54 Status forwarding belongs in `GatedCombiService`, including
+  initial replay. Do not also forward request intent in `ScreenCombiBAPListener`.
+  Keep VC-panel and speed-badge replay notifications.
+- The resident lifecycle worker retries service/cleanup state outside the small
+  app lock, with RGI refresh serialized by `lifecycleLock`. It must not restart
+  every module on its maintenance tick.
+- Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
+  Keep exact original variant backups, candidate validation and rollback.
+- This is a host-verified candidate, not a vehicle result or an SD deployment.
+  See `docs/upstream-integration.md` for retained policies, exclusions and trials.
+
 The complete workspace was moved from the Windows profile to these sibling folders:
 
 | Location | Contents |
@@ -45,7 +79,8 @@ not just its exit code. Do not loosen access on the shared workspace root.
 - `origin`: `https://github.com/lindayi/mib2-carplay-rgi-altscreen.git`
 - `upstream`: `https://github.com/Allemon/mib2-carplay-rgi-altscreen.git`
 - `rgi-upstream`: `https://github.com/luka-dev/mib2q-carplay-rgi.git`
-- Work so far is on `q5-mu1316-build-fixes`; check the actual branch, worktree and
+- Original custom work is on `q5-mu1316-build-fixes`; the source candidate uses
+  `integrate-upstreams-20261018`. Check the actual branch, worktree and
   remotes before changing anything. Push only to the owner's fork, never upstream.
 - Initial review compared Allemon `404ccc2` against RGI upstream `72d321c`:
   17 additional commits, including the AltScreen import at `acfb57f`.
@@ -659,7 +694,7 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   behavior and synthetic video conversion. The host suite needs FFmpeg and Pillow;
   local image `mib2-mascot-video-test` extends the GLES test image with FFmpeg.
   View its previews. This is not verification of QNX EGL interposition,
-  vehicle placement, or full binary-only mirror source.
+  vehicle placement, or the complete on-vehicle decoder/graphics path.
 
 ### Diagnostics and recovery
 
@@ -746,7 +781,7 @@ the documented toolchain/private inputs and recreate the Windows adapter if need
   SWDL checks this SHA-1 independently of the skip-CRC fields. Keep the source
   metadata checked too; Allemon PR 7 corrects the stale original value.
 - Changing mirror scripts requires updating their release `SHA256SUMS` before SD
-  staging. The 30-fps binary patcher checks exact upstream binary identities.
+  staging. Source V3.8 builds replace the historical 30-fps binary patcher.
 
 If the QNX image must be rebuilt, the tested Windows recipe is:
 
@@ -829,8 +864,9 @@ The `/e/...` paths above are Git Bash paths; host PowerShell paths use `E:\...`.
   or print the credential returned by `git credential fill`.
 - Push committed source to the owner's branch without force. Generated ZIPs,
   stock JXE/JARs, private decompilation, SD backups and raw logs are not source commits.
-- Keep third-party licenses. Some imported AltScreen runtime components are
-  binary-only; do not claim complete source audits or reproducibility for them.
+- Keep third-party licenses. The source-built AltScreen pair has noncommercial
+  terms; platform libraries and Toolbox dependencies remain outside that source
+  build. Do not claim a fully open-source vehicle software stack.
 - Online search summaries have fabricated issue descriptions and repeated obsolete
   claims that MHI2Q CarPlay cluster integration is impossible. Read actual repository
   code, issue bodies/comments and seller pages before relying on a claim.

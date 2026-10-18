@@ -65,6 +65,8 @@ summary(){
     marker VIDEO_DEMAND "$ROOT/tmp/mmi-mirror-active"
     marker FIRST_PRESENT_MARKER "$ROOT/tmp/mmi-mirror-basevideo.ready"
     marker MASCOT_RAMDISK "$ROOT/ramdisk"
+    marker ALTSCREEN_DISPLAY_OWNERSHIP "$ROOT/ramdisk/mmi-altscreen-displayable3.state"
+    marker ALTSCREEN_KEYFRAME_REQUEST "$ROOT/ramdisk/altscreen-private111.keyframe-request"
     marker MASCOT_CONTROL "$ROOT/ramdisk/carplay_mascot.control"
     marker MASCOT_STATUS "$ROOT/ramdisk/carplay_mascot.status"
     marker MAP_CARDS_CONTROL "$ROOT/ramdisk/carplay_cards.control"
@@ -148,6 +150,21 @@ for name in $LOGS; do
         ERRORS=$((ERRORS + 1))
     fi
 done
+if [ "$PRIVATE" = 1 ]; then
+    for name in mmi-altscreen-displayable3.state altscreen-private111.keyframe-request; do
+        source="$ROOT/ramdisk/$name"
+        if [ ! -f "$source" ]; then
+            echo "MISSING ramdisk/$name" >> "$OUT/FILES.txt" || exit 1
+            MISSING=$((MISSING + 1))
+        elif tail -c 262144 "$source" > "$OUT/private/$name"; then
+            echo "COPIED_TAIL_MAX_262144 ramdisk/$name" >> "$OUT/FILES.txt" || exit 1
+            COPIED=$((COPIED + 1))
+        else
+            echo "FAILED ramdisk/$name" >> "$OUT/FILES.txt" || exit 1
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
 printf 'LOGS_COPIED=%s\nLOGS_MISSING=%s\nLOG_ERRORS=%s\n' "$COPIED" "$MISSING" "$ERRORS" >> "$OUT/SUMMARY.txt" || exit 1
 (cd "$OUT" && cksum SUMMARY.txt PRIVACY.txt FILES.txt > CKSUMS.txt &&
     for file in private/*; do [ ! -f "$file" ] || cksum "$file" >> CKSUMS.txt || exit 1; done) ||

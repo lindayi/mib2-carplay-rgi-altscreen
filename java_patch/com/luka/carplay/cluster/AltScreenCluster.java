@@ -36,7 +36,7 @@ public final class AltScreenCluster {
     private static String uiUrlPath = UI_URL_FILE;
 
     private static final Object LOCK = new Object();
-    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4, MMI_RETURN = 8;
+    private static final int VIDEO = 1, ROUTE = 2, VIEW = 4, MMI_RETURN = 8, STARTUP = 16;
     private static boolean enabled, video;
     private static int connection = -1;
     private static int pending;
@@ -53,6 +53,9 @@ public final class AltScreenCluster {
     private static int urlConnection = -1;
     private static String sessionUrl;
     private static CarplayBus.Observer routeObserver;
+    private static CarplayBus.Observer sessionObserver;
+    private static boolean startupAllowed, suppressInitialVideo;
+    private static long nativeSession, startupSentSession;
 
     private AltScreenCluster() {}
 
@@ -91,6 +94,8 @@ public final class AltScreenCluster {
         synchronized (LOCK) {
             if (routeObserver != null)
                 CarplayBus.getInstance().removeObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
+            if (sessionObserver != null)
+                CarplayBus.getInstance().removeObserver(CarplayBus.EVT_ALT_SESSION, sessionObserver);
             final int run = ++lifecycle;
             enabled = true;
             video = false;
@@ -100,12 +105,35 @@ public final class AltScreenCluster {
             pending = 0;
             revision++;
             resetRoute();
+            resetStartup();
             routeObserver = new CarplayBus.Observer() {
                 public void onFrame(int generation, int type, int flags, byte[] payload, int len) {
                     onRouteFrame(run, generation, CarplayBus.parseText(payload, len));
                 }
             };
             CarplayBus.getInstance().addObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
+            sessionObserver = new CarplayBus.Observer() {
+                public void onFrame(int generation, int type, int flags, byte[] payload, int len) {
+                    if ((flags & CarplayBus.FLAG_BINARY) == 0 || len != 4 || payload == null) {
+                        Log.w(TAG, "invalid native session readiness");
+                        return;
+                    }
+                    synchronized (LOCK) {
+                        if (!enabled || run != lifecycle
+                                || generation != CarplayBus.getInstance().connectionGeneration()) return;
+                        useConnection(generation);
+                        long epoch = ((long)(payload[0] & 255) << 24)
+                            | ((long)(payload[1] & 255) << 16)
+                            | ((long)(payload[2] & 255) << 8) | (payload[3] & 255);
+                        if (nativeSession == epoch) return;
+                        nativeSession = epoch;
+                        if (epoch == 0) { pending &= ~STARTUP; suppressInitialVideo = false; }
+                        queueStartup();
+                        revision++;
+                    }
+                }
+            };
+            CarplayBus.getInstance().addObserver(CarplayBus.EVT_ALT_SESSION, sessionObserver);
         }
     }
 
@@ -117,9 +145,13 @@ public final class AltScreenCluster {
             lifecycle++;
             revision++;
             resetRoute();
+            resetStartup();
             if (routeObserver != null)
                 CarplayBus.getInstance().removeObserver(CarplayBus.EVT_RGD_UPDATE, routeObserver);
             routeObserver = null;
+            if (sessionObserver != null)
+                CarplayBus.getInstance().removeObserver(CarplayBus.EVT_ALT_SESSION, sessionObserver);
+            sessionObserver = null;
         }
     }
 
@@ -135,8 +167,33 @@ public final class AltScreenCluster {
         presentation = -1;
         mainScreen = -1;
         resetRoute();
+        resetStartup();
         pending = video && generation >= 0 ? VIDEO : 0;
         revision++;
+    }
+
+    private static void resetStartup() {
+        startupAllowed = suppressInitialVideo = false;
+        nativeSession = startupSentSession = 0L;
+    }
+
+    private static void queueStartup() {
+        if (startupAllowed && nativeSession != 0L && nativeSession != startupSentSession
+                && (pending & STARTUP) == 0) {
+            pending |= STARTUP;
+            revision++;
+        }
+    }
+
+    /** OEM and native command-channel readiness must both precede initial showUI. */
+    public static void setStartupAllowed(int generation, boolean allowed) {
+        synchronized (LOCK) {
+            if (!enabled || generation != CarplayBus.getInstance().connectionGeneration()) return;
+            useConnection(generation);
+            startupAllowed = allowed;
+            if (!allowed && (pending & STARTUP) != 0) { pending &= ~STARTUP; revision++; }
+            queueStartup();
+        }
     }
 
     private static boolean settled(int state) { return state == 1 || state == 6; }
@@ -181,7 +238,8 @@ public final class AltScreenCluster {
         synchronized (LOCK) {
             if (!enabled || video == ready) return;
             video = ready;
-            pending = ready ? pending | VIDEO : 0;
+            pending = ready ? (suppressInitialVideo ? pending : pending | VIDEO) : 0;
+            if (ready) suppressInitialVideo = false;
             revision++;
         }
     }
@@ -212,7 +270,8 @@ public final class AltScreenCluster {
             if (!enabled) return;
             generation = CarplayBus.getInstance().connectionGeneration();
             useConnection(generation);
-            if (!video || generation < 0 || pending == 0) return;
+            if (generation < 0 || pending == 0
+                    || (!video && (!startupAllowed || (pending & STARTUP) == 0))) return;
             long now = System.currentTimeMillis();
             if ((pending & VIEW) != 0 && now >= viewChangedAt && now - viewChangedAt < 350L) return;
             if ((pending & MMI_RETURN) != 0 && now >= mainScreenChangedAt
@@ -226,7 +285,7 @@ public final class AltScreenCluster {
         try { if (url != null) bytes = url.getBytes("UTF-8"); }
         catch (IOException e) { Log.e(TAG, "cannot encode cluster layout", e); }
         synchronized (LOCK) {
-            if (!enabled || !video || revision != request
+            if (!enabled || (!video && (!startupAllowed || (pending & STARTUP) == 0)) || revision != request
                     || generation != CarplayBus.getInstance().connectionGeneration()) return;
             if (load) { sessionUrl = url; urlConnection = generation; }
             if (bytes == null) {
@@ -239,8 +298,15 @@ public final class AltScreenCluster {
             if ((reasons & ROUTE) != 0) reason += (reason.length() == 0 ? "" : "+") + "route";
             if ((reasons & VIEW) != 0) reason += (reason.length() == 0 ? "" : "+") + "view";
             if ((reasons & MMI_RETURN) != 0) reason += (reason.length() == 0 ? "" : "+") + "mmi-return";
+            if ((reasons & STARTUP) != 0) reason += (reason.length() == 0 ? "" : "+") + "startup";
             boolean sent = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_UICTX, bytes, generation);
-            if (sent) pending = 0;
+            if (sent) {
+                pending = 0;
+                if ((reasons & STARTUP) != 0) {
+                    startupSentSession = nativeSession;
+                    suppressInitialVideo = !video;
+                }
+            }
             Log.i(TAG, "cluster showUI " + (sent ? "queued" : "not queued")
                 + " connection=" + generation
                 + " reason=" + reason

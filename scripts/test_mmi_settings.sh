@@ -55,15 +55,19 @@ javac -encoding UTF-8 -d /tmp/lifecycle \
     /src/java_patch/com/luka/carplay/core/CarPlayApp.java /src/java_patch/com/luka/carplay/core/Module.java \
     /src/tests/CarPlayAppLifecycleTest.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java \
+    /src/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java \
+    /src/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java \
     /src/tests/stubs/app-lifecycle/com/luka/carplay/pdc/PdcSmallStageGuard.java \
     /src/tests/stubs/app-lifecycle/de/audi/app/terminalmode/IContext.java \
     /src/tests/stubs/app-lifecycle/de/audi/atip/base/IFrameworkAccess.java
-for scenario in publication during-start replug failure bounce menu; do
+for scenario in publication during-start replug failure bounce menu maintenance; do
     java -cp /tmp/lifecycle com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
 done
 export TOOLS_DIR=/tools STOCK_JAR="$STOCK_JAR_NAME" SKIP_BUILD=1
+bash /src/scripts/test_rgi_upstream.sh
+TELEPHONY_TEST_MODE=java bash /src/scripts/test_telephony.sh
 bash /src/scripts/test_route_info.sh
 bash /src/scripts/test_java_transports.sh
 '

@@ -125,6 +125,17 @@ public final class CarPlayAppLifecycleTest {
             check(!CarPlayApp.isSessionConnected(),"disconnect left stale phone context");
             CarPlayApp.setFeaturesEnabled(true);settled();
             check(!CarPlayApp.isActive(),"enable resurrected a disconnected phone");
+        } else if (scenario.equals("maintenance")) {
+            CarPlayApp.onActivate(context); settled();
+            Thread.sleep(1250);
+            check(RgdModule.refreshes > 0, "resident worker did not refresh RGI bindings");
+            for (int i = 0; i < 5; i++)
+                check(LifecycleTestModule.count(i) == 1, "maintenance restarted a module");
+            CarPlayApp.onDeactivateAndWait(); settled();
+            int before = RgdModule.refreshes;
+            Thread.sleep(1250);
+            check(RgdModule.refreshes == before, "inactive maintenance refreshed RGI");
+            check(ScreenNavStatusGate.inactiveRetries > 0, "inactive cleanup was not retried");
         } else throw new AssertionError("unknown scenario");
         CarPlayApp.onDeactivateAndWait(); settled();
         check(!CarPlayApp.isActive(), "disconnect remained active");

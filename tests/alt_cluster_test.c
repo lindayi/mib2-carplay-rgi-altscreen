@@ -11,6 +11,8 @@
 #include <string.h>
 
 extern int fake_live_objects, fake_platform_init_calls, fake_platform_fini_calls, fake_send_calls;
+extern int fake_oem_ready_calls;
+extern uint32_t fake_ui_session_generation;
 extern void* fake_last_session;
 extern char fake_last_request[1024];
 
@@ -22,6 +24,16 @@ static bus_handler_t handlers[0x0200];
 int hook_process_is_dio_manager(void) { return 1; }
 hook_result_t bus_on(uint16_t type, bus_handler_t h, void* ctx) { (void)ctx; handlers[type] = h; return HOOK_OK; }
 void bus_off(uint16_t type) { handlers[type] = NULL; }
+static int session_events;
+static uint32_t last_session_epoch;
+hook_result_t bus_send(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len) {
+    if (type != EVT_ALT_SESSION || flags != (BUS_FLAG_BINARY | BUS_FLAG_STICKY) || len != 4)
+        abort();
+    last_session_epoch = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16)
+        | ((uint32_t)payload[2] << 8) | payload[3];
+    session_events++;
+    return HOOK_OK;
+}
 
 static int failures;
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); failures++; } } while (0)
@@ -39,13 +51,31 @@ int main(void) {
     int session_a, session_b;
 
     alt_cluster_module_def.on_init();
+    uint8_t ready = 1;
+    CHECK(handlers[CMD_OEM_MAP_READY] != NULL, "OEM readiness registered on existing command module");
+    handlers[CMD_OEM_MAP_READY](CMD_OEM_MAP_READY, BUS_FLAG_BINARY, &ready, 1, NULL);
+    CHECK(fake_oem_ready_calls == 1, "OEM readiness forwarded to source hook");
+    handlers[CMD_OEM_MAP_READY](CMD_OEM_MAP_READY, 0, &ready, 1, NULL);
+    handlers[CMD_OEM_MAP_READY](CMD_OEM_MAP_READY, BUS_FLAG_BINARY, NULL, 1, NULL);
+    ready = 0;
+    handlers[CMD_OEM_MAP_READY](CMD_OEM_MAP_READY, BUS_FLAG_BINARY, &ready, 1, NULL);
+    CHECK(fake_oem_ready_calls == 1, "malformed or false readiness cannot open startup gate");
 
     /* Before any AirPlay session nothing is sent. */
     zoom(1);
     CHECK(fake_send_calls == 0, "no session -> no command");
+    alt_cluster_module_def.on_tick();
+    CHECK(session_events == 1 && last_session_epoch == 0, "initial unusable session snapshot");
+    alt_cluster_module_def.on_tick();
+    CHECK(session_events == 1, "duplicate readiness is not published");
 
     CHECK(AirPlayReceiverSessionPlatformInitialize(&session_a) == 0, "stock init result forwarded");
     CHECK(fake_platform_init_calls == 1, "stock init called");
+    alt_cluster_module_def.on_tick();
+    CHECK(session_events == 1, "platform init alone is not a usable command channel");
+    fake_ui_session_generation = 0xFEDCBA98;
+    alt_cluster_module_def.on_tick();
+    CHECK(session_events == 2 && last_session_epoch == 0xFEDCBA98, "usable source epoch forwarded intact");
 
     /* +1 MapScale step = zoom index up = further out. */
     zoom(1);
@@ -87,6 +117,8 @@ int main(void) {
 
     /* After the live session is finalized nothing reaches it. */
     AirPlayReceiverSessionPlatformFinalize(&session_b);
+    alt_cluster_module_def.on_tick();
+    CHECK(session_events == 3 && last_session_epoch == 0, "finalize withdraws source readiness");
     CHECK(fake_platform_fini_calls == 2, "stock finalize forwarded");
     int before = fake_send_calls;
     zoom(1);
@@ -96,6 +128,7 @@ int main(void) {
     CHECK(fake_live_objects == 0, "every CF object released");
     alt_cluster_module_def.on_shutdown();
     CHECK(handlers[CMD_ALT_ZOOM] == NULL && handlers[CMD_ALT_UICTX] == NULL, "handlers removed");
+    CHECK(handlers[CMD_OEM_MAP_READY] == NULL, "OEM readiness handler removed");
 
     if (failures) { printf("alt_cluster_test: %d FAILED\n", failures); return 1; }
     printf("alt_cluster_test: session tracking, zoom/showUI dictionaries, burst cap, finalize gate, no leaks PASS\n");

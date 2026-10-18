@@ -137,15 +137,8 @@ public class BAPBridge {
      * keeps onShutdown from reopening the RG gate when CarPlay nav merely ends mid-session. */
     private volatile boolean takeoverEngaged = false;
     private boolean nativeStopAttempted = false;
-    /* Our rgActive forge is an overlay on shared HMI state, not our own flag: the whole
-     * navigation app reads DSIResponseContainer.isRgActive() (StartRouteGuidanceSequences,
-     * RgStopGuidanceGeneralCommand, RGStartGuidanceCalculatedRoute, ClusterViewMode ...).
-     * Remember what the DSI last reported so releasing the overlay restores that value
-     * instead of guessing -- a stale forged "true" sends the stock "start route guidance"
-     * sequence down the add-stopover/replace-destination-on-active-route branch of a route
-     * the nav core no longer guides, and it aborts on every attempt until the next reboot. */
-    private boolean rgActiveForced = false;
-    private boolean rgActiveSaved = false;
+    /* NativeRouteStateOverlay observes actual DSI setter writes while our shared
+     * acceptance flag is forced; release restores the latest, not initial, value. */
     /* A route-absent result is definite for connect-time takeover, but a stock route may
      * still be started later in the same CarPlay session.  Re-check that result once when
      * CarPlay RGI itself activates; a successfully issued stop remains session-final. */
@@ -155,6 +148,7 @@ public class BAPBridge {
 
     private ClusterService csRef;
     private KOMOService komoService;
+    private long lastClusterAccessWarning;
     private RendererServer rendererClient;
     private volatile PresentationListener presentationListener;
 
@@ -530,51 +524,54 @@ public class BAPBridge {
     private void initClusterAccess() {
         try {
             Navigation navi = Navigation.getInstance();
-            if (navi == null) {
-                Log.w(TAG, "ClusterAccess: Navigation.getInstance() returned null");
-                return;
-            }
-            ClusterService cs = navi.getClusterService();
-            if (cs == null) {
-                Log.w(TAG, "ClusterAccess: ClusterService is null");
-                return;
+            ClusterService cs = navi == null ? null : navi.getClusterService();
+            KOMOService nextKomo = cs == null ? null : cs.getKomoService();
+            if (cs == csRef && nextKomo == komoService) return;
+            if (csRef != null) {
+                if (cs != csRef) forceClusterRouteInfoState(false);
+                forceGfxAvailable(false);
             }
             this.csRef = cs;
-            this.komoService = cs.getKomoService();
-            if (this.komoService != null) {
-                Log.i(TAG, "KOMO service acquired");
-            } else {
-                Log.w(TAG, "KOMO service is null (non-fatal, LVDS video won't work)");
+            this.komoService = nextKomo;
+            if (cs == null) {
+                clusterAccessWarning("ClusterAccess unavailable; lazy reacquire remains enabled");
+                return;
             }
-
-            Log.i(TAG, "ClusterAccess init OK");
-        } catch (Exception e) {
-            Log.w(TAG, "ClusterAccess setup failed (non-fatal): " + e.getMessage());
+            if (bapSessionStarted) {
+                forceClusterRouteInfoState(true);
+                forceGfxAvailable(customRendererStarted);
+            }
+            Log.i(TAG, "ClusterAccess binding refreshed");
+        } catch (Throwable e) {
+            clusterAccessWarning("ClusterAccess setup failed: " + e);
         }
     }
+
+    private void clusterAccessWarning(String message) {
+        long now = System.currentTimeMillis();
+        if (lastClusterAccessWarning != 0L && now >= lastClusterAccessWarning
+                && now - lastClusterAccessWarning < 10000L) return;
+        lastClusterAccessWarning = now;
+        Log.w(TAG, message);
+    }
+
+    public void refreshClusterAccess() { initClusterAccess(); }
 
     /**
      * Force cluster acceptance flags so VC accepts RGI BAP messages.
      */
     private void forceClusterRouteInfoState(boolean active) {
+        if (!active) {
+            try { NativeRouteStateOverlay.releaseCurrent(); }
+            catch (Throwable t) { clusterAccessWarning("native state restore failed: " + t); }
+        }
         if (csRef == null) return;
 
         try {
             DSIResponseContainer container = csRef.getDSIResponseContainer();
-            if (container != null) {
-                if (active) {
-                    if (!rgActiveForced) {
-                        rgActiveSaved = container.isRgActive();
-                        rgActiveForced = true;
-                    }
-                    container.setRgActive(true);
-                } else if (rgActiveForced) {
-                    rgActiveForced = false;
-                    container.setRgActive(rgActiveSaved);
-                    Log.i(TAG, "rgActive overlay released (restored " + rgActiveSaved + ")");
-                }
-            }
+            if (active) NativeRouteStateOverlay.apply(container, true);
         } catch (Exception e) {
+            clusterAccessWarning("native state overlay failed: " + e);
         }
 
         if (active) {
@@ -608,7 +605,7 @@ public class BAPBridge {
         if (!initialized) return false;
         try {
             takeoverEngaged = true;
-            if (csRef == null) initClusterAccess();
+            initClusterAccess();
             if (!nativeStopAttempted) {
                 nativeStopAttempted = tryStopNativeNavigation();
             }

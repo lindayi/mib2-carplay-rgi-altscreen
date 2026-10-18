@@ -46,10 +46,23 @@ cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function 
     -o "$OUT/rgd_tlv"
 "$OUT/rgd_tlv"
 
+printf '%-32s ' rgd_lane_cache_test
+cc -std=gnu99 -O1 -g -ffunction-sections -fdata-sections \
+    -fsanitize=address,undefined -fno-omit-frame-pointer -Ihook \
+    tests/rgd_lane_cache_test.c hook/routeguidance/rgd_tlv.c hook/framework/iap2_protocol.c \
+    -DENABLE_LOGGING=0 -Wl,--gc-sections -lpthread -o "$OUT/rgd_lane_cache"
+"$OUT/rgd_lane_cache"
+
 printf '%-32s ' inject_generation_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook -Ihook/framework tests/inject_generation_test.c -o "$OUT/inject_generation"
 "$OUT/inject_generation"
+
+printf '%-32s ' inject_worker_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable \
+    -Wno-unused-but-set-variable -Wno-unused-parameter -ffunction-sections -fdata-sections \
+    -Ihook tests/inject_worker_test.c -Wl,--gc-sections -lpthread -ldl -o "$OUT/inject_worker"
+"$OUT/inject_worker"
 
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
@@ -124,6 +137,8 @@ sh scripts/test_install_payload.sh
 
 printf '%-32s ' cluster_shift_test
 bash tests/cluster_shift_test.sh
+sh tests/firewall_variants_test.sh
 
 python3 tools/final_script_checksum.py altscreen
 python3 tests/final_script_checksum_test.py
+TELEPHONY_TEST_MODE=native bash scripts/test_telephony.sh
