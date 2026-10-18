@@ -7,8 +7,8 @@ integration. Earlier vehicle reports do not validate this candidate.
 **The earlier `490dce9` package remains on hold.** Its follow-up audit found
 missing upstream fixes and features. The audit tables below describe that
 package; the corrected source and separate `build/upstream-corrected-sd`
-candidate must not be confused with it. Final clean-commit packaging is tracked
-in the checklist.
+candidate must not be confused with it. The corrected package is built from
+`f8c78e6`, with build ID `MHI2Q-2026-05-16-122-gf8c78e6`.
 
 The first follow-up (`140c304`) added the missing VC badge switch. The corrective
 work below supersedes it with the shared three-way selector and addresses the
@@ -55,8 +55,12 @@ preference file exists. Reset writes normal preferences; it does not delete old
 expert files, backups or private data.
 
 These are **source/host results**, not confirmation of phone rendering, physical
-clearance, QNX runtime behavior or installation. Final source-matched packaging,
-fault paths and remaining checklist items still gate delivery.
+clearance, QNX runtime behavior or installation. The clean-commit package passed
+the complete staged transaction/fault and retained mirror acceptance suites.
+All 75 package hashes pass; all 101 native source-manifest entries match the
+committed bytes. Its Java 1.4 JAR is 429676 bytes, POSIX cksum `969354569`.
+The source commit is pushed to the owner's integration branch. This documentation
+follow-up does not change the built runtime or require replacing that JAR.
 
 ## Source pins and merge decisions
 
@@ -539,6 +543,14 @@ mode verifies manifest coverage, hashes, real ARM ELF payloads and their fixture
 copies. Only runtime execution is explicitly stubbed in disposable fixtures.
 The local installer image uses a labelled Bash fallback, not QNX pdksh.
 Neither it nor synthetic GLES previews establishes QNX video output.
+
+Final checks also cover all 195 shipping classes at class-file version 48.0 and
+57 matching local Java/C protocol constants. Exact-stock Java/menu/RGI/telephony/
+PDC suites, native sanitizers, real 1440x455 GLES, QNX ELF/export/dependency guards,
+and staged install/upgrade/export/rollback/rescue/mirror checks passed. The local
+four-mascot pack matches Java, shell bounds and the staged atlas. Private build
+records retain artifact hashes and execution logs; no private inputs or package
+binaries are source commits.
 
 A parked vehicle trial is still required for cold startup, reconnect, native
 navigation restoration, Google Maps centering, theme changes, phone-card/sign/ETA

@@ -8,10 +8,12 @@ Built, SD-prepared and vehicle-confirmed states remain separate.
 Current evidence: the corrected Java candidate, including context rebinding and
 legacy-control isolation, passes the full exact-stock integration suite. Native
 RGI, real GLES overlays, source-native UI fixtures and QNX cross-builds also pass.
-The separate 75-entry staged package passes transaction/fault tests with real
-payloads, and the retained mirror acceptance suite passes. Clean-commit packaging
-and the final source/build record remain. The held `490dce9` SD package has not
-been replaced or approved.
+The clean-commit `f8c78e6` package passes all transaction/fault and retained mirror
+acceptance tests with its real payloads. All 75 package hashes pass, the shipping
+JAR is unchanged after testing, and all 101 native source-manifest entries match
+committed bytes. Source is pushed to the owner's integration branch; private build
+records identify the separate corrected package. The held `490dce9` SD package
+has not been replaced or approved. No SD was written and no vehicle was tested.
 
 ## Agreed behavior
 
@@ -140,7 +142,7 @@ been replaced or approved.
 - [x] Cross-build QNX artifacts with ELF/export/dependency checks intact.
 - [x] Verify a source-matched staged package and install/upgrade/export/restore/
   rescue fault paths; do not test silently stale binaries.
-- [ ] Update source provenance, AGENTS.md, audit resolution status and private
+- [x] Update source provenance, AGENTS.md, audit resolution status and private
   build records; commit and push to the owner's branch without force.
 - [x] List remaining vehicle-only acceptance checks explicitly. No SD write,
   vehicle installation or vehicle validation is authorized by this checklist.

@@ -54,6 +54,10 @@ Do not turn this into a raw conversation log or store credentials/private captur
   `mib2-altscreen-native:local`. Staging verifies both binaries and the source
   manifest from that same compilation snapshot. No old FPS binary patch,
   logo/watermark or Window58 bridge is deployed.
+- Normalize newly added text sources/tests to LF before the final build, not
+  only shell scripts. `git diff --cached --check` includes added files that an
+  unstaged diff misses. A clean Git status alone does not prove byte identity:
+  verify native source-manifest hashes against committed blob bytes too.
 - Run native host fixtures through `altscreen_native/tests/run_docker.sh` on
   Windows. Concurrent rename/read fixtures need its Linux volume, not the host
   bind mount. Seed initial HMI geometry before starting the fixture worker;
