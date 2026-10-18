@@ -42,6 +42,19 @@ Do not turn this into a raw conversation log or store credentials/private captur
   Java still owns contexts and physical placement. Startup waits for both OEM
   readiness and `EVT_ALT_SESSION` (u32 BE epoch, zero unavailable). Send the cached
   URL before first video, coalesce that video edge, and never timer-resend success.
+- A single owner is not proof of feature parity. AirPlay `updateViewArea` selects
+  an advertised FULL/SMALL safe area; `showUI` selects phone content, and Java
+  `DisplayManager.setPosition` moves the output plane. They are not substitutes.
+  The audit of `490dce9` found native view-area selection disabled without a Java
+  replacement. Verify replacement wire commands, not only blocked native calls.
+- V3.8's phone maneuver card uses `/car/instrumentcluster`, not the legacy `/map`
+  URL, plus a wider FULL safe area. Its native card profile is disabled here;
+  old top/right preferences do not establish equivalent card behavior.
+- Keep Fct19 lower-bar text, Fct22 destination arrival, the small maneuver
+  distance/next-road footer, and passive Trip cards distinct. V3.8 appends ETA
+  to Fct19 road text but still retains a Road/Trip toggle. That suffix is absent
+  from `490dce9`; adding it must preserve local road choice, scrolling and timezone
+  behavior, without importing a second publisher. See the functionality audit.
 - Shared native module `on_tick` callbacks use one framework dispatcher. Drain
   it before module shutdown; do not overwrite the bus timer from a module.
   Tracked iAP2 completion rechecks generation after the actual stock send.
