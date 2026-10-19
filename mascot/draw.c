@@ -159,7 +159,8 @@ static int draw(mascot_graphics *g,const mascot_animation a[MASCOT_COUNT],unsign
     if(framebuffer!=0 || viewport[2]<(fixed?1:128) || viewport[3]<(fixed?1:64))return 0;
     const mascot_animation *sprite=&a[selected-1];
     if(!sprite->pixels || !sprite->count || !sprite->duration)return 0;
-    float width=(image?1.f:2.f)*sprite->width,height=(image?1.f:2.f)*sprite->height;
+    float scale=image?1.f:mascot_display_scale(sprite->height);
+    float width=scale*sprite->width,height=scale*sprite->height;
     /* Trial clearance for the VC-local street/Trip overlay, not a measured bar boundary. */
     float bottom=image?floorf((viewport[3]-height)/2.f):(ceilf(viewport[3]*0.20f)+4.f)*0.70f;
     if(fixed)bottom=viewport[3]-fixed_top-height;

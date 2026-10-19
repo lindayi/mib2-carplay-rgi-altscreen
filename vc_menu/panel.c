@@ -1,4 +1,5 @@
 #include "panel.h"
+#include "../mascot/mascot.h"
 #include "../Toolbox/carplay_alt_screen/rgi_renderer/src/route_font_data.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -232,7 +233,7 @@ void vc_panel_preview(const vc_panel_renderer *renderer,const vc_panel_page *pag
         return;
     }
     if(!pixels || !sprite_width || !sprite_height)return;
-    float scale=2.f;
+    float scale=mascot_display_scale(sprite_height);
     if(sprite_width*scale>180)scale=180.f/sprite_width;
     unsigned w=(unsigned)(sprite_width*scale),h=(unsigned)(sprite_height*scale);
     int x=VC_PANEL_WIDTH+(220-(int)w)/2,y=92+(100-(int)h)/2;

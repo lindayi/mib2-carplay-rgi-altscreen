@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 int main(int argc,char **argv) {
-    assert(argc==3);
+    assert(argc==4);
     unsigned count=(unsigned)atoi(argv[2]);
     mascot_animation a[MASCOT_COUNT]={{0}};
     assert(mascot_load(argv[1],a));
@@ -12,6 +12,8 @@ int main(int argc,char **argv) {
         else assert(!a[i].count && !a[i].pixels);
     }
     mascot_free(a);
+    assert(!mascot_load(argv[3],a));
+    for(unsigned i=0;i<MASCOT_COUNT;i++)assert(!a[i].count && !a[i].pixels);
     puts("Generic atlas count, facing, timing, empty entries and cleanup PASS");
     return 0;
 }

@@ -24,10 +24,13 @@ int mascot_load(const char *path, mascot_animation animations[MASCOT_COUNT]) {
     int legacy=valid && !memcmp(magic,"MASCOT01",8);
     valid=valid && (legacy || !memcmp(magic,"MASCOT02",8))
         && number(file,&count) && count<=MASCOT_COUNT && (!legacy || count==4);
+    size_t total=12;
     for(unsigned i=0;valid && i<count;i++) {
         mascot_animation *a=&loaded[i];
         valid=number(file,&a->width) && number(file,&a->height) && number(file,&a->count)
-            && a->width>0 && a->width<=128 && a->height>0 && a->height<=64
+            && a->width>0 && a->height>0
+            && ((a->width<=128 && a->height<=64)
+                || (!legacy && a->width<=256 && a->height==MASCOT_TEXTURE_HEIGHT))
             && a->count>=2 && a->count<=MASCOT_MAX_FRAMES;
         if(legacy)a->faces_left=i!=0;
         else valid=valid && number(file,&a->faces_left) && a->faces_left<=1;
@@ -37,8 +40,12 @@ int mascot_load(const char *path, mascot_animation animations[MASCOT_COUNT]) {
         }
         if(valid) {
             size_t bytes=(size_t)a->width*a->height*a->count*4;
-            a->pixels=malloc(bytes);
-            valid=a->pixels && fread(a->pixels,1,bytes,file)==bytes;
+            total+=(legacy?12:16)+a->count*4+bytes;
+            valid=total<=MASCOT_MAX_ATLAS_BYTES;
+            if(valid) {
+                a->pixels=malloc(bytes);
+                valid=a->pixels && fread(a->pixels,1,bytes,file)==bytes;
+            }
         }
     }
     if(valid) valid=fgetc(file)==EOF && !ferror(file);

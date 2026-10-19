@@ -398,6 +398,14 @@ a decoder stall by advancing mirror telemetry. Off performs no map-mascot GL wor
 an open preview still uses the existing VC panel's texture.
 Graphics state, viewport bounds and destination alpha are preserved.
 
+New packs retain 80-pixel-high textures, sampled directly from the original
+frames. The map and VC preview use those pixels at the existing display size.
+Earlier packs stored 40-pixel-high frames and enlarged them twofold at runtime,
+which lost fine detail. Legacy packs still render at their original size.
+Width rounding, animation timing, travel, reflection and bottom clearance are
+unchanged. This removes the avoidable texture-resolution loss; it cannot add
+detail missing from a low-resolution source or prove cockpit display quality.
+
 The settings worker publishes a PID-bound, four-second RAM-file lease at
 `/ramdisk/carplay_mascot.control`; native status is
 `/ramdisk/carplay_mascot.status`. `/ramdisk` is the existing QNX4 RAM filesystem,
@@ -432,8 +440,12 @@ is `left` or `right` and must match the original animation; it controls initial
 travel direction, not an initial artwork flip. Background is `transparent` or
 `exterior-white` (remove edge-connected near-white, preserving enclosed white).
 The array may contain 0..16 entries. Each GIF needs 2..32 frames with 20..2000 ms
-delays; conversion normalizes the common animation canvas to height 40, width
-at most 128. Final atlas size is capped at 16 MiB.
+delays; conversion normalizes the common animation canvas to height 80, width
+at most 256. Final atlas size is capped at 16 MiB in both the pack validator and
+native loader. Pixel storage is four times that of the former 40-pixel profile.
+The validator also accepts complete legacy 40-pixel packs. New textures require
+the updated native library; rebuild and install the complete matching package,
+not an atlas-only update.
 
 ```sh
 python3 tools/prepare_mascot_pack.py --config /local/art/pack.json --output build/my-pack
