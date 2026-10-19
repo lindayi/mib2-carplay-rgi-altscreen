@@ -109,6 +109,9 @@ with zipfile.ZipFile(jar) as archive:
     for name in ("RouteGuidance", "BAPBridge", "RendererServer"):
         if "com/luka/carplay/routeguidance/" + name + ".class" not in classes:
             raise SystemExit("Missing upstream RGI class: " + name)
+    for name in ("CarPlayHook", "cluster/ClusterStateController", "cluster/DisplayStateSnapshot"):
+        if "com/luka/carplay/" + name + ".class" not in classes:
+            raise SystemExit("Missing upstream lifecycle/controller class: " + name)
     for name in classes:
         magic, minor, major = struct.unpack(">IHH", archive.read(name)[:8])
         if magic != 0xCAFEBABE or (minor, major) != (0, 48):

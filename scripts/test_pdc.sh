@@ -31,15 +31,9 @@ CP="$TEST_DIR/stubs:$PATCH:$STOCK:$LIBS:$ASM"
 # worker with only external modules/transport substituted, so disconnect does
 # not depend on a later HMI callback to release the presentation policy.
 mkdir -p "$TEST_DIR/lifecycle"
+source "$PROJECT_DIR/scripts/lifecycle_test_sources.sh"
 "$JDK/bin/javac" -encoding UTF-8 -cp "$CP" -d "$TEST_DIR/lifecycle" \
-    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java" \
-    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java" \
-    "$PROJECT_DIR/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/Module.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java"
+    "${LIFECYCLE_SOURCES[@]}"
 "$JDK/bin/javac" -cp "$TEST_DIR/lifecycle:$TEST_DIR/test:$CP" -d "$TEST_DIR/test" \
     "$PROJECT_DIR/tests/CarPlayPdcLifecycleTest.java"
 "$JDK/bin/java" -cp "$TEST_DIR/lifecycle:$TEST_DIR/test:$CP" CarPlayPdcLifecycleTest

@@ -48,7 +48,7 @@ public final class KomoGraphicsStateTest {
             });
         FrameworkRef ref = new FrameworkRef(null);
         set(ref, "fw", fw);
-        Field appRef = CarPlayApp.class.getDeclaredField("fwRef");
+        Field appRef = com.luka.carplay.CarPlayHook.class.getDeclaredField("fwRef");
         appRef.setAccessible(true); appRef.set(null, ref);
         NavigationEnv env = (NavigationEnv)unsafe.allocateInstance(NavigationEnv.class);
         set(env, "framework", fw);

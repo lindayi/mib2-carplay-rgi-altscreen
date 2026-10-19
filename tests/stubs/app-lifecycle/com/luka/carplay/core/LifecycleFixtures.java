@@ -7,7 +7,7 @@ import de.audi.atip.base.IFrameworkAccess;
 abstract class LifecycleTestModule implements Module {
     private static Object stateLock() {
         try {
-            java.lang.reflect.Field field = CarPlayApp.class.getDeclaredField("lock");
+            java.lang.reflect.Field field = com.luka.carplay.CarPlayHook.class.getDeclaredField("LIFECYCLE_QUEUE");
             field.setAccessible(true);
             return field.get(null);
         } catch (Exception e) { throw new AssertionError(e); }
@@ -48,19 +48,9 @@ abstract class LifecycleTestModule implements Module {
     public void stop() { checkLock(); synchronized (gate) { stops[index]++; } }
     static int count(int index) { synchronized (gate) { return starts[index]; } }
 }
-final class ScreenModule extends LifecycleTestModule { ScreenModule() { super(0); } }
-final class RgdModule extends LifecycleTestModule {
-    static volatile int refreshes;
-    RgdModule() { super(1); }
-    public void refreshServiceBindings() { checkLock(); refreshes++; }
-    public void retryCleanup() { checkLock(); }
+final class ScreenModule extends LifecycleTestModule {
+    ScreenModule() { super(0); }
+    static boolean isPlatformSupported(FrameworkRef framework) { return !LifecycleProbe.unsupported; }
 }
 final class SteeringWheelInputModule extends LifecycleTestModule { SteeringWheelInputModule() { super(2); } }
 final class SpeedSourceDiagnostics extends LifecycleTestModule { SpeedSourceDiagnostics() { super(3); } }
-final class ScreenNavStatusGate {
-    static volatile int inactiveRetries;
-    static void retryPending(boolean active) {
-        LifecycleTestModule.checkLock();
-        if (!active) inactiveRetries++;
-    }
-}

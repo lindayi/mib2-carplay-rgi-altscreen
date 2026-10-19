@@ -54,7 +54,7 @@ public final class DestinationTimeZoneTest {
         check(out.text.endsWith("10 min"),"timezone changed UTC duration: "+out.text);
     }
     public static void main(String[] args)throws Exception {
-        Field fw=field(CarPlayApp.class,"fwRef");Object prior=fw.get(null);
+        Field fw=field(com.luka.carplay.CarPlayHook.class,"fwRef");Object prior=fw.get(null);
         TimeZone priorZone=TimeZone.getDefault();
         int priorFormat=DateMetric.timeFormat;
         int priorDistance=Distance.getSystemUnit();

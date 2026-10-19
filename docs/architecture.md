@@ -92,7 +92,8 @@ flowchart LR
 
 - **hook**: iAP2 thread (recv/read hooks) - cover-art worker - bus connector/writer - 1 Hz timer.
 - **Java**: HMI EDT - `carplay-bus` (bus server IO, + `carplay-bus-writer`/`carplay-bus-reader`) -
-  `carplay-cluster-switch` (single DM writer, [display-contexts](cluster/display-contexts.md)) - `carplay-rgi-presentation`
+  `ClusterStateController` (single DM writer) and `CarPlayHook` (lifecycle/RGI actor;
+  [current boundaries](upstream-baseline.md)) - `carplay-rgi-presentation`
   (RouteGuidance worker: retry, viewport, route-text scroll ticks) - `BAPActionBlink` ([bargraph-sync](rgd/bargraph-sync.md)) -
   `RendererServer` accept/read + writer.
 - **renderer**: EGL draw loop - TCP client to Java - progress watchdog thread

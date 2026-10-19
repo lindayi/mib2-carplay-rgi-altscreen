@@ -50,22 +50,7 @@ java -cp /tmp:$CP com.luka.carplay.settings.SettingsRuntimeTest
 bash /src/tests/settings_runtime_test.sh /src
 bash /src/tests/volatile_state_test.sh /src
 bash /src/scripts/test_supervisor_lifecycle.sh
-mkdir -p /tmp/lifecycle
-javac -encoding UTF-8 -d /tmp/lifecycle \
-    /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/Module.java \
-    /src/Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java \
-    /src/tests/CarPlayAppLifecycleTest.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java \
-    /src/tests/stubs/app-lifecycle/com/luka/carplay/pdc/PdcSmallStageGuard.java \
-    /src/tests/stubs/app-lifecycle/de/audi/app/terminalmode/IContext.java \
-    /src/tests/stubs/app-lifecycle/de/audi/atip/base/IFrameworkAccess.java
-for scenario in publication during-start replug failure bounce menu maintenance; do
-    java -cp /tmp/lifecycle com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
-done
+TOOLS_DIR=/tools STOCK_JAR="$STOCK_JAR_NAME" bash /src/scripts/test_carplay_lifecycle.sh
 export TOOLS_DIR=/tools STOCK_JAR="$STOCK_JAR_NAME" SKIP_BUILD=1
 bash /src/scripts/test_rgi_upstream.sh
 TELEPHONY_TEST_MODE=java bash /src/scripts/test_telephony.sh

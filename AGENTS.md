@@ -43,7 +43,7 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - `Toolbox/carplay_alt_screen/UPSTREAM.json` pins 109 upstream source/data files,
   including the Unicode table/license and renderer flag atlas. Binary updates
   use exact bytes; divergent edits require review, never text normalization.
-  The 12 explicit integration replacements are not claimed as identical upstream
+  The 9 explicit integration replacements are not claimed as identical upstream
   behavior. In particular, keep MU1316 context roles, the single zoom sender,
   NavigationJobs model writes, and SI-owned supervision until an explicit
   migration reconciles their contracts. Never silently omit a changed adapter
@@ -60,10 +60,18 @@ Do not turn this into a raw conversation log or store credentials/private captur
   not acquire the new source-directory prefix.
 - See `docs/upstream-baseline.md`. This is a component baseline with documented
   local deltas, not a merge of every upstream file or a whole-fork reparenting.
-- The independent Opus review found the upstream-first lifecycle/context
-  migration incomplete: CarPlayApp/ScreenModule remain substantive replacements,
-  not narrow adapters around upstream controllers. Do not report this checkpoint
-  as the full requested migration. Preserve Q5 behavior while reconciling that layer.
+- The first Opus review rejected path-only lifecycle/context adoption. Source now
+  runs upstream `CarPlayHook` and `ClusterStateController`: CarPlayApp is an API
+  facade, ScreenModule has no context loop, and RgdModule is removed. Keep the
+  local feature hooks separate; never reintroduce a competing actor or writer.
+- Preserve 80/Audi-map, 81/video, 82/video-refresh roles in the upstream state
+  machine. Reject old-generation readback/failures; acknowledge only the current
+  verified target and renderer ticket. Return cluster rate to 30 after release.
+  The upstream refresh-table hook is called before MU1316 DSI declaration.
+- Upstream observer diagnostics follow session-verified Verbose logging. Their
+  `/ramdisk/carplay_upstream_*` snapshots are diagnostics, not native ownership
+  leases. Full private export includes them; atomic writes never fall back to
+  `/tmp` rename or delete-before-rename.
 
 ### Source integration candidate: 2026-10-18
 
@@ -443,7 +451,8 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   `maneuver_render` is a restartable native client.
 - Renderer commands are fixed **48-byte packets**. Update both Java/C definitions
   and `scripts\check_local_protocols.py` together.
-- `ScreenModule` is the sole cluster-context writer:
+- `ClusterStateController` is the sole cluster-context writer; `ScreenModule`
+  is its worker-free Q5 feature facade:
   **81** = custom maneuver/backings over CarPlay video,
   **80** = custom maneuver/backings over the Audi map,
   **74** = released/stock context. Do not add a competing `dmdt` context writer.

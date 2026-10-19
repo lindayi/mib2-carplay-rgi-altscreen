@@ -309,12 +309,13 @@ public class RouteGuidance implements CarplayBus.Listener {
     public RouteGuidance(){this(false);}
     public RouteGuidance(boolean lowerBarTextOnly){textOnly=lowerBarTextOnly;}
     public boolean isTextOnly(){return textOnly;}
+    private boolean cleanupPending;
 
     public boolean init(Object naviService) {
+        cleanupPending = true;
         bap = new BAPBridge();
         if (!bap.init(naviService,textOnly)) {
             Log.e(TAG, "BAPBridge init failed");
-            bap = null;
             return false;
         }
         bap.setPresentationListener(bapPresentationListener);
@@ -383,7 +384,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      * Stop route guidance.
      */
     public void stop() {
-        if (!running) return;
+        if (!running && !cleanupPending) return;
         CarplayBus.getInstance().off(CarplayBus.EVT_RGD_UPDATE);
         Thread worker;
         synchronized (presentationLock) {
@@ -418,7 +419,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (worker != null && worker != Thread.currentThread()) {
             try { worker.join(1000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
-
+        cleanupPending = false;
         Log.i(TAG, "Stopped");
     }
 

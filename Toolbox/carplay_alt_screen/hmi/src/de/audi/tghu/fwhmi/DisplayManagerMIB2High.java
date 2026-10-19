@@ -185,11 +185,10 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 33});
             this.dc[CTX_CARPLAY_VIDEO] = new DisplayContext(CTX_CARPLAY_VIDEO,
                 new int[]{98, 101, 102, ALTSCREEN_VIDEO});
-            this.dc[CTX_CARPLAY_REFRESH] = new DisplayContext(CTX_CARPLAY_REFRESH,
-                new int[]{101, 102, ALTSCREEN_VIDEO});
         } else {
             this.defineContextsForG24();
         }
+        com.luka.carplay.cluster.ClusterStateController.configureRgiRefreshContext(this);
 
         /* One-shot platform fingerprint.  The CarPlay cluster context is composed from the stock
          * KDK backings 101/102, and configureDM() only creates those when sysConst(541)==2 -- so a

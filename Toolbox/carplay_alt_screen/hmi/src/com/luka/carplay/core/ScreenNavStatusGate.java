@@ -222,7 +222,7 @@ public final class ScreenNavStatusGate {
     }
 
     /** Exact stock-service availability edge, after prepareCombiBAPService + stock updateAll.
-     * Also wakes CarPlayApp so RgdModule releases/reacquires its paired OSGi reference when the
+     * Also wakes CarPlayHook through the facade to rebind its paired OSGi reference when the
      * Navigation service is replaced without a phone reconnect. */
     public static synchronized void onCombiBAPServiceChanged(ClusterService cs) {
         CombiBAPServiceNavi current = null;

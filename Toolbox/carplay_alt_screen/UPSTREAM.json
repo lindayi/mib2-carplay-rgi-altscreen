@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen.git",
   "commit": "141e7ed33775af02a5af0b8616ee3c6250eea997",
-  "scope": "GPL RGI native, Java integration and renderer source components plus their Unicode and flag-atlas data inputs. Context/lifecycle orchestration migration remains incomplete; retained implementations are explicit replacements, not narrow upstream adapters.",
+  "scope": "GPL RGI source and data baseline, including the running CarPlayHook lifecycle actor and ClusterStateController context writer. Local settings/platform/ownership hooks and remaining explicit replacements are recorded below.",
   "excluded": [
     {"path": "Toolbox/carplay_alt_screen/hmi/stubs", "reason": "Tests compile against exact private MU1316 ABI, not permissive upstream platform stubs."},
     {"path": "Toolbox/carplay_alt_screen/hmi/vendor", "reason": "Opaque upstream baseline JAR is not a build input; local Java implementation is source-built against the stock platform."},
@@ -35,12 +35,8 @@
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
       "sha256": "1fb7cada02f54989ef93af22cd802c31fc9ed1fded63b9ba703115ca152e0707",
-      "local": null,
-      "replacements": [
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/CarPlayApp.java",
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/RgdModule.java"
-      ],
-      "reason": "MU1316 source-built module lifecycle, settings Master Off and service-generation gates; no incomplete baseline JAR or second activation actor."
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
+      "reason": "Actual upstream lifecycle/RGI actor, service discovery and retry implementation. Q5 hooks retain always-on transport, Master Off versus physical connection, guidance mode, ordered local modules, takeover and generation/cleanup fences. CarPlayApp is only an API facade; RgdModule is removed."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java",
@@ -57,22 +53,14 @@
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterStateController.java",
       "sha256": "2d89f3f9759ac7d7b8cce9fb04fcf39a867fedd60a7a91e834e4e0a317bc3437",
-      "local": null,
-      "replacements": [
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenModule.java",
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/AltScreenCluster.java"
-      ],
-      "reason": "Explicit MU1316 context adapter: 80 is Audi-map composition, 81 CarPlay, 82 refresh. Keep the sole context worker and generation-bound HMI/native-session publication; upstream hardcoded context-80 controller cannot run alongside it."
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterStateController.java",
+      "reason": "Actual upstream context acquisition/readback/reconcile/circuit-breaker worker. MU1316 extends its target selection to 80 Audi-map, 81 video and 82 video refresh, with generation-fenced acknowledgements, local video/placement hooks and 30 Hz release. Observer diagnostics use Verbose logging and separate RAM files, never a second native ownership producer."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/DisplayStateSnapshot.java",
       "sha256": "4ee6341653012bd1e8d28d16b12402ccb958db5ccdd60dd77caac1aea0b1a250",
-      "local": null,
-      "replacements": [
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterLayerController.java",
-        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/AltScreenVideo.java"
-      ],
-      "reason": "Use accepted live Fct44/Fct54 state and verified receiver/mirror readiness, not a second snapshot/ownership reader."
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/DisplayStateSnapshot.java",
+      "reason": "Unmodified upstream decoder for observer diagnostics; framed byte/hash validation does not grant renderer readiness or input ownership."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/NativeRouteStateJarPatch.java",
@@ -90,7 +78,7 @@
       "replacements": [
         "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java"
       ],
-      "reason": "Source-built MU1316 context tables and guarded single-writer refresh context."
+      "reason": "Source-built MU1316 DisplayManager calls the upstream controller's configureRgiRefreshContext before declaring the table; no binary JAR patch or competing table writer."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/WheelZoomBridge.java",
@@ -106,19 +94,19 @@
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/OemMapStartupGate.java",
       "sha256": "7f86794f4f65deb688fb15a5fc9dce6fbe0e9d06656ea36198b7b0820b4c0405",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/OemMapStartupGate.java",
-      "reason": "MU1316 source/lifecycle adapter for local modes and PID/connection-fenced startup; do not import opaque baseline classes."
+      "reason": "Q5 mode/session/PID-aware OEM-map command bridge, polled by the upstream controller. Retains one native command owner and reconnect semantics instead of upstream's fixed startup policy."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenModule.java",
       "sha256": "54c72c72bda1726d0a48f8d42abc6eab79dcf977aa86abffde915bdc3dc837d3",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenModule.java",
-      "reason": "MU1316 source/lifecycle adapter for local modes and PID/connection-fenced startup; do not import opaque baseline classes."
+      "reason": "Worker-free MU1316 Module/feature facade: delegates context and renderer binding to ClusterStateController; retains VC input/view listeners and local video/layout publication hooks."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenNavStatusGate.java",
       "sha256": "3cd808c0bd3fb96f0d243d2892ff376cdf515f0c3893a64f15218cee2bb52ca8",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenNavStatusGate.java",
-      "reason": "MU1316 source/lifecycle adapter for local modes and PID/connection-fenced startup; do not import opaque baseline classes."
+      "reason": "Exact-stock NavigationJobs gate installation/replay, service-edge lifecycle notification, retirement and current-position ownership. No OEM callbacks wait on the lifecycle actor lock."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/CarplayBus.java",

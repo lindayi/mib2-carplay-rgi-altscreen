@@ -160,10 +160,10 @@ public final class SpeedSourceDiagnosticsTest {
         v.updateDynamicVehicleInfoHighFrequent(null,1);
         check(latest(r,0).endsWith("status=1 NULL"),"null callback retained speed");
         String before=latest(r,0);
-        set(CarPlayApp.class,"active",false);
+        set(com.luka.carplay.CarPlayHook.class,"active",false);
         v.updateDynamicVehicleInfoHighFrequent(d,1);
         check(latest(r,0).split(" age_ms=")[0].equals(before.split(" age_ms=")[0]),"disconnected callback accepted");
-        set(CarPlayApp.class,"active",true);
+        set(com.luka.carplay.CarPlayHook.class,"active",true);
         DSITrafficRegulationListener t=(DSITrafficRegulationListener)traffic.listener;
         TrafficSignInformation info=new TrafficSignInformation();
         info.highestPrioritySpeedLimit=new SpeedLimitInfo(50,1,0);
@@ -274,7 +274,7 @@ public final class SpeedSourceDiagnosticsTest {
         prefs.set(Setting.SPEED_BADGE,1);set(Preferences.class,"instance",prefs);
         set(SettingsRuntime.class,"sessionKnown",true);set(SettingsRuntime.class,"sessionEnabled",true);
         set(SettingsRuntime.class,"sessionVideo",true);set(SettingsRuntime.class,"sessionVerbose",false);
-        set(CarPlayApp.class,"phoneContext",proxy(IContext.class,SpeedSourceDiagnosticsTest::identity));
+        set(com.luka.carplay.CarPlayHook.class,"phoneContext",proxy(IContext.class,SpeedSourceDiagnosticsTest::identity));
         CarplayBus bus=CarplayBus.getInstance();
         setInstance(bus,"running",true);setInstance(bus,"out",new java.io.ByteArrayOutputStream());
         setInstance(bus,"connectionGeneration",5);
@@ -317,15 +317,15 @@ public final class SpeedSourceDiagnosticsTest {
         field=SpeedSourceDiagnostics.class.getDeclaredField("worker");field.setAccessible(true);
         ((Thread)field.get(module)).join(2000);
         check(!((Thread)field.get(module)).isAlive(),"badge worker leaked");
-        setInstance(bus,"running",false);set(CarPlayApp.class,"phoneContext",null);
+        setInstance(bus,"running",false);set(com.luka.carplay.CarPlayHook.class,"phoneContext",null);
         set(Preferences.class,"instance",null);
         java.nio.file.Files.delete(directory.resolve("prefs"));java.nio.file.Files.delete(directory);
     }
     public static void main(String[] args) throws Exception {
         Log.setLevel(Log.E);
-        set(CarPlayApp.class,"active",true);
+        set(com.luka.carplay.CarPlayHook.class,"active",true);
         samplesAndLifecycle();failureCleanup();workerGates();badgeGates();
-        set(CarPlayApp.class,"active",false);
+        set(com.luka.carplay.CarPlayHook.class,"active",false);
         System.out.println("SpeedSourceDiagnosticsTest PASS: exact-stock passive subscriptions, replay, validity, privacy, bounded transitions, service generations, opt-in and nonblocking teardown");
     }
 }

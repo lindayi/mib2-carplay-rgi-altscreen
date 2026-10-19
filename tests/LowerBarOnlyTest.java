@@ -65,18 +65,18 @@ public final class LowerBarOnlyTest implements InvocationHandler {
         BAPBridge bridge=(BAPBridge)field(RouteGuidance.class,"bap").get(rg);
         check(!bridge.preparePresentation(),"text readiness before publication");
         field(RouteGuidance.class,"running").setBoolean(rg,true);
-        field(ScreenModule.class,"navActive").setBoolean(null,false);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"rgiPresentationActive").setBoolean(null,false);
         byte[] frame="route_state:n:1\ncurrent_road:s:Main Street\neta_seconds:n:36000\ndist_dest_m:n:300\n"
             .getBytes("UTF-8");
         rg.onFrame(CarplayBus.EVT_RGD_UPDATE,0,frame,frame.length);
         check(output.text!=null && output.text.startsWith("Main") && output.text.contains(" | "),
             "real RGI frame must publish Road and ETA");
         check(bridge.isPresentationReady() && !ScreenModule.isNavActive(),"text must not claim RGI context");
-        field(ScreenModule.class,"connected").setBoolean(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"carPlaySessionActive").setBoolean(null,true);
         ScreenModule.setInfoModeListener((ScreenModule.InfoModeListener)field(RouteGuidance.class,"infoModeListener").get(rg));
         ScreenModule.onSteeringWheelOkPressed();
         check(field(RouteGuidance.class,"desiredInfoPhase").getInt(rg)==1,"text-only Road/Trip toggle was blocked");
-        field(ScreenModule.class,"connected").setBoolean(null,false);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"carPlaySessionActive").setBoolean(null,false);
         check(field(BAPBridge.class,"rendererClient").get(bridge)==null
             && field(BAPBridge.class,"csRef").get(bridge)==null
             && !field(BAPBridge.class,"nativeStopAttempted").getBoolean(bridge),
@@ -84,7 +84,7 @@ public final class LowerBarOnlyTest implements InvocationHandler {
         RouteGuidance.State state=(RouteGuidance.State)field(RouteGuidance.class,"state").get(rg);
         check(bridge.refreshInfoPresentation(state,1),"text-only Trip refresh");
         check(output.count("updateTimeToDestination")==0,"text mode wrote destination clock Fct22");
-        field(ScreenModule.class,"navActive").setBoolean(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"rgiPresentationActive").setBoolean(null,true);
         frame="route_state:n:0\n".getBytes("UTF-8");
         rg.onFrame(CarplayBus.EVT_RGD_UPDATE,0,frame,frame.length);
         check("".equals(output.text) && ScreenModule.isNavActive(),"route end changed non-owned context");

@@ -25,7 +25,9 @@ public final class VcPanelWorkerTest {
         constructor.setAccessible(true);
         Preferences prefs=constructor.newInstance(root.resolve("preferences").toFile(),root.resolve("layout").toFile());
         field(Preferences.class,"instance").set(null,prefs);prefs.set(Setting.ENABLED,1);
-        for(String name:new String[]{"platformSupported","connected","altScreenVideo"})field(ScreenModule.class,name).set(null,true);
+        field(ScreenModule.class,"platformSupported").set(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"carPlaySessionActive").set(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"videoReady").set(null,true);
         field(CarplayBus.class,"running").set(CarplayBus.getInstance(),true);
         field(CarplayBus.class,"out").set(CarplayBus.getInstance(),new DataOutputStream(new ByteArrayOutputStream()));
         field(CarplayBus.class,"connectionGeneration").set(CarplayBus.getInstance(),8);

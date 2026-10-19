@@ -117,7 +117,7 @@ public final class TelephonyTest {
         ServerSocket server=(ServerSocket)field(CarplayBus.class,"serverSocket").get(bus);
         Socket receiver=new Socket("127.0.0.1",server.getLocalPort()); receiver.setSoTimeout(4000);
         await(new Condition(){public boolean test(){return bus.connectionGeneration()>=0;}},"receiver connect");
-        field(CarPlayApp.class,"active").setBoolean(null,true);
+        field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,true);
         final TelephonyModule module=new TelephonyModule();
         try {
             events.refuse=true;
@@ -190,7 +190,7 @@ public final class TelephonyTest {
             for(int i=0;i<17;i++)listener.hangupCall(0);
             check(phone.count("hangupCallResult")==hangups+1&&phone.integer("hangupCallResult")==1,"bounded action queue reports failure");
             start=System.nanoTime();
-            field(CarPlayApp.class,"active").setBoolean(null,false); module.stop();
+            field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,false); module.stop();
             check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)<100,"stop cannot await blocked dial");
             check(phone.integer("updateSignalQuality")==91,"latest Bluetooth signal restored");
             check(phone.integer("updateFSGOperationState")==9,"latest Bluetooth state restored");
@@ -200,7 +200,7 @@ public final class TelephonyTest {
                 check(!support,"uncached capabilities cannot retain fabricated CarPlay support");
             listener.acceptCall(); check(bluetooth.count("acceptCall")==2,"Off restores original action");
             old.updateCallState(calls(new CallStateChangedEvent("late","Late",1,1,"late")));
-            field(CarPlayApp.class,"active").setBoolean(null,true);
+            field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,true);
             check(module.start(new FrameworkRef(context)),"restart");
             int results=phone.count("dialNumberResult");
             events.dialRelease.countDown(); Thread.sleep(200);
@@ -224,7 +224,7 @@ public final class TelephonyTest {
             System.out.println("TelephonyTest: PASS (exact interfaces, worker, actions, restore, late callbacks)");
         } finally {
             if(events.dialRelease!=null)events.dialRelease.countDown();
-            field(CarPlayApp.class,"active").setBoolean(null,false);
+            field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,false);
             module.stop(); receiver.close(); bus.stop();
         }
     }

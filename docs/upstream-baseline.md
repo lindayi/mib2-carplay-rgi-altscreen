@@ -28,7 +28,7 @@ The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 109 fil
 in the five source trees, `hmi/resources`, and the runtime flag atlas from
 `rgi_renderer/release`. It includes the Unicode license. It also lists excluded
 vendor/stub/release trees and the separately tracked AltScreen native components.
-At this checkpoint, 50 files match, 47 have local deltas, and 12 have explicit
+At this checkpoint, 51 files match, 49 have local deltas, and 9 have explicit
 replacement mappings. Text comparisons normalize CRLF/LF; binary resource
 comparisons use exact bytes. These counts are not a feature-coverage percentage.
 
@@ -40,28 +40,53 @@ preferences, custom footer, cards, settings and lifecycle fencing.
 The status gate now starts from the upstream implementation and API, with
 retirement, NavigationJobs ownership and VC-panel/speed-badge notifications added.
 
-## Retained integrations: migration not complete
+## Running upstream control layer
 
-The independent review found that lifecycle and display orchestration still
-use the local implementation. `CarPlayHook`, `ClusterStateController` and
-`WheelZoomBridge` are substantive replacements, not narrow adapters around
-upstream code. `LowerBarKomo`, `OemMapStartupGate` and `ScreenModule` also contain
-large local rewrites even though their files have direct source mappings.
-An "adapted" count does not imply a small delta or an easy future merge.
+The first review correctly found that moving paths and keeping the old
+controllers did not meet the upstream-first goal. The next implementation
+replaces that orchestration:
 
-**The requested upstream-first lifecycle/context migration is not complete.**
-The data path and renderer have a pinned upstream baseline. The control layer
-still requires a separately verified integration before this branch can be
-described as meeting the full maintenance goal. Do not merge this checkpoint as
-completion of that goal.
+- `CarPlayHook` runs the lifecycle actor, RGI discovery, service/device
+  registration, retry and maintenance. `LifecycleFeatures` supplies the local
+  ordered feature hooks. `CarPlayApp` is an API/build-ID facade; `RgdModule`
+  and the old application actor are removed.
+- `ClusterStateController` runs context acquisition, readback, reconciliation,
+  renderer-window rebinding and the circuit breaker. `ScreenModule` supplies
+  worker-free MU1316 video, placement, view and input hooks.
+- `DisplayStateSnapshot` is the unmodified upstream diagnostic decoder.
+  The source-built DisplayManager calls `configureRgiRefreshContext` before
+  declaring its context table.
+
+The context state machine has a necessary local extension: choose 80 for the
+Audi map or 81 for live CarPlay video, rather than assuming one composite.
+Video rebind uses 82; native-map rebind retains the existing 72 bounce.
+Session generations and target checks reject stale completion and retry charges.
+Only verified readback acknowledges a renderer binding. Stock release restores
+the 30 Hz update rate and preserves a different current OEM context.
+
+Lifecycle hooks retain Master Off without phone disconnection, always-on
+transport, settings-backed guidance mode, G24 exclusion and local takeover.
+They must not start another lifecycle actor or context loop.
+
+The upstream geometry/ownership observer runs only with the existing
+session-verified Verbose setting. Its diagnostic snapshots have separate
+`/ramdisk/carplay_upstream_*` names. They never replace the native HMI lease or
+authorize video/input ownership. Full private export includes them; summary
+export does not include raw observer data. Atomic snapshots do not use `/tmp`
+rename or delete-before-rename fallback.
+
+An "adapted" count does not imply a small delta or automatic behavior parity.
+The integrated checks and independent review still determine release readiness.
+
+## Remaining integration boundaries
 
 The file-level map names replacements and their reasons. The principal contracts
 are:
 
 | Upstream integration | Local contract retained |
 | --- | --- |
-| `CarPlayHook` and legacy framework bus facade | Source-built MU1316 module lifecycle and one real bus; no opaque baseline JAR or parallel activation actor |
-| Context controller, geometry snapshots and refresh weave | One context writer: 80 is Audi-map composition, 81 is CarPlay composition, 82 is map-preserving renderer refresh |
+| Legacy framework bus facade | One real always-on bus; no opaque baseline JAR |
+| Binary refresh weave | Source-built DisplayManager calls the upstream controller's refresh-table hook |
 | Wheel zoom and OEM startup module | Existing generation/PID-bound bus bridge and VC-input arbitration, not two senders |
 | Native navigation-state patch tool | Exact-stock source weave and ABI guards |
 | Renderer supervisor lease/clock entry points | Existing SI receiver/renderer supervision and monotonic renderer timing |
@@ -79,10 +104,11 @@ an upstream refresh.
 The local tests cover async lifecycle intent, duplicate/stale activation, late
 navigation services and service replacement, Master Off, one context writer,
 context readback, RGI window rebinding, OEM field restoration and wheel ownership.
-They do not prove implementation parity with the upstream activation actor,
-context circuit breaker, generic geometry observer or FD-9 supervisor lease.
-Those controller changes still need manual comparison; the planner deliberately
-reports changes to replaced files instead of pretending it can merge them.
+The actor and context tests execute the adopted implementations, not a second
+local controller. They do not prove vehicle behavior, generic geometry-probe
+support on every firmware or FD-9 supervisor-lease parity. The planner merges
+changes to the adopted controller paths and explicitly reports changes to
+the remaining replaced files for manual review.
 
 ## Updating the baseline
 

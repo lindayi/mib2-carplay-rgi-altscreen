@@ -612,7 +612,7 @@ public class BAPBridge {
      *  the lazy init when CarPlay nav begins — the connect-time CANCEL still fires via the
      *  Navigation singleton regardless. */
     /** @return true once the native RG gate is actually installed+shut; false if ClusterService
-     *  isn't up yet so the caller (RgdModule) keeps retrying — otherwise a connected session with
+     *  isn't up yet so CarPlayHook keeps retrying — otherwise a connected session with
      *  no CarPlay navigation would run with stock RG never blocked. */
     public boolean engageTakeover() {
         if (!initialized) return false;
