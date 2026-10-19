@@ -184,9 +184,13 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - Accepted Fct44/Fct54 Status forwarding belongs in `GatedCombiService`, including
   initial replay. Do not also forward request intent in `ScreenCombiBAPListener`.
   Keep VC-panel and speed-badge replay notifications.
-- The resident lifecycle worker retries service/cleanup state outside the small
-  app lock, with RGI refresh serialized by `lifecycleLock`. It must not restart
-  every module on its maintenance tick.
+- Keep upstream CarPlayHook's queued actor, resident monitor and bounded-cadence
+  retry worker. Serialize module/service work with `RGI_LOCK`, never the small
+  publication lock. Pending intent/service generations block monitor/retry work;
+  a captured retry generation must survive every blocking call unchanged.
+  Retried cleanup must eventually initialize the new context, not retain the old
+  FrameworkRef or wait for another physical reconnect. Maintenance must not
+  restart every module.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
 - Corrected INSTALL includes boot-only START arming inside a unit-bound,

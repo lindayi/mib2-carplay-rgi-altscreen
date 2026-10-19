@@ -4,12 +4,22 @@ import com.luka.carplay.core.Module;
 
 public final class RouteGuidance {
     public static volatile int refreshes, initFailures, stopFailures, takeoverFailures, initThrows, startThrows;
+    public static volatile boolean retryOnly;
+    public static volatile java.util.concurrent.CountDownLatch retryEntered, retryRelease;
     private final Module fixture = LifecycleProbe.rgModule();
     private final boolean textOnly;
     private boolean running, taken;
     public RouteGuidance(boolean textOnly) { this.textOnly = textOnly; }
     public boolean init(Object service) {
         LifecycleProbe.checkLock();
+        if (retryOnly) {
+            if (!Thread.currentThread().getName().equals("CarPlayHook-Retry")) return false;
+            if (retryEntered != null) {
+                retryEntered.countDown();
+                try { retryRelease.await(); }
+                catch (InterruptedException e) { throw new IllegalStateException("retry interrupted"); }
+            }
+        }
         if (initThrows > 0) { initThrows--; throw new IllegalStateException("injected partial init"); }
         if (initFailures > 0) { initFailures--; return false; }
         return service != null;

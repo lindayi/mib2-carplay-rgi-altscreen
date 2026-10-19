@@ -36,7 +36,7 @@
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
       "sha256": "1fb7cada02f54989ef93af22cd802c31fc9ed1fded63b9ba703115ca152e0707",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
-      "reason": "Actual upstream lifecycle/RGI actor, service discovery and retry implementation. Q5 hooks retain always-on transport, Master Off versus physical connection, guidance mode, ordered local modules, takeover and generation/cleanup fences. CarPlayApp is only an API facade; RgdModule is removed."
+      "reason": "Upstream queued lifecycle actor, separate resident monitor and retry worker, serialized RGI initialization and service discovery. Initialization/retirement hooks retain substantial Q5 adaptations: always-on transport, Master Off versus physical connection, guidance mode, ordered local modules, takeover and generation/cleanup fences. CarPlayApp is only an API facade; RgdModule is removed."
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java",

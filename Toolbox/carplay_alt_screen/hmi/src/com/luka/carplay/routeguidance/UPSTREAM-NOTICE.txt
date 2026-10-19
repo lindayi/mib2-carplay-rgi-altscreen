@@ -22,9 +22,9 @@ one filter into the synchronized setRgActive(boolean) setter. Runtime output
 is class version 48. The overlay must ship with that weave; a source-only
 NativeRouteStateOverlay cannot observe stock native writes.
 
-The existing CarPlayApp lifecycle worker must call
+The CarPlayHook resident monitor must call
 ScreenNavStatusGate.retryPending(active) even after disconnect for pending
-OEM replay, and RgdModule.refreshServiceBindings() for a started RGI module.
+OEM replay, and RouteGuidance.refreshServiceBindings() for a started RGI module.
 Release writes run on NavigationJobs, never on preference/HMI callbacks.
 GatedCombiService is the single accepted Fct44/Fct54 forwarding point;
 the ScreenCombiBAPListener request methods must not duplicate layer callbacks.
@@ -32,11 +32,11 @@ The VC-panel and speed-badge presentation observers remain registered there.
 
 Local behavior is intentionally retained: next-road footer, original maneuver
 thresholds, settings/defaults/Keep page policy, destination timezone, map cards,
-renderer options and ScreenModule's sole cluster-context ownership.
-Upstream LowerBarKomo is not used: this branch publishes the selected lower
-information page through BAPBridge's Fct19/20/22 path, not the independent
-upstream ClusterService.updateCurrentStreet/updateArrivalTime path. Adding it
-would introduce a second writer and change the chosen page semantics.
+renderer options and ClusterStateController's sole cluster-context ownership.
+ScreenModule supplies worker-free platform hooks. LowerBarKomo is an explicit
+MU1316 adapter: BAPBridge supplies formatted values, and NavigationJobs publishes
+the selected lower information page with per-field ownership and native restore.
+Do not add independent generic stock setters alongside that path.
 
 Host verification: scripts/test_rgi_upstream.sh compiles fresh Java 1.4 output
 under build/rgi-upstream-tests, tests the exact woven native setter with strict

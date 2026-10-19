@@ -46,8 +46,9 @@ The first review correctly found that moving paths and keeping the old
 controllers did not meet the upstream-first goal. The next implementation
 replaces that orchestration:
 
-- `CarPlayHook` runs the lifecycle actor, RGI discovery, service/device
-  registration, retry and maintenance. `LifecycleFeatures` supplies the local
+- `CarPlayHook` retains the queued lifecycle actor, separate resident monitor,
+  retry worker and their serialized RGI work. It runs RGI discovery and
+  service/device registration. `LifecycleFeatures` supplies the local
   ordered feature hooks. `CarPlayApp` is an API/build-ID facade; `RgdModule`
   and the old application actor are removed.
 - `ClusterStateController` runs context acquisition, readback, reconciliation,
@@ -67,6 +68,11 @@ the 30 Hz update rate and preserves a different current OEM context.
 Lifecycle hooks retain Master Off without phone disconnection, always-on
 transport, settings-backed guidance mode, G24 exclusion and local takeover.
 They must not start another lifecycle actor or context loop.
+The first lifecycle draft still folded monitor/retry into the old local polling
+loop. The follow-up restores upstream's three-worker structure and method flow.
+The initialization/retirement hooks remain substantial adaptations for ordered
+local modules and retryable cleanup. OEM callbacks take only the publication
+lock; monitor/retry work must reject pending or stale lifecycle generations.
 
 The upstream geometry/ownership observer runs only with the existing
 session-verified Verbose setting. Its diagnostic snapshots have separate

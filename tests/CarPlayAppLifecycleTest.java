@@ -130,6 +130,36 @@ public final class CarPlayAppLifecycleTest {
             Thread.sleep(1250);
             check(RouteGuidance.refreshes == before, "inactive maintenance refreshed RGI");
             check(ScreenNavStatusGate.inactiveRetries > 0, "inactive cleanup was not retried");
+        } else if (scenario.equals("retry-worker") || scenario.equals("retry-replug")) {
+            RouteGuidance.retryOnly = true;
+            if (scenario.equals("retry-replug")) {
+                RouteGuidance.retryEntered = new java.util.concurrent.CountDownLatch(1);
+                RouteGuidance.retryRelease = new java.util.concurrent.CountDownLatch(1);
+            }
+            CarPlayApp.onActivate(context); settled();
+            check(LifecycleTestModule.count(1) == 0, "failed initial attempt started RGI");
+            if (scenario.equals("retry-replug")) {
+                check(RouteGuidance.retryEntered.await(5, java.util.concurrent.TimeUnit.SECONDS),
+                    "upstream retry worker did not retry independently of the resident monitor");
+                CarPlayApp.onDeactivate();
+                check(!CarPlayApp.isSessionConnected(), "blocked retry blocked OEM disconnect callback");
+                CarPlayApp.onActivate(new LifecycleContext().context);
+                RouteGuidance.retryOnly = false;
+                RouteGuidance.retryRelease.countDown();
+                settled();
+                check(fixture.acquired == fixture.released, "stale retry kept the old service binding");
+            }
+            awaitCount(2, 1);
+            check(LifecycleTestModule.count(1) == 1, "retry subscribed a stale or duplicate RGI");
+        } else if (scenario.equals("cleanup-replug")) {
+            CarPlayApp.onActivate(context); settled();
+            RouteGuidance.stopFailures = 4;
+            CarPlayApp.onDeactivate();
+            LifecycleContext next = new LifecycleContext();
+            CarPlayApp.onActivate(next.context); settled();
+            awaitCount(2, 2);
+            check(fixture.acquired == fixture.released && next.adds == 1,
+                "pending old cleanup prevented the new session from starting");
         } else if (scenario.equals("late-device")) {
             fixture.deviceAvailable = false;
             CarPlayApp.onActivate(context); settled();

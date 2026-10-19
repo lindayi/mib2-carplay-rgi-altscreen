@@ -3,7 +3,8 @@
  *
  * Upstream lifecycle, RGI initialization, device listener and service discovery.
  * MU1316 extensions: always-on transport, preference gates and local Module hooks.
- * OEM callbacks publish intent; one actor also drains runtime monitoring/retries.
+ * OEM callbacks publish intent. Upstream's actor, resident monitor and retry
+ * worker serialize service/module work, never the publication callbacks.
  */
 package com.luka.carplay;
 
@@ -30,11 +31,15 @@ public final class CarPlayHook {
     private static final String TAG = "CarPlayHook";
     private static volatile boolean active, registered, carplayRunning;
     private static volatile FrameworkRef fwRef;
+    private static final Object RGI_LOCK = new Object();
     private static final Object LIFECYCLE_QUEUE = new Object();
     private static Thread lifecycleWorker;
+    private static Thread rgiRuntimeMonitor, retryThread;
+    private static boolean lifecyclePending, requestedActive, lifecycleCleanupPending;
     private static IContext requestedContext, phoneContext;
     private static Object savedContext;
-    private static int activationGeneration, appliedGeneration, serviceGeneration, appliedServiceGeneration;
+    private static volatile int activationGeneration, serviceGeneration;
+    private static int appliedGeneration, appliedServiceGeneration;
     private static boolean featuresEnabled = true, guidanceEnabled = true;
     private static long deactivateDeadline;
     private static final Module[] MODULES = LifecycleFeatures.create();
@@ -48,7 +53,7 @@ public final class CarPlayHook {
     private static Object boundNaviService, boundNaviUnderlyingService, naviServiceIdentity;
     private static long lastServiceProbe, lastInitFailureLog, lastDiscoveryWarning;
     private static boolean retrying, retiringRouteGuidance, naviReleasePending;
-    private static int listenerGeneration, retryAttempts;
+    private static int listenerGeneration;
     private static final java.util.Vector pendingReleases = new java.util.Vector();
 
     private CarPlayHook() {}
@@ -110,6 +115,9 @@ public final class CarPlayHook {
         active = activate;
         if (!activate) carplayRunning = false;
         requestedContext = context;
+        requestedActive = activate;
+        lifecyclePending = true;
+        if (!activate) lifecycleCleanupPending = true;
         ++activationGeneration;
         ++serviceGeneration;
         deactivateDeadline = activate ? 0L : ElapsedClock.nowMs() + 400L;
@@ -123,40 +131,31 @@ public final class CarPlayHook {
                 while (true) {
                     int generation, service;
                     IContext context;
-                    boolean activate, changed;
+                    boolean activate, cleanup;
                     synchronized (LIFECYCLE_QUEUE) {
-                        long wait = !active && appliedGeneration != activationGeneration
-                            ? deactivateDeadline - ElapsedClock.nowMs() : 0L;
-                        if (wait > 0L || (appliedGeneration == activationGeneration
-                                && appliedServiceGeneration == serviceGeneration)) {
-                            try { LIFECYCLE_QUEUE.wait(wait > 0L ? wait : 200L); }
+                        while (!lifecyclePending) {
+                            try { LIFECYCLE_QUEUE.wait(); }
                             catch (InterruptedException ignored) { }
-                            if (!active && ElapsedClock.nowMs() < deactivateDeadline) continue;
+                        }
+                        long wait = requestedActive ? 0L : deactivateDeadline - ElapsedClock.nowMs();
+                        if (wait > 0L) {
+                            try { LIFECYCLE_QUEUE.wait(wait); }
+                            catch (InterruptedException ignored) { }
+                            continue;
                         }
                         generation = activationGeneration;
                         service = serviceGeneration;
                         context = requestedContext;
-                        activate = active;
-                        changed = appliedGeneration != generation;
+                        activate = requestedActive;
+                        cleanup = lifecycleCleanupPending;
+                        lifecyclePending = lifecycleCleanupPending = false;
                     }
                     try {
-                        if (changed) {
-                            deactivateNow();
+                        synchronized (RGI_LOCK) {
+                            if (cleanup || !activate) deactivateNow();
                             if (activate && current(generation, context)) activateNow(context, generation);
-                        } else if (!activate && fwRef == null && context != null) {
-                            fwRef = new FrameworkRef(context);
-                        }
-                        if (current(generation, context)) {
-                            if (service != appliedServiceGeneration && !changed) {
-                                retireRouteGuidance();
-                                releaseNaviService();
-                                lastServiceProbe = 0L;
-                                retryAttempts = 0;
-                            }
-                            pollRgiRuntimeNow(generation, context);
                         }
                     } catch (Throwable t) {
-                        retrying = activate;
                         Log.e(TAG, "lifecycle worker: " + t);
                     } finally {
                         synchronized (LIFECYCLE_QUEUE) {
@@ -180,23 +179,37 @@ public final class CarPlayHook {
         }
     }
 
-    private static void activateNow(IContext context, int generation) {
+    private static void activateNow(Object context, int generation) {
+        if (savedContext != null && savedContext != context) deactivateNow();
+        if (!active || !current(generation, (IContext)context)) return;
+        startRgiRuntimeMonitor();
         if (cleanupPending()) return;
         Log.refreshLevel();
         Log.i(TAG, "onActivate build=" + CarPlayApp.BUILD_ID);
-        FrameworkRef next = new FrameworkRef(context);
-        if (!current(generation, context)) return;
-        fwRef = next;
-        savedContext = context;
         CarplayBus.getInstance().start();
-        lastServiceProbe = 0L;
-        retrying = true;
-        retryAttempts = 0;
+        savedContext = context;
+        lastServiceProbe = ElapsedClock.nowMs();
+        try {
+            if (fwRef == null) fwRef = new FrameworkRef((IContext)context);
+            if (!current(generation, (IContext)context)) return;
+            applyServiceChange();
+            if (tryInit(context, generation)) {
+                Log.i(TAG, "Initialized on first attempt");
+                return;
+            }
+            Log.i(TAG, "Starting retry thread");
+            startRetryThread(context, generation);
+        } catch (Throwable t) {
+            Log.e(TAG, "onActivate error: " + t);
+            startRetryThread(context, generation);
+        }
     }
 
     private static void deactivateNow() {
         Log.i(TAG, "onDeactivate");
         retrying = false;
+        if (retryThread != null) retryThread.interrupt();
+        retryThread = null;
         for (int i = MODULES.length - 1; i > 0; i--) stopFeature(i);
         retireRouteGuidance();
         releaseNaviService();
@@ -242,19 +255,29 @@ public final class CarPlayHook {
      * Initialization
      * ============================================================ */
 
-    private static boolean tryInit(IContext context, int generation) {
+    private static boolean tryInit(Object context, int generation) {
+        synchronized (RGI_LOCK) { return initNow(context, generation); }
+    }
+
+    private static boolean initNow(Object value, int generation) {
+        IContext context = (IContext)value;
         if (!active || !current(generation, context)) return false;
         if (cleanupPending()) return false;
-        if (savedContext != context || fwRef == null) activateNow(context, generation);
+        if (savedContext != context || fwRef == null) {
+            FrameworkRef next = new FrameworkRef(context);
+            if (!active || !current(generation, context)) return false;
+            fwRef = next;
+            savedContext = context;
+        }
         if (fwRef == null || !fwRef.isReady()) return false;
         if (!startFeature(0, generation, context)) return false;
-        if (!initNow(context, generation)) return false;
+        if (!initializeRouteGuidance(context, generation)) return false;
         for (int i = 1; i < MODULES.length; i++)
             if (!startFeature(i, generation, context)) return false;
         return true;
     }
 
-    private static boolean initNow(IContext context, int generation) {
+    private static boolean initializeRouteGuidance(IContext context, int generation) {
         int service;
         synchronized (LIFECYCLE_QUEUE) { service = serviceGeneration; }
         if (retiringRouteGuidance) {
@@ -307,6 +330,50 @@ public final class CarPlayHook {
         }
         if (!rgiCurrent(generation, context, service)) { retireRouteGuidance(); return false; }
         return true;
+    }
+
+    private static void startRetryThread(final Object context, final int generation) {
+        if (!active || !current(generation, (IContext)context)) return;
+        if (retrying) return;
+        retrying = true;
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    int attempts = 0;
+                    while (active && generation == activationGeneration) {
+                        sleep(2000);
+                        if (!active || generation != activationGeneration) break;
+                        attempts++;
+                        if (attempts % 10 == 1) Log.d(TAG, "Retry attempt " + attempts);
+                        try {
+                            synchronized (RGI_LOCK) {
+                                if (runtimeCurrent(generation) && tryInit(context, generation)) {
+                                    Log.i(TAG, "Retry succeeded after " + attempts + " attempts");
+                                    return;
+                                }
+                            }
+                        } catch (Throwable e) {
+                            Log.w(TAG, "Retry error: " + e);
+                        }
+                    }
+                } finally {
+                    synchronized (RGI_LOCK) {
+                        if (retryThread == Thread.currentThread()) {
+                            retrying = false;
+                            retryThread = null;
+                        }
+                    }
+                }
+            }
+        }, "CarPlayHook-Retry");
+        t.setDaemon(true);
+        retryThread = t;
+        try { t.start(); }
+        catch (Throwable t0) {
+            retryThread = null;
+            retrying = false;
+            Log.e(TAG, "retry thread start failed; resident monitor retains retry: " + t0);
+        }
     }
 
     private static boolean rgiCurrent(int generation, IContext context, int service) {
@@ -372,15 +439,36 @@ public final class CarPlayHook {
         synchronized (LIFECYCLE_QUEUE) {
             if (!active) return;
             ++serviceGeneration;
+            lifecyclePending = true;
             LIFECYCLE_QUEUE.notifyAll();
         }
     }
 
-    /* Upstream's independent monitor/retry are drained by the same actor. */
     public static void pollRgiRuntime() {
-        synchronized (LIFECYCLE_QUEUE) { LIFECYCLE_QUEUE.notifyAll(); }
+        synchronized (RGI_LOCK) { pollRgiRuntimeNow(); }
     }
-    private static void pollRgiRuntimeNow(int generation, IContext context) {
+
+    private static boolean runtimeCurrent(int generation) {
+        synchronized (LIFECYCLE_QUEUE) {
+            return generation == activationGeneration && appliedGeneration == generation
+                && appliedServiceGeneration == serviceGeneration;
+        }
+    }
+
+    private static void applyServiceChange() {
+        if (serviceGeneration == appliedServiceGeneration) return;
+        retireRouteGuidance();
+        releaseNaviService();
+    }
+
+    private static void pollRgiRuntimeNow() {
+        int generation;
+        IContext context;
+        synchronized (LIFECYCLE_QUEUE) {
+            generation = activationGeneration;
+            context = requestedContext;
+        }
+        if (!runtimeCurrent(generation)) return;
         ScreenNavStatusGate.retryPending(active);
         LowerBarKomo.retryPending();
         retryServiceReleases();
@@ -390,15 +478,41 @@ public final class CarPlayHook {
         if (naviReleasePending) releaseNaviService();
         if (listenerProxy != null && listenerGeneration != generation) unregisterListener();
         if (!active) { retireRouteGuidance(); releaseNaviService(); unregisterListener(); return; }
+        RouteGuidance current = routeGuidance;
+        if (current != null && current.isTextOnly() != isRgiPresentationDisabled()) {
+            Log.i(TAG, "RGI presentation mode changed; rebuilding route guidance");
+            retireRouteGuidance();
+        }
         long now = ElapsedClock.nowMs();
-        long delay = retrying ? (retryAttempts < 50 ? 200L : 2000L) : 1000L;
-        if (lastServiceProbe != 0L && now >= lastServiceProbe && now - lastServiceProbe < delay) return;
-        lastServiceProbe = now;
-        retrying = !tryInit(context, generation);
-        if (retrying) retryAttempts++; else retryAttempts = 0;
-        if (active && current(generation, context) && routeGuidance != null
-                && !retiringRouteGuidance && !naviReleasePending)
-            routeGuidance.refreshServiceBindings();
+        if (context != null && (now < lastServiceProbe || now - lastServiceProbe >= 1000L)) {
+            lastServiceProbe = now;
+            if (!runtimeCurrent(generation)) return;
+            tryInit(context, generation);
+            if (runtimeCurrent(generation) && routeGuidance != null
+                    && !retiringRouteGuidance && !naviReleasePending)
+                routeGuidance.refreshServiceBindings();
+        }
+    }
+
+    private static void startRgiRuntimeMonitor() {
+        if (rgiRuntimeMonitor != null && rgiRuntimeMonitor.isAlive()) return;
+        rgiRuntimeMonitor = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    try { pollRgiRuntime(); }
+                    catch (Throwable t) { Log.e(TAG, "RGI runtime monitor: " + t); }
+                    sleep(200);
+                }
+            }
+        }, "carplay-rgi-lifecycle");
+        rgiRuntimeMonitor.setDaemon(true);
+        try { rgiRuntimeMonitor.start(); }
+        catch (Throwable t) { rgiRuntimeMonitor = null; Log.e(TAG, "runtime monitor start failed: " + t); }
+    }
+
+    private static void sleep(int ms) {
+        try { Thread.sleep(ms); }
+        catch (InterruptedException ignored) { }
     }
 
     private static boolean cleanupPending() {
