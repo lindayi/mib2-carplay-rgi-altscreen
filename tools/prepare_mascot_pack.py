@@ -84,7 +84,8 @@ def validate(pack):
             raise ValueError("Truncated animation header")
         width, height, count, left = struct.unpack_from("<IIII", atlas, offset)
         offset += 16
-        if not (1 <= width <= 128 and height == 40 and 2 <= count <= 32) or left != (entry["facing"] == "left"):
+        dimensions = (height == 40 and 1 <= width <= 128) or (height == 80 and 1 <= width <= 256)
+        if not (dimensions and 2 <= count <= 32) or left != (entry["facing"] == "left"):
             raise ValueError("Invalid animation dimensions, count or facing")
         if offset + count * 4 > len(atlas):
             raise ValueError("Truncated frame delays")

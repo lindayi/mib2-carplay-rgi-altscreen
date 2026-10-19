@@ -1,4 +1,5 @@
 import json
+import hashlib
 import struct
 import subprocess
 import sys
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from create_example_mascot import create
 from prepare_mascot_pack import build, validate, stage, java_source
+from build_mascot_assets import animation
 
 output = ROOT / "build/mascot-pack-tests"
 create(output / "art")
@@ -27,7 +29,7 @@ for count in (0, 1, 5, 16):
     offset = 12
     for i in range(count):
         w, h, frames, facing = struct.unpack_from("<IIII", atlas, offset)
-        assert facing == i % 2 and h == 40 and frames == 4
+        assert facing == i % 2 and h == 80 and frames == 4
         offset += 16 + frames * 4 + w * h * frames * 4
     assert offset == len(atlas)
     jar = pack / "fixture.jar"
@@ -58,6 +60,30 @@ for count in (0, 1, 5, 16):
     else:
         raise AssertionError("Mixed atlas/catalog accepted")
     (pack / "mascots.rgba").write_bytes(atlas)
+    if count == 1:
+        original_catalog = (pack / "catalog.json").read_bytes()
+        def validate_bytes(data):
+            (pack / "mascots.rgba").write_bytes(data)
+            changed = dict(catalog, atlas_sha256=hashlib.sha256(data).hexdigest())
+            (pack / "catalog.json").write_text(json.dumps(changed))
+            return validate(pack)
+        low, delays = animation(output / "art/robot.gif", False, height=40)
+        old = bytearray(b"MASCOT02" + struct.pack("<I", 1))
+        old += struct.pack("<IIII", *low[0].size, len(low), 0)
+        old += struct.pack("<" + "I" * len(delays), *delays)
+        old += b"".join(f.tobytes() for f in low)
+        validate_bytes(old)
+        for offset, value in ((12, 257), (16, 81)):
+            invalid = bytearray(atlas)
+            struct.pack_into("<I", invalid, offset, value)
+            try:
+                validate_bytes(invalid)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("Unsupported high-resolution dimensions accepted")
+        (pack / "mascots.rgba").write_bytes(atlas)
+        (pack / "catalog.json").write_bytes(original_catalog)
 for bad in (
     {"format": 1, "mascots": [one["mascots"][0]] * 17},
     {"format": 1, "mascots": [dict(one["mascots"][0], name="Off")]},
@@ -84,4 +110,10 @@ subprocess.run([sys.executable, str(ROOT / "tools/build_mascot_assets.py"),
                 "--raccoon", str(output / "art/robot.gif"), "--nian", str(output / "art/robot.gif"),
                 "--capybara", str(output / "art/robot.gif"), "--lizard", str(output / "art/robot.gif"),
                 "--output", str(output / "legacy.rgba")], check=True)
+with (output / "oversize.rgba").open("wb") as file:
+    file.write(b"MASCOT02" + struct.pack("<I", 7))
+    for _ in range(7):
+        file.write(struct.pack("<IIII", 256, 80, 32, 0))
+        file.write(struct.pack("<32I", *([100] * 32)))
+        file.write(bytes(256 * 80 * 32 * 4))
 print("Generic packs: 0/1/5/16 entries, directions, generated validators, strict names/counts and mixed-pack rejection PASS")

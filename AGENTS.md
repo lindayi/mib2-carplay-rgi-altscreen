@@ -874,6 +874,15 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   pose differences after padding removal, not measured Audi-bar geometry. Keep
   the requested 30% base-clearance reduction; do not double-compensate raw GIF
   margins already removed by the atlas builder.
+- Generate mascot pack textures directly from the source at 80 pixels high,
+  not at 40 and then enlarge them. Preserve the old rounded display width and
+  80-pixel footprint. Map and VC preview share the texture-to-display scale;
+  80-pixel MASCOT02 textures draw 1:1, legacy <=64-pixel textures retain 2x.
+  Keep native dimensions bounded (new width <=256) and total atlas <=16 MiB.
+  Legacy MASCOT01 generation remains 40 pixels for compatibility fixtures.
+  Rebuild the native library, pack and catalog-pinned JAR together; old libraries
+  reject the larger textures. Real GLES one-pixel detail and unchanged geometry
+  are host checks, not vehicle-quality confirmation.
 - `scripts/test_mascots.sh` covers real host GLES/state/failure/interposition
   behavior and synthetic video conversion. The host suite needs FFmpeg and Pillow;
   local image `mib2-mascot-video-test` extends the GLES test image with FFmpeg.

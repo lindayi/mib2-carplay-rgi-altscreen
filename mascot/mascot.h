@@ -6,6 +6,12 @@
 
 #define MASCOT_COUNT 16
 #define MASCOT_MAX_FRAMES 32
+#define MASCOT_TEXTURE_HEIGHT 80
+#define MASCOT_MAX_ATLAS_BYTES (16u * 1024u * 1024u)
+static inline float mascot_display_scale(unsigned texture_height) {
+    /* Existing low-resolution atlases retain their original doubled footprint. */
+    return texture_height == MASCOT_TEXTURE_HEIGHT ? 1.f : 2.f;
+}
 typedef struct {
     unsigned width, height, count, duration;
     unsigned delay[MASCOT_MAX_FRAMES];

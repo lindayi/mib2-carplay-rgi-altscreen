@@ -74,9 +74,9 @@ static void parsers(const char *atlas,const char *bad) {
     for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++)assert(mascot_config(invalid[i],1000,42)==-1);
     FILE *f=fopen(atlas,"rb");assert(f);assert(fseek(f,0,SEEK_END)==0);long n=ftell(f);assert(n>100);
     rewind(f);unsigned char *data=malloc(n+1);assert(data);assert(fread(data,1,n,f)==(size_t)n);fclose(f);
-    unsigned offsets[]={0,8,12,16,20,24};
+    unsigned offsets[]={0,8,12,16,20,!memcmp(data,"MASCOT02",8)?28:24};
     for(unsigned i=0;i<6;i++) {
-        unsigned char original=data[offsets[i]];data[offsets[i]]=offsets[i]==24?0:255;
+        unsigned char original=data[offsets[i]];data[offsets[i]]=i==5?0:255;
         f=fopen(bad,"wb");assert(f);assert(fwrite(data,1,n,f)==(size_t)n);fclose(f);
         mascot_animation a[MASCOT_COUNT]={{0}};assert(!mascot_load(bad,a));assert(a[0].pixels==NULL);
         data[offsets[i]]=original;
@@ -101,7 +101,7 @@ int main(int argc,char **argv) {
     EGLint attributes[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_NONE};
     EGLConfig config;EGLint count;assert(eglChooseConfig(d,attributes,&config,1,&count) && count==1);
-    EGLint size[]={EGL_WIDTH,512,EGL_HEIGHT,256,EGL_NONE},version[]={EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE};
+    EGLint size[]={EGL_WIDTH,1440,EGL_HEIGHT,455,EGL_NONE},version[]={EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE};
     EGLSurface surface=eglCreatePbufferSurface(d,config,size);
     EGLContext c=eglCreateContext(d,config,EGL_NO_CONTEXT,version);assert(eglMakeCurrent(d,surface,surface,c));
     glViewport(31,19,320,160);glClearColor(.08f,.17f,.23f,.37f);glClear(GL_COLOR_BUFFER_BIT);pixels(before);
@@ -197,7 +197,7 @@ int main(int argc,char **argv) {
     mascot_graphics_destroy(&g);
     glViewport(31,19,320,160);
     for(unsigned selected=1;selected<=MASCOT_COUNT;selected++) {
-        double span=320-2*a[selected-1].width;
+        double span=320-mascot_display_scale(a[selected-1].height)*a[selected-1].width;
         if(!a[selected-1].count)continue;
         unsigned t=(unsigned)round(1.5*span/.048);
         glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
@@ -236,6 +236,29 @@ int main(int argc,char **argv) {
     assert(!mascot_draw_image(&g,solid,20,40,1));
     snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
     fail_texture=0;assert(mascot_draw_image(&g,solid,20,40,1));
+    mascot_graphics_destroy(&g);
+    /* One-pixel source detail must survive at the unchanged 80-pixel footprint. */
+    unsigned char detail[80*80*4],row[80*4];
+    for(unsigned y=0;y<80;y++)for(unsigned x=0;x<80;x++) {
+        unsigned char *p=detail+(y*80+x)*4;
+        p[0]=p[1]=p[2]=(x%2)?0:255;p[3]=255;
+    }
+    mascot_animation high[MASCOT_COUNT]={{.width=80,.height=80,.count=1,.duration=100,.delay={100},.pixels=detail}};
+    glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);
+    snapshot(&initial);
+    assert(mascot_draw(&g,high,1,0));
+    glGetUniformfv(g.program,g.rectangle,rectangle);
+    assert(fabsf(rectangle[2]*1440/2-80)<0.001f && fabsf(rectangle[3]*455/2-80)<0.001f);
+    assert(fabsf((rectangle[1]+1)*455/2-66.5f)<0.001f);
+    glReadPixels(0,100,80,1,GL_RGBA,GL_UNSIGNED_BYTE,row);
+    for(unsigned x=0;x<80;x++)assert(x%2?row[x*4]<15:row[x*4]>240);
+    snapshot(&final);assert(!memcmp(&initial,&final,sizeof(initial)));
+    unsigned char *full=malloc(1440*455*4);assert(full);
+    glReadPixels(0,0,1440,455,GL_RGBA,GL_UNSIGNED_BYTE,full);
+    snprintf(path,sizeof(path),"%s/native-detail-1440.ppm",argv[2]);
+    FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1440 455\n255\n");
+    for(int y=454;y>=0;y--)for(int x=0;x<1440;x++)assert(fwrite(full+(y*1440+x)*4,1,3,f)==3);
+    assert(fclose(f)==0);free(full);
     mascot_graphics_destroy(&g);mascot_free(a);glUseProgram(0);glDeleteProgram(program);
     assert(eglMakeCurrent(d,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT));
     assert(eglDestroyContext(d,c));assert(eglDestroySurface(d,surface));assert(eglTerminate(d));

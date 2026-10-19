@@ -28,7 +28,9 @@ def transparent_background(frame):
     return frame
 
 
-def animation(path, remove_background):
+def animation(path, remove_background, height=80):
+    if height not in (40, 80):
+        raise ValueError("Expected legacy 40 or native-size 80 pixel textures")
     frames, delays = [], []
     with Image.open(path) as image:
         if image.n_frames < 2 or image.n_frames > 32:
@@ -45,10 +47,11 @@ def animation(path, remove_background):
         raise ValueError("Empty mascot frame")
     box = (min(b[0] for b in boxes), min(b[1] for b in boxes),
            max(b[2] for b in boxes), max(b[3] for b in boxes))
-    height = 40
-    width = max(1, round((box[2]-box[0])*height/(box[3]-box[1])))
+    # Retain the established display width, but resample directly from the source.
+    width = max(1, round((box[2]-box[0])*40/(box[3]-box[1])))
     if width > 128:
         raise ValueError("Mascot aspect ratio is too wide")
+    width *= height // 40
     resampling = getattr(Image, "Resampling", Image)
     frames = [frame.crop(box).resize((width, height), resampling.LANCZOS) for frame in frames]
     return frames, delays
@@ -68,7 +71,7 @@ def main():
     provenance = []
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for name, path, remove in sources:
-        frames, delays = animation(path, remove)
+        frames, delays = animation(path, remove, height=40)
         width, height = frames[0].size
         output += struct.pack("<III", width, height, len(frames))
         output += struct.pack("<" + "I"*len(delays), *delays)

@@ -16,7 +16,8 @@ python3 tests/mascot_video_test.py
 cc -std=gnu99 -Wall -Wextra -Werror -fsanitize=address,undefined \
     tests/mascot_pack_test.c mascot/assets.c -o build/mascot-tests/pack
 for count in 0 1 5 16; do
-    build/mascot-tests/pack "build/mascot-pack-tests/$count/mascots.rgba" "$count"
+    build/mascot-tests/pack "build/mascot-pack-tests/$count/mascots.rgba" "$count" \
+        build/mascot-pack-tests/oversize.rgba
 done
 cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
     tests/mascot_test.c mascot/assets.c mascot/draw.c \
@@ -24,6 +25,9 @@ cc -std=gnu99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
     -lEGL -lGLESv2 -lm -o build/mascot-tests/test
 ASAN_OPTIONS=detect_leaks=0 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
     build/mascot-tests/test "$ATLAS" build/mascot-tests
+mkdir -p build/mascot-tests/native-size
+ASAN_OPTIONS=detect_leaks=0 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 \
+    build/mascot-tests/test build/mascot-pack-tests/5/mascots.rgba build/mascot-tests/native-size
 cc -D_GNU_SOURCE -std=gnu99 -O2 -Wall -Wextra -Werror -shared -fPIC -fvisibility=hidden \
     mascot/assets.c mascot/draw.c mascot/hook.c vc_menu/panel.c vc_menu/protocol.c vc_menu/runtime.c \
     map_cards/protocol.c map_cards/paint.c map_cards/artwork.c map_cards/runtime.c -lEGL -lGLESv2 -lm -ldl -pthread \
@@ -56,6 +60,6 @@ bash map_cards/test.sh
 python3 - <<'PY'
 from pathlib import Path
 from PIL import Image
-for path in Path("build/mascot-tests").glob("*.ppm"):
+for path in Path("build/mascot-tests").rglob("*.ppm"):
     Image.open(path).save(path.with_suffix(".png"))
 PY

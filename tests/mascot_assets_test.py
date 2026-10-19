@@ -23,8 +23,8 @@ with tempfile.TemporaryDirectory() as directory:
     image.save(path, save_all=True, append_images=[other], duration=[50, 120], loop=0)
     frames, delays = assets.animation(path, True)
     assert delays == [50, 120] and len(frames) == 2
-    assert frames[0].size == (40, 40)
-    assert frames[0].getpixel((20, 20))[3] == 255
+    assert frames[0].size == (80, 80)
+    assert frames[0].getpixel((40, 40))[3] == 255
     output = Path(directory) / "built" / "mascots.rgba"
     subprocess.run([sys.executable, assets.__file__, "--raccoon", str(path), "--nian", str(path),
                     "--capybara", str(path), "--lizard", str(path), "--output", str(output)], check=True)
@@ -41,10 +41,23 @@ with tempfile.TemporaryDirectory() as directory:
         offset += 4 * count + width * height * count * 4
     assert offset == len(data)
     with Image.open(output.parent / "capybara-0.png") as capybara:
-        assert capybara.tobytes() == frames[0].tobytes()
+        assert capybara.tobytes() == assets.animation(path, True, height=40)[0][0].tobytes()
         assert capybara.getpixel((20, 20))[3] == 255
     with Image.open(output.parent / "lizard-0.png") as lizard:
-        assert lizard.tobytes() == assets.animation(path, False)[0][0].tobytes()
+        assert lizard.tobytes() == assets.animation(path, False, height=40)[0][0].tobytes()
+    detail = Image.new("RGB", (80, 80), "black")
+    draw = ImageDraw.Draw(detail)
+    for x in range(0, 80, 2):
+        draw.line((x, 0, x, 79), fill="white")
+    second = detail.copy()
+    second.putpixel((1, 1), (255, 0, 0))
+    detail.save(path, save_all=True, append_images=[second], duration=[60, 140], loop=0)
+    high, timing = assets.animation(path, False)
+    low, old_timing = assets.animation(path, False, height=40)
+    assert high[0].tobytes() == detail.convert("RGBA").tobytes(), "native-size detail was resampled away"
+    assert high[0].size == tuple(2 * n for n in low[0].size)
+    assert timing == old_timing == [60, 140]
+    assert low[0].resize((80, 80)).tobytes() != high[0].tobytes()
     image.save(path)
     try:
         assets.animation(path, True)
@@ -76,6 +89,6 @@ with tempfile.TemporaryDirectory() as directory:
     normalized_padded = save_loop("padded.gif", padded)
     assert [f.tobytes() for f in normalized] == [f.tobytes() for f in normalized_padded]
     assert normalized[0].size == normalized[1].size
-    assert normalized[0].getchannel("A").getbbox()[3] == 40
-    assert normalized[1].getchannel("A").getbbox()[3] < 30
-print("Mascot GIF preprocessing: exterior transparency, enclosed white, frame timing and bounds PASS")
+    assert normalized[0].getchannel("A").getbbox()[3] == 80
+    assert normalized[1].getchannel("A").getbbox()[3] < 60
+print("Mascot preprocessing: native-size detail, legacy output, transparency, frame timing and bounds PASS")

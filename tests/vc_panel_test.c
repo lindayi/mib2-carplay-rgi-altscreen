@@ -97,6 +97,24 @@ int main(int argc,char **argv) {
         assert(ink>20);
     }
     save(argv[1],"six-rows");
+    vc_panel_page preview=mascots;preview.preview=2;
+    unsigned char detail[80*80*4];
+    for(unsigned y=0;y<80;y++)for(unsigned x=0;x<80;x++) {
+        unsigned char *p=detail+(y*80+x)*4;
+        p[0]=p[1]=p[2]=x%2?0:255;p[3]=255;
+    }
+    background();
+    vc_panel_preview(&renderer,&preview,pixels,WIDTH,HEIGHT,WIDTH*4,detail,80,80,NULL);
+    const int left=WIDTH-VC_PANEL_PREVIEW_WIDTH-16+VC_PANEL_WIDTH+70;
+    const int top=(HEIGHT-VC_PANEL_HEIGHT)/2+102;
+    for(unsigned y=0;y<HEIGHT;y++)for(unsigned x=0;x<WIDTH;x++) {
+        unsigned at=(y*WIDTH+x)*4;
+        if(x>=(unsigned)left && x<(unsigned)left+80 && y>=(unsigned)top && y<(unsigned)top+80) {
+            assert(pixels[at]==((x-left)%2?0:255));
+            assert(pixels[at+3]==baseline[at+3]);
+        } else assert(!memcmp(pixels+at,baseline+at,4));
+    }
+    save(argv[1],"native-size-preview");
     vc_panel_page invalid=root;
     invalid.count=VC_PANEL_ROWS+1;assert(!vc_panel_open(&panel,&invalid));
     invalid=root;memset(invalid.rows[0].label,'x',sizeof(invalid.rows[0].label));
