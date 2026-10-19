@@ -2,7 +2,7 @@ import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.core.FrameworkRef;
 import com.luka.carplay.core.ScreenModule;
-import com.luka.carplay.rgd.*;
+import com.luka.carplay.routeguidance.*;
 import de.audi.app.terminalmode.IContext;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
@@ -54,7 +54,7 @@ public final class DestinationTimeZoneTest {
         check(out.text.endsWith("10 min"),"timezone changed UTC duration: "+out.text);
     }
     public static void main(String[] args)throws Exception {
-        Field fw=field(CarPlayApp.class,"fwRef");Object prior=fw.get(null);
+        Field fw=field(com.luka.carplay.CarPlayHook.class,"fwRef");Object prior=fw.get(null);
         TimeZone priorZone=TimeZone.getDefault();
         int priorFormat=DateMetric.timeFormat;
         int priorDistance=Distance.getSystemUnit();

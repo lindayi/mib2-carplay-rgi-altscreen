@@ -1,5 +1,5 @@
 #define ENABLE_LOGGING 0
-#include "../hook/routeguidance/rgd_hook.c"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.c"
 #include <assert.h>
 #include <errno.h>
 

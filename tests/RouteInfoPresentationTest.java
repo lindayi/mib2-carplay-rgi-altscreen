@@ -1,6 +1,6 @@
 import com.luka.carplay.core.ScreenModule;
-import com.luka.carplay.rgd.BAPBridge;
-import com.luka.carplay.rgd.RouteGuidance;
+import com.luka.carplay.routeguidance.BAPBridge;
+import com.luka.carplay.routeguidance.RouteGuidance;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;

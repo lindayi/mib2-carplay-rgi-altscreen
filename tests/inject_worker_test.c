@@ -1,7 +1,7 @@
 #define ENABLE_LOGGING 0
 #define ENABLE_STATE_TRACE 0
 #include <assert.h>
-#include "../hook/framework/hook_framework.c"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/framework/hook_framework.c"
 
 const hook_module_def_t *const hook_module_table[] = {NULL};
 const size_t hook_module_table_count = 0;

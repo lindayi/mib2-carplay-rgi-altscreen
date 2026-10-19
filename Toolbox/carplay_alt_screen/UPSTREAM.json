@@ -1,0 +1,703 @@
+{
+  "repository": "https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen.git",
+  "commit": "141e7ed33775af02a5af0b8616ee3c6250eea997",
+  "scope": "GPL RGI source and data baseline, including the running CarPlayHook lifecycle actor and ClusterStateController context writer. Local settings/platform/ownership hooks and remaining explicit replacements are recorded below.",
+  "excluded": [
+    {"path": "Toolbox/carplay_alt_screen/hmi/stubs", "reason": "Tests compile against exact private MU1316 ABI, not permissive upstream platform stubs."},
+    {"path": "Toolbox/carplay_alt_screen/hmi/vendor", "reason": "Opaque upstream baseline JAR is not a build input; local Java implementation is source-built against the stock platform."},
+    {"path": "Toolbox/carplay_alt_screen/hmi/release", "reason": "Prebuilt upstream HMI artifacts are not deployed."},
+    {"path": "Toolbox/carplay_alt_screen/rgi_native/release", "reason": "Native runtime is cross-built from the pinned source, not imported from release artifacts."},
+    {"path": "Toolbox/carplay_alt_screen/rgi_renderer/release", "except": ["flag_atlas.rgba"], "reason": "Only the runtime flag atlas is an input; upstream build metadata and checksums do not describe our rebuilt artifacts."},
+    {"path": "Toolbox/carplay_alt_screen/src", "reason": "Separate source-available AltScreen component is tracked by altscreen_native provenance and source manifest, not this GPL RGI pin."},
+    {"path": "Toolbox/carplay_alt_screen/mirror_display", "reason": "Separate mirror component is tracked by altscreen_native provenance and source manifest; do not mix its license boundary with GPL objects."}
+  ],
+  "files": [
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/resources/META-INF/UNICODE-LICENSE.txt",
+      "sha256": "8437ba5f4e4c8ae0268c3df5cf106006f2d045ff3452eedd1f27e8eb26c5f327",
+      "local": "Toolbox/carplay_alt_screen/hmi/resources/META-INF/UNICODE-LICENSE.txt",
+      "reason": "Retain the upstream Unicode table license in the HMI JAR."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/resources/com/luka/carplay/routeguidance/vc-text.bin",
+      "sha256": "8b4a8d0b5b006ad2465c846170f2294bdf5696e3ec607cf1356fb8ba66e8ba22",
+      "local": "Toolbox/carplay_alt_screen/hmi/resources/com/luka/carplay/routeguidance/vc-text.bin",
+      "kind": "binary",
+      "reason": "VCTextData loads this exact table; update format and data together without text normalization."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/release/flag_atlas.rgba",
+      "sha256": "b1985705eabcb0379bed9a5c0055694a4b3db7ac28cef29c57a9d7f2e619dd11",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/resources/flag_atlas.rgba",
+      "kind": "binary",
+      "reason": "Renderer flag coordinates depend on the upstream atlas; stage its exact bytes from the local resources directory."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
+      "sha256": "1fb7cada02f54989ef93af22cd802c31fc9ed1fded63b9ba703115ca152e0707",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
+      "reason": "Upstream queued lifecycle actor, separate resident monitor and retry worker, serialized RGI initialization and service discovery. Initialization/retirement hooks retain substantial Q5 adaptations: always-on transport, Master Off versus physical connection, guidance mode, ordered local modules, takeover and generation/cleanup fences. CarPlayApp is only an API facade; RgdModule is removed."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java",
+      "sha256": "12adae1762aab008c75662f27767540f4384ee95a9ccf91a3e246798b320d741",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterLayerController.java",
+      "sha256": "ae0dd9c4fe68d2f15386d878f6581388e6004346b312717c939351edb104c2b0",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterLayerController.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterStateController.java",
+      "sha256": "2d89f3f9759ac7d7b8cce9fb04fcf39a867fedd60a7a91e834e4e0a317bc3437",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterStateController.java",
+      "reason": "Actual upstream context acquisition/readback/reconcile/circuit-breaker worker. MU1316 extends its target selection to 80 Audi-map, 81 video and 82 video refresh, with generation-fenced acknowledgements, local video/placement hooks and 30 Hz release. Observer diagnostics use Verbose logging and separate RAM files, never a second native ownership producer."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/DisplayStateSnapshot.java",
+      "sha256": "4ee6341653012bd1e8d28d16b12402ccb958db5ccdd60dd77caac1aea0b1a250",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/DisplayStateSnapshot.java",
+      "reason": "Unmodified upstream decoder for observer diagnostics; framed byte/hash validation does not grant renderer readiness or input ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/NativeRouteStateJarPatch.java",
+      "sha256": "50ca5a24c079a0efd8b25c348edc551f9c1012713994c221349ca2919af0c867",
+      "local": null,
+      "replacements": [
+        "tools/PatchNativeRouteState.java"
+      ],
+      "reason": "Exact MU1316 stock hash/ABI-checked weave, not a prepatched baseline JAR."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/RgiRefreshJarPatch.java",
+      "sha256": "262c8b1ff6ef387cbb365b6d4447bafefaeb4fa155e069036fbbb783856b2c2c",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java"
+      ],
+      "reason": "Source-built MU1316 DisplayManager calls the upstream controller's configureRgiRefreshContext before declaring the table; no binary JAR patch or competing table writer."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/WheelZoomBridge.java",
+      "sha256": "a0bb6707fb425659590e2e3f24eee1fe28900b171c1f6c800b26de215a00843e",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/input/TouchpadController.java",
+        "Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_cluster.c"
+      ],
+      "reason": "Retain the sole generation-bound CarPlay zoom sender and VC-panel detent arbitration; do not enable a second wheel consumer."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/OemMapStartupGate.java",
+      "sha256": "7f86794f4f65deb688fb15a5fc9dce6fbe0e9d06656ea36198b7b0820b4c0405",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/OemMapStartupGate.java",
+      "reason": "Q5 mode/session/PID-aware OEM-map command bridge, polled by the upstream controller. Retains one native command owner and reconnect semantics instead of upstream's fixed startup policy."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenModule.java",
+      "sha256": "54c72c72bda1726d0a48f8d42abc6eab79dcf977aa86abffde915bdc3dc837d3",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenModule.java",
+      "reason": "Worker-free MU1316 Module/feature facade: delegates context and renderer binding to ClusterStateController; retains VC input/view listeners and local video/layout publication hooks."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenNavStatusGate.java",
+      "sha256": "3cd808c0bd3fb96f0d243d2892ff376cdf515f0c3893a64f15218cee2bb52ca8",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/ScreenNavStatusGate.java",
+      "reason": "Exact-stock NavigationJobs gate installation/replay, service-edge lifecycle notification, retirement and current-position ownership. No OEM callbacks wait on the lifecycle actor lock."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/CarplayBus.java",
+      "sha256": "6d1776d601bebad0abbe961024c34fcf95e5421bc109c17c67a2ca5a05891d1e",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/bus/CarplayBus.java"
+      ],
+      "reason": "Legacy compatibility facade is not used by our fully source-built Java classes. One real bus server remains at port 19810."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java",
+      "sha256": "7c5afdcb49cfa8c48e0319f2cf17b4358e6159d75554456b6df3ff32adbf95d8",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/ElapsedClock.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/Log.java",
+      "sha256": "c6248a72caa762df353d5cd2be2471e28cddd22564a2d1d835cf283105b1f433",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/framework/Log.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/BAPBridge.java",
+      "sha256": "a03e74d72bb67176de318e1f669231d6ebbddd9a1e5a3b6a8d13d23fb697ff2e",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/BAPBridge.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/CurrentPositionScroll.java",
+      "sha256": "6e83a500a33999b7dcae1bd82fc4cde025a345ceea13c31bf0bf29afb2a2c132",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/CurrentPositionScroll.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/GatedCombiService.java",
+      "sha256": "81c6a6f362644359a4781337471752b44779c2d5e684f5c0e552b24eaab55237",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/GatedCombiService.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/LaneGuidanceSnapshot.java",
+      "sha256": "d12c1657cd9e5548275ccbe6094c14f34c934190413a572db99ea6a814fdba83",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/LaneGuidanceSnapshot.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/LowerBarKomo.java",
+      "sha256": "cc0d591eab7abd090f0cb06ebac3bad38163dc5ef1f7582593d175119c792254",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/LowerBarKomo.java",
+      "reason": "Explicit MU1316 NavigationJobs model/KOMO adapter: per-field OEM ownership, settings/timezone formatting and stale queued-work fencing replace reflection-based direct stock calls."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/ManeuverDistancePolicy.java",
+      "sha256": "6548b32ab91b2d5dbb15e70f6e198d9e595e44d9441220c7381f8ddb77d1170e",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/ManeuverDistancePolicy.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/ManeuverMapper.java",
+      "sha256": "6b48804442555d8897cb95c2530de6dc7f9eda6c207304e27984a02949bc9047",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/ManeuverMapper.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/NativeRouteStateOverlay.java",
+      "sha256": "887824b3bd5ecc486b5e282e76ff1c5d89c6358ee1ad9bd46fbaf7e61b61922f",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/NativeRouteStateOverlay.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RendererMapper.java",
+      "sha256": "8666c9da6c9640783ced8a8d6490a5f274e8f7a55adc4ce6fa97b186a8d71c06",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RendererMapper.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RendererServer.java",
+      "sha256": "24aacd823a2793d33133c985c68a7e2b3d1746b47512d7cb81ad6dc9efdfcf81",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RendererServer.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RouteGuidance.java",
+      "sha256": "884f484ac244a2aca859f4b400ab287722c8b7afbca081f5a16bb39de3f06adf",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/RouteGuidance.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/SideStreets.java",
+      "sha256": "fedf358883df30c03391830551eaeeb8b9ad87399f1a402d01085219b906f235",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/SideStreets.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/VCTextData.java",
+      "sha256": "e500b2e095bca26ca8caa322eaea5cf9b22b368b48b71f99c26385282f362270",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/VCTextData.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/VCUnicode.java",
+      "sha256": "7daefdc1ab5c77b76a94d70318e00aff90d8f1f8afcfa78f9385698271af6c65",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/routeguidance/VCUnicode.java",
+      "reason": "Canonical upstream routeguidance package; local display preferences, labels, destination timezone, lane follow-ups and verified renderer/session ownership."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlayDisclaimerSkip.java",
+      "sha256": "2b7c2e867a0d884f497c4c29ab0cd9f470e6a75d68cb9ac42c70cf1ead2e4b8f",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlayDisclaimerSkip.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlayPhoneSMM.java",
+      "sha256": "356b7abbed638ccc6c39f0ee70de59750e07a224b844b844e27bde11399ef53b",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlayPhoneSMM.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlaySystemSMM.java",
+      "sha256": "6a11649a508a1a709b69c36c52294992463fe9babb7cd8d042ce6dda3049ead6",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/CarPlaySystemSMM.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedAddressBook.java",
+      "sha256": "bdfafba4bd35d936b3e2a530bdde19008c40808dda1b180f96e097e3188b712e",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedAddressBook.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneListener.java",
+      "sha256": "cb1175ed31086e06ff9a64a6999ffd9bdd4e2de860966747dab2cad7deb90656",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneListener.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneService.java",
+      "sha256": "72d7b612ef916d2a1555667648371283b71f48d54fefe55b989494e1abfa0612",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneService.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/TelephonyEventBridge.java",
+      "sha256": "1e906effe9ee875e04d7a23f6c57275ad1b3a8089b78234e186aaf4640959d27",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/TelephonyEventBridge.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/de/audi/app/combi/bap/app/phone/ServiceManagerPhone.java",
+      "sha256": "24a7e0ead9e7f34107a73fde88886279b4c1f8d975c5995076b9c52cef6d15aa",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/de/audi/app/combi/bap/app/phone/ServiceManagerPhone.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/phone/sm/Activator.java",
+      "sha256": "43fefd8f739c575e9220b5bb7b77118ea09d2e12cf09cdac45f0303ffe48b9e9",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/phone/sm/Activator.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/system/sm/Activator.java",
+      "sha256": "ab48f25265ed9754524a070ddad5e4e769da1b2b47a76c47015e85650413ae96",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/de/audi/tghu/system/sm/Activator.java",
+      "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/carplay_hook.exports.map",
+      "sha256": "2969113f4e7acf5dde9b9a6a09a72a5a4942530d6aad9288f74546fb7b0615bd",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/carplay_hook.exports.map",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_hook.c",
+      "sha256": "63b7fadf1407006eb2612e92ace5d0edd71b6c1a54dacd7a0e3d3beb953d4631",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_hook.c",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_hook.h",
+      "sha256": "2910ec3fcaddc2ff81dbe84201010a7aaae0996bfb0ec95afaa260a849e705b2",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_hook.h",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.c",
+      "sha256": "2d3cfa7be856daab91f674a82a218314c2db7cfe435fa56372db45dbfe086e8d",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.c",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.h",
+      "sha256": "d871659839f76a1e3fb6c040d514ebd37e472b0d703c86532deb71da68e937f6",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.h",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.c",
+      "sha256": "5896fc1eefb82a82b374cdaf2b27baadfd0764509c7e5e1e6cbe320e7be3225a",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.c",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.h",
+      "sha256": "c270e6a30e3c02509ce3f2dc7835c1afde8b43c6a6e723335986c518d8fb8046",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.h",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/stb_image.h",
+      "sha256": "1f8c1b6b408f26e3b20cbfbbd4758afb3dc9b837ff1e17c258928f406148a87c",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/coverart/stb_image.h",
+      "reason": "Upstream cover-art pipeline plus PNG checksum and fresh same-image receipt notification for local cards."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c",
+      "sha256": "6fe1ede73c73287933df122f7dc39865f80ebd49a742ebc8c3cf7397b822097e",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.h",
+      "sha256": "0f0c58d58b301f3d2ae06e4fba9d98b6e3c2eedfd26e129eac2c299dc1874c24",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus_protocol.h",
+      "sha256": "321fce7612b9bbf97f66f2329a266f436908c8d17e7c4b63dab1bc0cf810f6f3",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/bus_protocol.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/common.h",
+      "sha256": "ee437c3d584a90a2d66335c158c5974f84a9bc402cfee42ab675d9995027c123",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/common.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/hook_framework.c",
+      "sha256": "37caae23be3c406939f73c38ff3ae00d1bfe42e8c382f905c65a92df014c5a5b",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/hook_framework.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/hook_framework.h",
+      "sha256": "ab68029c3810bb59c7c95132e97a3563a0710cdfbf46bb238ec479a5f740b75c",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/hook_framework.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c",
+      "sha256": "5e03516eed442a341602d8090e4b4768cc9376fbd33bd3c70aae32c71d6b4654",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.h",
+      "sha256": "3930208019fdcca0f9d860d745bc0a9a8a85a17afa4301a217741f6569c02cb2",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.c",
+      "sha256": "185f087fe911d6885ccccaffde98ae98a182cdac7d3feb39202289a989d9a921",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.h",
+      "sha256": "89c455c737c2fa39f8a072b245d586a9c27da5ea8188bff2fe19d5dc6469e473",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.c",
+      "sha256": "56eecbe000f9c9b0c7739d69f18ec0bcf8a1cb35842a9687a232f84a035a81c0",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.h",
+      "sha256": "c6d4a2d70b160791780e15c3acab817ed49c659f0ec52b6e53cc22f2ad689246",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/state_trace.c",
+      "sha256": "324a16881d3888878f752670e462e3eabb5190e26d82b6e35f215d79deac661e",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/state_trace.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/framework/state_trace.h",
+      "sha256": "10a68539fa799e884d79347f6c08989e64884467537854088232e42b0d917223",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/framework/state_trace.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/main.c",
+      "sha256": "1fa7c201f40f59819dc8a8ac503f7f55f76e9a38b36efcdf2d35c85cac069a75",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/main.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/oemmap/oem_map_gate.c",
+      "sha256": "7edfd6c8e1938db27f2746e5d5b7b2f1965ecc15b551b45abfac96921a2516fa",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_cluster.c",
+        "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/core/OemMapStartupGate.java"
+      ],
+      "reason": "OEM readiness shares the existing PID/connection-fenced bus bridge and native UI queue; no competing OEM gate module."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/oemmap/oem_map_gate.h",
+      "sha256": "98072d1d3787bedfa37dca26cc89f818dea04e366b0dd85413dee71092e0f3ad",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_cluster.h"
+      ],
+      "reason": "ABI for the same single OEM readiness bridge."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.c",
+      "sha256": "35a6a88d9309787225a128a9877560a70a7dfae8b5055e6c1617b0f5799eefce",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.c",
+      "reason": "Upstream metadata parser/cache baseline plus later Luka lane fixes, local destination-zone and Trip sample-age fields, and ordered session/route publication."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.h",
+      "sha256": "dfebd078e34e82b394d7dfb30d8b7cf6591c7d56bf24b775cf4a9d4b8f8a549c",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.h",
+      "reason": "Upstream metadata parser/cache baseline plus later Luka lane fixes, local destination-zone and Trip sample-age fields, and ordered session/route publication."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.c",
+      "sha256": "ed54d9242b1b6fff7d99481740ec29ecb5292c62568feb4e5a43469ffac58f1a",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.c",
+      "reason": "Upstream metadata parser/cache baseline plus later Luka lane fixes, local destination-zone and Trip sample-age fields, and ordered session/route publication."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.h",
+      "sha256": "778e630d4b10fc5d2fba7c653099e80f6b5d64eb4fce7d5d5149cfeabf963269",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.h",
+      "reason": "Upstream metadata parser/cache baseline plus later Luka lane fixes, local destination-zone and Trip sample-age fields, and ordered session/route publication."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/telephony/tel_hook.c",
+      "sha256": "09e8cca0405838ffb2dc00f33eb4ae5c201f92cdacc27dd975a75b449b453c89",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/telephony/tel_hook.c",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_native/src/telephony/tel_hook.h",
+      "sha256": "5d9db15dc2b08a33d44363644540be221b03a81b394806c22bb05fc628680fe7",
+      "local": "Toolbox/carplay_alt_screen/rgi_native/src/telephony/tel_hook.h",
+      "reason": "Upstream hook/bus/telephony baseline; local opcode/module wiring, retained-object and session fences, bounded QNX RAM logging."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/common/cluster_surface.c",
+      "sha256": "beb294ff6c24df19434b8b2bc6f8d77465a084ccfb22905eeab4971c7a064dc5",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/common/cluster_surface.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/common/cluster_surface.h",
+      "sha256": "91130ca8ee426a9353d1a02ddb6952a4861c84ff0f2266ed415b9d4b303e7fb4",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/common/cluster_surface.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/common/gl_program_cache.h",
+      "sha256": "bb0478eb447cfe3becde79d98eaa381d725e49a97eff3ae3ab80e1da41d647ec",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/common/gl_program_cache.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/common/log_stamp.h",
+      "sha256": "203dc549c5051d416e3b030415e8eac12932155ec0d2ca83fe9275659d66fc7d",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/common/log_stamp.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/Makefile",
+      "sha256": "2d615512195881a0d9b3cf108d46d238e3fcda829fc4e0461500ca017f318c9a",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/Makefile",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/arrow_progress.h",
+      "sha256": "ac15ca88af9e6a6c9552382e9685c3d3133c6d275ee536e5f55e240e0ec85a5d",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/arrow_progress.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/contact_shadow.h",
+      "sha256": "c22d9f5c645203fef2d9cd84bca853e3c08c33f26085fcb08b522184c3ff655f",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/contact_shadow.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/gl_compat.h",
+      "sha256": "38616e329f301c80c59f44d79f7c0c488fe2e88d6014dfc576196f19a9de76bc",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/gl_compat.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/lane_guidance.h",
+      "sha256": "1d731d0b4eff4f18d78c6bc84a678e2e891502383cb32bcecc7835072ef40969",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/lane_guidance.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/lane_panel.h",
+      "sha256": "1a8a4390b8cbe7bc4b41e675c3c4fc0943ac76d37c6686ba6f50fc24568075fc",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/lane_panel.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/main.c",
+      "sha256": "2f55c1553708a0a90e462d006a0e209e13d20b3dca4499db29b14a17e62b6299",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/main.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.c",
+      "sha256": "87d70493358e756e53da0b3822f6123afdb39d2d1dd2fc220fa791b77156ce05",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.h",
+      "sha256": "6f18e995ea8389bd14000da116c592c87843c954ff017064c2e46aa1782b074c",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver_command.h",
+      "sha256": "9991ec14644a570dad097d11f5ead942084a0ae14b84aa358cd2b2027e1bc599",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver_command.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/platform.h",
+      "sha256": "474a57bcc1d424f62a9020d9e6a5307596b5e0075f920f5da86abc3559d60bdc",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/platform.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/platform_qnx.c",
+      "sha256": "dac3d10c9418082bca2eefbfc0b535238020e35f11f310a0a7014c234db792ae",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/platform_qnx.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/protocol.h",
+      "sha256": "5b532e06a701a3040665bb5c2be4a83a2fbce9661ec5fc848112ac2c70b3101a",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/protocol.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/render.c",
+      "sha256": "e067f9fab9d3650afd3478b690cc583e74a02bdb8a6f014e827e7e5afa8ae021",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/render.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/render.h",
+      "sha256": "9f44b3cbb46fb93617c1aa653549a331f60b0fe3c48fea05b1d8d2360d3d9fec",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/render.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_path.c",
+      "sha256": "ca4ef3224fad0634ed889293b2eaa22390121eeb1c08bfdc2d3a5ce15f7ec42d",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_path.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_path.h",
+      "sha256": "dd9dc03ab32c10191d3dc5ecacb8a222660a6fee2cfa542e152e5a039c165b6e",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_path.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_progress.h",
+      "sha256": "ce62dc10fb66ef552fe6abcc8add404b990f582285ab7e965166f8dc1062f511",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/route_progress.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/geometry.cpp",
+      "sha256": "b4b0de1d6a5c54862945d5e89bd4f1a7601f7cc14fffec7361b8b031819e1197",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/geometry.cpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/lane_panel.cpp",
+      "sha256": "f9dfb1319fdcc946e08cf071152835e6a7f6d999bb3c7d96e8e9ea3581fed509",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/lane_panel.cpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/layout.cpp",
+      "sha256": "e5b94535e90a7ef60719ad417c831a80bdbf55d80d5876c9049d273115b97ca6",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/layout.cpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene.cpp",
+      "sha256": "47aa284132ae8afbd6b4dbdee839361272555e649ec9ba2fd06628d56884e0fb",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene.cpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene.h",
+      "sha256": "9893902d05a3b37907db18161a43d3dc4d6e224636c53c2eb29cc7d223b1481e",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene_internal.hpp",
+      "sha256": "9602d532b230c8dfdd1bc25a2df166c645da14613f7fd97abfea48e35d82b08a",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/scene_internal.hpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/style.hpp",
+      "sha256": "e3efc573d4969b734f157cb56b087177d13376ccb9dc02c701890a5f2613d27c",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/scene/style.hpp",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/server.c",
+      "sha256": "5483cb85bef4819eac03d3b9245ddc2daab22f7633ed74d0585373b366280873",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/server.c",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/server.h",
+      "sha256": "fb69338487824dd28677eef24f6c79563b766b91f3a50a6fc90a1cb7725bddd3",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/server.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/supervisor_clock.h",
+      "sha256": "600165709619cf358776787a2ccb652209b01f06ca806be215d53b6cfed68ffe",
+      "local": null,
+      "replacements": [
+        "Toolbox/carplay_alt_screen/rgi_renderer/src/main.c"
+      ],
+      "reason": "The renderer already uses monotonic 64-bit timing; keep one clock implementation."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/supervisor_lease.c",
+      "sha256": "294c252f6a1c6a7e44abd8ad6dee201f859ebcb324bf85a6bbaa883f1e4cc52b",
+      "local": null,
+      "replacements": [
+        "deploy/smartphone_integrator/carplay_monitor.sh",
+        "deploy/smartphone_integrator/carplay_processes.sh"
+      ],
+      "reason": "Retain the installed SI-owned receiver/renderer supervision contract and its bounded PID/session checks. Upstream FD-9/port-19801 supervisor entry is not enabled; this is an explicit runtime adapter, not claimed lease parity."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/supervisor_lease.h",
+      "sha256": "be964115ad1fefbea494fe975db7eccd0a205d2f2cf6863de56edf1cbf733e52",
+      "local": null,
+      "replacements": [
+        "deploy/smartphone_integrator/carplay_monitor.sh",
+        "deploy/smartphone_integrator/carplay_processes.sh"
+      ],
+      "reason": "Same explicit supervisor adapter; no second watchdog/receiver owner."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/visible_area.h",
+      "sha256": "d2300884f14baa58ae94f56667258a3310ecfe037a972959d9a25d6853d72421",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/visible_area.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/src/visual_style.h",
+      "sha256": "f35a30c1b167bfe307edd8ff5418b5609c870b051542eef87dac8cf2fefe30fe",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/src/visual_style.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/rgi_renderer/toolchain/qnx65-abi/include/screen/screen.h",
+      "sha256": "ef5a84ba14512f33cfeb601112fb90e8be94e5917881d242cbf826b2df8c41f9",
+      "local": "Toolbox/carplay_alt_screen/rgi_renderer/toolchain/qnx65-abi/include/screen/screen.h",
+      "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    }
+  ]
+}

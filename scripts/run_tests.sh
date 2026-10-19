@@ -5,6 +5,7 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+python3 tests/test_yuedizhibo_baseline.py
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 if [ "$(uname)" = Darwin ]; then DEAD_STRIP=-Wl,-dead_strip; else DEAD_STRIP=-Wl,--gc-sections; fi
@@ -15,69 +16,69 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/renderer_runtime_test.c -o "$OUT/r
 
 printf '%-32s ' maneuver_surface_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
-    -ffunction-sections -fdata-sections -Imaneuver_render/hostcheck -Icommon \
+    -ffunction-sections -fdata-sections -IToolbox/carplay_alt_screen/rgi_renderer/src/hostcheck -IToolbox/carplay_alt_screen/rgi_renderer/common \
     tests/maneuver_surface_test.c "$DEAD_STRIP" -lpthread -lm -o "$OUT/maneuver_surface"
 "$OUT/maneuver_surface"
 
 printf '%-32s ' gl_program_cache_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
-    -Imaneuver_render/hostcheck -Icommon tests/gl_program_cache_test.c -o "$OUT/gl_program_cache"
+    -IToolbox/carplay_alt_screen/rgi_renderer/src/hostcheck -IToolbox/carplay_alt_screen/rgi_renderer/common tests/gl_program_cache_test.c -o "$OUT/gl_program_cache"
 "$OUT/gl_program_cache"
 
 printf '%-32s ' coverart_safety_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/coverart_safety_test.c hook/coverart/jpeg_safety.c \
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/coverart_safety_test.c Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.c \
     -o "$OUT/coverart_safety"
 "$OUT/coverart_safety"
 
 printf '%-32s ' coverart_stream_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
-    tests/coverart_stream_test.c hook/coverart/coverart_stream.c \
-    hook/framework/iap2_protocol.c -o "$OUT/coverart_stream"
+cc -std=c99 -O2 -Wall -Wextra -Werror -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/coverart_stream_test.c Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.c \
+    Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c -o "$OUT/coverart_stream"
 "$OUT/coverart_stream"
 
 printf '%-32s ' coverart_pipeline_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable \
-    -Ihook "-DCOVERART_DIR=\"$OUT/artwork\"" tests/coverart_pipeline_test.c \
-    hook/coverart/jpeg_safety.c hook/coverart/coverart_stream.c \
-    hook/framework/iap2_protocol.c -lpthread -lz -lm -o "$OUT/coverart_pipeline"
+    -IToolbox/carplay_alt_screen/rgi_native/src "-DCOVERART_DIR=\"$OUT/artwork\"" tests/coverart_pipeline_test.c \
+    Toolbox/carplay_alt_screen/rgi_native/src/coverart/jpeg_safety.c Toolbox/carplay_alt_screen/rgi_native/src/coverart/coverart_stream.c \
+    Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c -lpthread -lz -lm -o "$OUT/coverart_pipeline"
 "$OUT/coverart_pipeline"
 
 printf '%-32s ' rgd_tlv_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
-    -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \
+    -DENABLE_LOGGING=0 -IToolbox/carplay_alt_screen/rgi_native/src tests/rgd_tlv_test.c Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.c \
     -o "$OUT/rgd_tlv"
 "$OUT/rgd_tlv"
 
 printf '%-32s ' rgd_lane_cache_test
 cc -std=gnu99 -O1 -g -ffunction-sections -fdata-sections \
-    -fsanitize=address,undefined -fno-omit-frame-pointer -Ihook \
-    tests/rgd_lane_cache_test.c hook/routeguidance/rgd_tlv.c hook/framework/iap2_protocol.c \
+    -fsanitize=address,undefined -fno-omit-frame-pointer -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/rgd_lane_cache_test.c Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.c Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c \
     -DENABLE_LOGGING=0 -Wl,--gc-sections -lpthread -o "$OUT/rgd_lane_cache"
 "$OUT/rgd_lane_cache"
 
 printf '%-32s ' inject_generation_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
-    -DENABLE_LOGGING=0 -Ihook -Ihook/framework tests/inject_generation_test.c -o "$OUT/inject_generation"
+    -DENABLE_LOGGING=0 -IToolbox/carplay_alt_screen/rgi_native/src -IToolbox/carplay_alt_screen/rgi_native/src/framework tests/inject_generation_test.c -o "$OUT/inject_generation"
 "$OUT/inject_generation"
 
 printf '%-32s ' inject_worker_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-variable \
     -Wno-unused-but-set-variable -Wno-unused-parameter -ffunction-sections -fdata-sections \
-    -Ihook tests/inject_worker_test.c -Wl,--gc-sections -lpthread -ldl -o "$OUT/inject_worker"
+    -IToolbox/carplay_alt_screen/rgi_native/src tests/inject_worker_test.c -Wl,--gc-sections -lpthread -ldl -o "$OUT/inject_worker"
 "$OUT/inject_worker"
 
 printf '%-32s ' state_trace_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=c99 -O2 -Wall -Wextra -Werror -IToolbox/carplay_alt_screen/rgi_native/src \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
-    tests/state_trace_test.c hook/framework/state_trace.c \
-    hook/framework/iap2_protocol.c -o "$OUT/state_trace"
+    tests/state_trace_test.c Toolbox/carplay_alt_screen/rgi_native/src/framework/state_trace.c \
+    Toolbox/carplay_alt_screen/rgi_native/src/framework/iap2_protocol.c -o "$OUT/state_trace"
 "$OUT/state_trace" && echo OK
 
 printf '%-32s ' signal_guard_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/signal_guard_test.c hook/framework/signal_guard.c \
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/signal_guard_test.c Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.c \
     -o "$OUT/signal_guard"
 "$OUT/signal_guard"
 
@@ -85,8 +86,8 @@ printf '%-32s ' alt_cluster_test
 if [ "$(uname)" = Darwin ]; then FAKE_AIRPLAY=libfakeairplay.dylib; else FAKE_AIRPLAY=libfakeairplay.so; fi
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-parameter -shared -fPIC \
     tests/alt_cluster_fake_airplay.c -o "$OUT/$FAKE_AIRPLAY"
-cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -Ihook \
-    tests/alt_cluster_test.c hook/altcluster/alt_cluster.c \
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/alt_cluster_test.c Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_cluster.c \
     -L"$OUT" -lfakeairplay -Wl,-rpath,"$OUT" -lpthread -o "$OUT/alt_cluster"
 "$OUT/alt_cluster"
 
@@ -94,29 +95,29 @@ printf '%-32s ' alt_viewarea_test
 if [ "$(uname)" = Darwin ]; then FAKE_VA=libfakeairplay_va.dylib; else FAKE_VA=libfakeairplay_va.so; fi
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-parameter -shared -fPIC \
     tests/alt_viewarea_fake_airplay.c -o "$OUT/$FAKE_VA"
-cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -Ihook \
-    tests/alt_viewarea_test.c hook/altcluster/alt_viewarea.c \
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/alt_viewarea_test.c Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_viewarea.c \
     -L"$OUT" -lfakeairplay_va -Wl,-rpath,"$OUT" -ldl -o "$OUT/alt_viewarea"
 "$OUT/alt_viewarea"
 
 printf '%-32s ' bus_transport_test
 cc -std=gnu99 -O2 -Wall -Wextra -Werror \
-    -Wno-unused-variable -Wno-unused-but-set-variable -Ihook \
-    tests/bus_transport_test.c hook/framework/signal_guard.c \
+    -Wno-unused-variable -Wno-unused-but-set-variable -IToolbox/carplay_alt_screen/rgi_native/src \
+    tests/bus_transport_test.c Toolbox/carplay_alt_screen/rgi_native/src/framework/signal_guard.c \
     -lpthread -o "$OUT/bus_transport"
 "$OUT/bus_transport"
 
 printf '%-32s ' state_trace_logger_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=c99 -O2 -Wall -Wextra -Werror -IToolbox/carplay_alt_screen/rgi_native/src \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
-    tests/state_trace_logger_test.c hook/framework/logging.c \
+    tests/state_trace_logger_test.c Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.c \
     -lpthread -ldl -o "$OUT/state_trace_logger"
 "$OUT/state_trace_logger" && echo OK
 
 printf '%-32s ' log_rotation_test
-cc -std=gnu99 -O2 -Wall -Wextra -Werror -Ihook \
+cc -std=gnu99 -O2 -Wall -Wextra -Werror -IToolbox/carplay_alt_screen/rgi_native/src \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
-    tests/log_rotation_test.c hook/framework/logging.c \
+    tests/log_rotation_test.c Toolbox/carplay_alt_screen/rgi_native/src/framework/logging.c \
     -Wl,--wrap=rename -lpthread -ldl -o "$OUT/log_rotation"
 "$OUT/log_rotation"
 "$OUT/log_rotation" archive-failure

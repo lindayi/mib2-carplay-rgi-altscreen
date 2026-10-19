@@ -12,6 +12,12 @@ RGI implementation and the existing custom controls. The native components are
 **source-available under noncommercial terms**, not unrestricted open source.
 See [merge decisions, licensing and evidence](docs/upstream-integration.md).
 
+**RGI source baseline:** GPL native RGI, Java and renderer sources now use
+yuedizhibo's component paths below `Toolbox/carplay_alt_screen`, including the
+`com.luka.carplay.routeguidance` package. Local features and explicit MU1316
+adapters remain in that single implementation. See the
+[baseline map and three-way update workflow](docs/upstream-baseline.md).
+
 For project scope, tested build commands, deployment rules and investigation
 lessons, start with [AGENTS.md](AGENTS.md).
 
@@ -208,13 +214,13 @@ features below follow it automatically.
 
 | Path | Purpose |
 | --- | --- |
-| `hook/` | Shipping native `libcarplay_hook.so` source |
+| `Toolbox/carplay_alt_screen/rgi_native/src/` | Shipping native `libcarplay_hook.so`, based on upstream RGI |
 | `altscreen_native/` | Separate source-available Type111 hook and NV12/GLES mirror, licenses and provenance |
-| `java_patch/` | The only supported Java patch source |
-| `java_resources/` | Resources packed into the jar (VC glyph-width / Unicode table `vc-text.bin`) |
-| `maneuver_render/` | GLES maneuver overlay renderer (C, plus the C++11 `scene/` engine) |
+| `Toolbox/carplay_alt_screen/hmi/src/` | The only supported Java source; upstream routeguidance package plus local features and MU1316 adapters |
+| `Toolbox/carplay_alt_screen/hmi/resources/` | Resources packed into the JAR |
+| `Toolbox/carplay_alt_screen/rgi_renderer/src/` | Upstream GLES maneuver renderer and C++11 scene engine, with the local footer/options |
 | `mascot/` | Optional mirror-only GLES map mascot compositor; artwork is supplied privately |
-| `common/` | Shared renderer code: QNX Screen surface, GL program-binary cache, log timestamps |
+| `Toolbox/carplay_alt_screen/rgi_renderer/common/` | QNX Screen surface, GL program-binary cache and log timestamps |
 | `deploy/smartphone_integrator/` | Runtime scripts and child-process configuration for the HU |
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. custom scripts that install / remove a staged release / collect logs |
 | `altscreen/` | AltScreen SD tree (CarPlay video on the VC) with RGI wired into its installer; `scripts/build_sd.sh` turns it into a card |
@@ -222,7 +228,7 @@ features below follow it automatically.
 | `tools/` | Guarded stock-Java weaving, asset tools and H.264 analysis; old FPS patcher retained only as history |
 | `scripts/` | Docker build entry points (Java / hook / renderer / SD card) and host test runners |
 | `tests/` | Host tests (C, Java, Python) for the hook, Java bridge and renderer |
-| `toolchain/qnx65-abi/` | QNX Screen ABI headers used only for cross-compilation |
+| `Toolbox/carplay_alt_screen/rgi_renderer/toolchain/qnx65-abi/` | QNX Screen ABI headers used only for cross-compilation |
 | `docs/` | Markdown knowledge base (also opens in Obsidian) - validated RE + implementation notes (open [`docs/INDEX.md`](docs/INDEX.md)) |
 | `assets/` | Screenshots and visual reference material |
 | `build/` | Canonical deployable artifacts |
@@ -237,7 +243,7 @@ redistribute the current modified four-mascot atlas. Attribution or a
 "we do not own the rights" disclaimer does not replace applicable permission.
 
 The renderer embeds a small DejaVu-derived font atlas. Keep
-`maneuver_render/LICENSE.DEJAVU` with redistributed renderer binaries; the native
+`Toolbox/carplay_alt_screen/rgi_renderer/src/LICENSE.DEJAVU` with redistributed renderer binaries; the native
 build copies it into `build/` and the SD build includes it at the card root.
 
 ### Native-menu build and tests
@@ -423,7 +429,7 @@ SD package for this fork's native menu runtime and its diagnostic/video actions:
 
 | On-unit path | Files |
 | --- | --- |
-| `/mnt/app/root/hooks/` | `libcarplay_hook.so`, `maneuver_render` (from `build/`), `flag_atlas.rgba` (from `maneuver_render/resources/`), `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_settings.sh`, `carplay_cleanup.sh` (from `deploy/smartphone_integrator/`) |
+| `/mnt/app/root/hooks/` | `libcarplay_hook.so`, `maneuver_render` (from `build/`), `flag_atlas.rgba` (from `Toolbox/carplay_alt_screen/rgi_renderer/src/resources/`), and the startup/monitor/settings scripts from `deploy/smartphone_integrator/` |
 | `/mnt/app/eso/hmi/lsd/jars/` | `carplay_hook.jar` (from `build/`) |
 | `/mnt/system/etc/eso/production/smartphone_integrator.json` | `children.carplay` replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
 | `/mnt/system/etc/eso/production/dio_manager.json` | `MessagesSentByAccessory` += `0x5200`, `0x5203`; `MessagesReceivedFromDevice` += `0x5201`, `0x5202`, `0x5204` |

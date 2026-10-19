@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import java.lang.reflect.InvocationHandler;

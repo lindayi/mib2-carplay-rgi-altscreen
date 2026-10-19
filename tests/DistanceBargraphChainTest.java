@@ -1,5 +1,5 @@
-import com.luka.carplay.rgd.BAPBridge;
-import com.luka.carplay.rgd.RendererServer;
+import com.luka.carplay.routeguidance.BAPBridge;
+import com.luka.carplay.routeguidance.RendererServer;
 import com.luka.carplay.framework.Log;
 import de.audi.app.combi.bap.app.navi.AppConnectorNavi;
 import de.audi.app.combi.bap.app.navi.CombiModuleNavi;
@@ -52,7 +52,7 @@ public final class DistanceBargraphChainTest {
         Capture capture = (Capture)unsafe.allocateInstance(Capture.class);
         Module module = (Module)unsafe.allocateInstance(Module.class); module.capture = capture;
         AppConnectorNavi sender = (AppConnectorNavi)unsafe.allocateInstance(AppConnectorNavi.class);
-        Constructor<?> logCtor = Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        Constructor<?> logCtor = Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         logCtor.setAccessible(true);
         set(sender, "logChannelFrequent", logCtor.newInstance()); set(sender, "moduleFsg", module);
         BAPBridge bridge = new BAPBridge(); Renderer renderer = new Renderer();

@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.core.CarPlayApp;
@@ -41,13 +41,13 @@ public final class MapCardsTest {
     public static void main(String[] args) throws Exception {
         Object phone=java.lang.reflect.Proxy.newProxyInstance(IContext.class.getClassLoader(),
             new Class<?>[]{IContext.class},(proxy,method,argv)->null);
-        field(CarPlayApp.class,"phoneContext").set(null,phone);
+        field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,phone);
         field(CarplayBus.class,"port").setInt(bus,0);
         CarplayBus.Observer after=(generation,type,flags,payload,len)->delivered.countDown();
         Socket peer=null;
         try {
             cards.start();
-            field(CarPlayApp.class,"phoneContext").set(null,null);
+            field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,null);
             cards.track(track("Early song"),true);
             cards.playback(new PlaybackInfoChangedEvent(PlaybackInfoChangedEvent.PlaybackState.PAUSED),true);
             check(!MapCards.snapshot(true,true).media,"early metadata stays hidden before session readiness");
@@ -59,7 +59,7 @@ public final class MapCardsTest {
                 check(System.nanoTime()<end,"bus start");Thread.sleep(1);
             }
             peer=connect();
-            field(CarPlayApp.class,"phoneContext").set(null,phone);
+            field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,phone);
             check(copy().media && copy().title.equals("Early song") && copy().playback.equals("Paused"),
                 "first eligible snapshot catches up early media without another phone event");
             cards.resetSession();
@@ -150,10 +150,10 @@ public final class MapCardsTest {
             check(!copy().trip,"old receiver callback rejected");
             cards.track(track("Last song"),true);
             cards.resetSession();check(!copy().media,"phone boundary clears track");
-            field(CarPlayApp.class,"phoneContext").set(null,null);
+            field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,null);
             cards.track(track("Retired early song"),true);
             cards.resetSession();
-            field(CarPlayApp.class,"phoneContext").set(null,phone);
+            field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,phone);
             check(!copy().media,"source departure fences pending early metadata");
             cards.stop();
             cards.track(track("Late song"),true);
@@ -163,7 +163,7 @@ public final class MapCardsTest {
             check(MapCards.clean(" \nA\tB\r ").equals("A B"),"controls normalized without file I/O");
         } finally {
             cards.stop();if(peer!=null)peer.close();bus.stop();
-            field(CarPlayApp.class,"phoneContext").set(null,null);
+            field(com.luka.carplay.CarPlayHook.class,"phoneContext").set(null,null);
         }
         System.out.println("MapCardsTest: real bus, media, baseline/reset, stale callbacks, no-route, toggles PASS");
     }

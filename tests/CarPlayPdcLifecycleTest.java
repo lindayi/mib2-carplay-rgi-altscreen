@@ -19,15 +19,15 @@ public final class CarPlayPdcLifecycleTest {
         return PdcResourcePolicyTest.proxy(type, call);
     }
     static Object field(String name) throws Exception {
-        java.lang.reflect.Field field = CarPlayApp.class.getDeclaredField(name);
+        java.lang.reflect.Field field = com.luka.carplay.CarPlayHook.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.get(null);
     }
     static void awaitActivation() throws Exception {
         long deadline = System.currentTimeMillis() + 3000;
         for (;;) {
-            synchronized (field("lock")) {
-                if (field("lifecycleGeneration").equals(field("lifecycleAppliedGeneration"))) {
+            synchronized (field("LIFECYCLE_QUEUE")) {
+                if (field("activationGeneration").equals(field("appliedGeneration"))) {
                     for (boolean started : (boolean[])field("started"))
                         check(started, "external module fixture failed to start");
                     return;
@@ -41,7 +41,7 @@ public final class CarPlayPdcLifecycleTest {
         long deadline = System.currentTimeMillis() + 3000;
         for (;;) {
             for (Thread thread : Thread.getAllStackTraces().keySet()) {
-                if (thread.getName().equals("carplay-lifecycle") && thread.getState() == Thread.State.BLOCKED) {
+                if (thread.getName().equals("carplay-oem-lifecycle") && thread.getState() == Thread.State.BLOCKED) {
                     StackTraceElement[] stack = thread.getStackTrace();
                     if (stack.length > 0 && stack[0].getClassName().equals(PdcSmallStageGuard.class.getName())) return;
                 }
@@ -51,9 +51,7 @@ public final class CarPlayPdcLifecycleTest {
         }
     }
     public static void main(String[] args) throws Exception {
-        CarPlayApp.onActivate(edge(IContext.class, (name,a) -> {
-            throw new AssertionError("unexpected native lifecycle service " + name);
-        }));
+        CarPlayApp.onActivate(new com.luka.carplay.core.LifecycleContext().context);
         check(CarPlayApp.isActive(), "real lifecycle failed to activate");
         awaitActivation();
         AbstractScreenWidget screen = new AbstractScreenWidget(3200000);
@@ -81,7 +79,7 @@ public final class CarPlayPdcLifecycleTest {
         synchronized (PdcSmallStageGuard.class) {
             CarPlayApp.onDeactivate();
             awaitBlockedCleanup();
-            CarPlayApp.onActivate(edge(IContext.class, (n,a) -> null));
+            CarPlayApp.onActivate(new com.luka.carplay.core.LifecycleContext().context);
             // A new valid OPS interval wins while the old lifecycle cleanup
             // is already dispatched but still waiting for the guard monitor.
             PdcSmallStageGuard.parkingStopped();

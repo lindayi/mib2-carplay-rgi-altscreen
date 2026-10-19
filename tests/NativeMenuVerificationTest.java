@@ -13,7 +13,7 @@ public final class NativeMenuVerificationTest {
             Class<?> type=Class.forName(name,false,NativeMenuVerificationTest.class.getClassLoader());
             if(type.getDeclaredMethods().length==0)throw new AssertionError("No methods: "+name);
         }
-        java.lang.reflect.Constructor<?> ctor=Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        java.lang.reflect.Constructor<?> ctor=Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         ctor.setAccessible(true);final Object log=ctor.newInstance();
         de.audi.atip.base.IFrameworkAccess fw=(de.audi.atip.base.IFrameworkAccess)java.lang.reflect.Proxy.newProxyInstance(
             NativeMenuVerificationTest.class.getClassLoader(),new Class[]{de.audi.atip.base.IFrameworkAccess.class},(p,m,a)->{

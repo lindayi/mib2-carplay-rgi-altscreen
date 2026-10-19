@@ -5,6 +5,12 @@ audit in `upstream-integration.md`. A checked item requires implementation and
 the relevant evidence, not just imported source or a passing unrelated test.
 Built, SD-prepared and vehicle-confirmed states remain separate.
 
+The later [RGI source-baseline migration](upstream-baseline.md) moves the actual
+build inputs to upstream component paths and the `routeguidance` package, and
+adds a complete pinned source/adapter map plus tested three-way update planning.
+The artifact and test record below remains the earlier `f8c78e6` correction;
+it does not identify the later baseline build.
+
 Current evidence: the corrected Java candidate, including context rebinding and
 legacy-control isolation, passes the full exact-stock integration suite. Native
 RGI, real GLES overlays, source-native UI fixtures and QNX cross-builds also pass.

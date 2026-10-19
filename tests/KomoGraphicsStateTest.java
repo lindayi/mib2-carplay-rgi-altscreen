@@ -1,7 +1,7 @@
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.core.FrameworkRef;
-import com.luka.carplay.rgd.BAPBridge;
+import com.luka.carplay.routeguidance.BAPBridge;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.tghu.navi.app.NavigationEnv;
 import de.audi.tghu.navi.app.cluster.ClusterService;
@@ -48,7 +48,7 @@ public final class KomoGraphicsStateTest {
             });
         FrameworkRef ref = new FrameworkRef(null);
         set(ref, "fw", fw);
-        Field appRef = CarPlayApp.class.getDeclaredField("fwRef");
+        Field appRef = com.luka.carplay.CarPlayHook.class.getDeclaredField("fwRef");
         appRef.setAccessible(true); appRef.set(null, ref);
         NavigationEnv env = (NavigationEnv)unsafe.allocateInstance(NavigationEnv.class);
         set(env, "framework", fw);
@@ -59,7 +59,7 @@ public final class KomoGraphicsStateTest {
         set(view, "env", env); set(view, "clusterService", service);
         KOMOService komo = (KOMOService)unsafe.allocateInstance(KOMOService.class);
         set(komo, "service", service);
-        Constructor<?> ctor = Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        Constructor<?> ctor = Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         ctor.setAccessible(true); set(komo, "logChannel", ctor.newInstance());
         BAPBridge bridge = new BAPBridge(); set(bridge, "csRef", service);
         Method force = BAPBridge.class.getDeclaredMethod("forceGfxAvailable", Boolean.TYPE);

@@ -1,6 +1,6 @@
 package com.luka.carplay.settings;
 
-import com.luka.carplay.rgd.MapCards;
+import com.luka.carplay.routeguidance.MapCards;
 import java.io.*;
 import java.nio.file.*;
 import java.lang.management.ManagementFactory;

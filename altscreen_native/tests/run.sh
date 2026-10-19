@@ -21,14 +21,14 @@ cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined -ffunction-sections -fdata-
 ./recovery_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -shared -fPIC \
     "$ROOT/../tests/alt_cluster_fake_airplay.c" -o libfakeairplay.so
-cc -D_GNU_SOURCE -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -I"$ROOT/../hook" \
-    "$ROOT/../tests/alt_cluster_test.c" "$ROOT/../hook/altcluster/alt_cluster.c" \
+cc -D_GNU_SOURCE -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -I"$ROOT/../Toolbox/carplay_alt_screen/rgi_native/src" \
+    "$ROOT/../tests/alt_cluster_test.c" "$ROOT/../Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_cluster.c" \
     -L. -lfakeairplay -Wl,-rpath,'$ORIGIN' -lpthread -ldl -o alt_cluster_test
 ./alt_cluster_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -shared -fPIC \
     "$ROOT/../tests/alt_viewarea_fake_airplay.c" -o libfakeairplay_va.so
-cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -I"$ROOT/../hook" \
-    "$ROOT/../tests/alt_viewarea_test.c" "$ROOT/../hook/altcluster/alt_viewarea.c" \
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -DENABLE_LOGGING=0 -I"$ROOT/../Toolbox/carplay_alt_screen/rgi_native/src" \
+    "$ROOT/../tests/alt_viewarea_test.c" "$ROOT/../Toolbox/carplay_alt_screen/rgi_native/src/altcluster/alt_viewarea.c" \
     -L. -lfakeairplay_va -Wl,-rpath,'$ORIGIN' -ldl -o alt_viewarea_test
 ./alt_viewarea_test ./libfakeairplay.so
 cc -D_GNU_SOURCE -O2 -Wall -Wextra "$ROOT/tests/installed_paths_test.c" -o installed_paths_test

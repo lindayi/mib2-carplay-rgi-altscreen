@@ -138,7 +138,8 @@ LOGS="carplay_java.log carplay_java.log.1 carplay_hook.log carplay_hook.log.1 \
     carplay_menu_action.failure.log maneuver_render.log carplay_wrapper.log \
     MMI-Cockpit-Carplay.altscreen_hook.log altscreen_hook.log CinemoDioManager.log \
     MMI-Cockpit-Carplay.mirror.log MMI-Cockpit-Carplay.mirror.autorestart.log \
-    MMI-Cockpit-Carplay.mirror.autostart.log MMI-Cockpit-Carplay.boot_entry.log mmi-mirror-controller.log"
+    MMI-Cockpit-Carplay.mirror.autostart.log MMI-Cockpit-Carplay.boot_entry.log mmi-mirror-controller.log \
+    carplay_upstream_geometry.log"
 [ "$PRIVATE" = 1 ] || LOGS=""
 for name in $LOGS; do
     source="$ROOT/tmp/$name"
@@ -172,7 +173,9 @@ if [ "$PRIVATE" = 1 ]; then
             COPIED=$((COPIED + 1))
         else ERRORS=$((ERRORS + 1)); fi
     done
-    for name in mmi-altscreen-displayable3.state altscreen-private111.keyframe-request mmi-mirror-hmi.state; do
+    for name in mmi-altscreen-displayable3.state altscreen-private111.keyframe-request mmi-mirror-hmi.state \
+        carplay_upstream_hmi.state carplay_upstream_ownership.state carplay_upstream_geometry.state \
+        carplay_upstream_controller.started carplay_upstream_displaymanager.state; do
         source="$ROOT/ramdisk/$name"
         if [ ! -f "$source" ]; then
             echo "MISSING ramdisk/$name" >> "$OUT/FILES.txt" || exit 1

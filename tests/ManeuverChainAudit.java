@@ -1,4 +1,4 @@
-import com.luka.carplay.rgd.*;
+import com.luka.carplay.routeguidance.*;
 import com.luka.carplay.framework.Log;
 import de.audi.app.combi.bap.app.navi.AppConnectorNavi;
 import de.audi.app.combi.bap.app.navi.CombiModuleNavi;
@@ -100,7 +100,7 @@ public final class ManeuverChainAudit {
                 }
             });
         sender=(Sender)u.allocateInstance(Sender.class);
-        Constructor<?> ctor=Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+        Constructor<?> ctor=Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
         ctor.setAccessible(true); set(sender,"logChannel",ctor.newInstance()); set(sender,"moduleFsg",module);
         set(bridge,"appConnectorNavi",sender); set(bridge,"rendererClient",renderer);
         set(bridge,"customRendererStarted",Boolean.TRUE);

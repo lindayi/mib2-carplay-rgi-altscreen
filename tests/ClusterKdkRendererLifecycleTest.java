@@ -1,6 +1,6 @@
 import com.luka.carplay.framework.Log;
-import com.luka.carplay.rgd.BAPBridge;
-import com.luka.carplay.rgd.RendererServer;
+import com.luka.carplay.routeguidance.BAPBridge;
+import com.luka.carplay.routeguidance.RendererServer;
 import java.lang.reflect.Field;
 
 /** Route stop preserves pixels; session shutdown still releases the renderer. */

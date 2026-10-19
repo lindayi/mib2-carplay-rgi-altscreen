@@ -36,8 +36,8 @@ public final class VcPanelTest {
         Preferences prefs=ctor.newInstance(root.resolve("preferences").toFile(),root.resolve("layout").toFile());
         field(Preferences.class,"instance").set(null,prefs);prefs.set(Setting.ENABLED,1);
         field(ScreenModule.class,"platformSupported").set(null,true);
-        field(ScreenModule.class,"connected").set(null,true);
-        field(ScreenModule.class,"altScreenVideo").set(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"carPlaySessionActive").set(null,true);
+        field(com.luka.carplay.cluster.ClusterStateController.class,"videoReady").set(null,true);
         Field connection=field(CarplayBus.class,"connectionGeneration");
         connection.set(CarplayBus.getInstance(),2);
         field(CarplayBus.class,"running").set(CarplayBus.getInstance(),true);
@@ -58,7 +58,7 @@ public final class VcPanelTest {
             }
             return null;
         });
-        com.luka.carplay.rgd.GatedCombiService gate=new com.luka.carplay.rgd.GatedCombiService(
+        com.luka.carplay.routeguidance.GatedCombiService gate=new com.luka.carplay.routeguidance.GatedCombiService(
             (de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi)sink);
         gate.setRouteGuidanceBlocked(true);
         stockField(listener,"combiservice",gate);

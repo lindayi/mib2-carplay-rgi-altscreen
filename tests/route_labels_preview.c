@@ -1,9 +1,9 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
-#include "../maneuver_render/render.h"
-#include "../maneuver_render/maneuver.h"
-#include "../maneuver_render/route_labels.h"
-#include "../maneuver_render/lane_panel.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/render.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/route_labels.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/lane_panel.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

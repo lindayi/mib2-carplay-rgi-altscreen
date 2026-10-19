@@ -45,12 +45,12 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$TEST_DIR:$CLASSPATH" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/RouteLabelsTest.java" "$PROJECT_DIR/tests/RouteLabelsBridgeTest.java"
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteLabelsTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.RouteLabelsTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" RouteLabelsBridgeTest
 # No checkout resources or font files are visible through the working directory.
 # The pure runtime uses only classes and the embedded data in the built JAR.
 (cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \
-    com.luka.carplay.rgd.VCTextScrollTest ${VC_UNICODE_TEST_DIR:+"$VC_UNICODE_TEST_DIR"})
+    com.luka.carplay.routeguidance.VCTextScrollTest ${VC_UNICODE_TEST_DIR:+"$VC_UNICODE_TEST_DIR"})
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
 "$JDK_DIR/bin/java" -Xverify:none -Dmap.cards.fixture.dir="$PROJECT_DIR/build/mmi-tests" \
     -cp "$TEST_DIR:$CLASSPATH" DestinationTimeZoneTest
@@ -74,15 +74,15 @@ CLASSPATH="$PATCH_JAR:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkBapChainTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ClusterKdkRendererLifecycleTest
 
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.CurrentPositionDeliveryTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LowerBarOnlyTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LowerBarKomoTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteInfoTimeoutTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.InfoPreferencesTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.LaneGuidanceLifecycleTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.RgiDeliveryRecoveryTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.CurrentPositionDeliveryTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.LowerBarOnlyTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.LowerBarKomoTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.RouteInfoTimeoutTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.routeguidance.InfoPreferencesTest
 "$JDK_DIR/bin/java" -Xverify:none \
     -cp "$TEST_DIR:$PATCH_JAR:$STOCK_COMBINED:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar" \
-    com.luka.carplay.rgd.CurrentPositionStockChainTest
+    com.luka.carplay.routeguidance.CurrentPositionStockChainTest
 python3 "$PROJECT_DIR/tests/test_rgd_native_contract.py"

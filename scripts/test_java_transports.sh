@@ -19,7 +19,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
     com.luka.carplay.cluster.AltScreenLayoutLifecycleTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
-"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.routeguidance.RendererServerTransportTest
 
 # NAVSD INITIALIZING/READY must pass straight through the RGI gate
 # (the altscreen INITIALIZING takeover and AltScreenStartupTest do not apply here).
@@ -31,25 +31,16 @@ mkdir -p "$TEST_DIR/nav-init"
     "$PROJECT_DIR/tests/GatedCombiServiceInitStateTest.java"
 "$TEST_JDK/bin/java" \
     -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_FINAL" \
-    com.luka.carplay.rgd.GatedCombiServiceInitStateTest
+    com.luka.carplay.routeguidance.GatedCombiServiceInitStateTest
+"$TEST_JDK/bin/javac" -encoding UTF-8 \
+    -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_FINAL" \
+    -d "$TEST_DIR/nav-init" "$PROJECT_DIR/tests/RouteGuidancePartialLifecycleTest.java"
+"$TEST_JDK/bin/java" -Xverify:all \
+    -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_FINAL:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar" \
+    RouteGuidancePartialLifecycleTest
 
 # Exercise the actual lifecycle worker against controllable external modules.
-mkdir -p "$TEST_DIR/lifecycle"
-"$TEST_JDK/bin/javac" -encoding UTF-8 -d "$TEST_DIR/lifecycle" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/framework/ElapsedClock.java" \
-    "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
-    "$PROJECT_DIR/tests/CarPlayAppLifecycleTest.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/FrameworkRef.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/telephony/TelephonyModule.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/pdc/PdcSmallStageGuard.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/app/terminalmode/IContext.java" \
-    "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/atip/base/IFrameworkAccess.java"
-for scenario in publication during-start replug failure bounce menu maintenance; do
-    "$TEST_JDK/bin/java" -cp "$TEST_DIR/lifecycle" com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
-done
+LIFECYCLE_TEST_OUT="$TEST_DIR/lifecycle" TEST_JDK="$TEST_JDK" TOOLS_DIR="$TOOLS_DIR" \
+    bash "$PROJECT_DIR/scripts/test_carplay_lifecycle.sh"
 # Parking resource policy also uses the freshly built shipping JAR.
 bash "$PROJECT_DIR/scripts/test_pdc.sh"

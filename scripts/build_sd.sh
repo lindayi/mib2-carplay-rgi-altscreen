@@ -67,7 +67,7 @@ case "$OUT" in "$PROJECT_DIR"/build/*) rm -rf "$OUT" ;; *) [ ! -e "$OUT" ] || { 
 mkdir -p "$OUT"
 (cd "$SRC" && tar --exclude=.DS_Store --exclude='._*' -cf - .) | (cd "$OUT" && tar -xf -)
 python3 "$PROJECT_DIR/tools/final_script_checksum.py" "$OUT" --update
-cp "$PROJECT_DIR/maneuver_render/LICENSE.DEJAVU" "$OUT/LICENSE.DEJAVU"
+cp "$PROJECT_DIR/Toolbox/carplay_alt_screen/rgi_renderer/src/LICENSE.DEJAVU" "$OUT/LICENSE.DEJAVU"
 cp "$PROJECT_DIR/map_cards/LICENSE.OFL" "$OUT/LICENSE.CARD-CJK"
 rm -f "$OUT/SHA256SUMS-SD.list"
 
@@ -106,7 +106,7 @@ chmod 755 "$OUT/$ALTS_MIRROR_DIR/libcarplay_mascot.so"
 # RGI native half, installed by Toolbox/scripts/rgi_companion.sh from AltScreen INSTALL.
 mkdir -p "$OUT/$RGI_DIR"
 cp "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
-   "$PROJECT_DIR/maneuver_render/resources/flag_atlas.rgba" \
+   "$PROJECT_DIR/Toolbox/carplay_alt_screen/rgi_renderer/src/resources/flag_atlas.rgba" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_startup.sh" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_monitor.sh" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_processes.sh" \

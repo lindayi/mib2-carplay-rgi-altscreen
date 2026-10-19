@@ -1,12 +1,12 @@
 /* Execute the production decoder, path builder and transition engine without
  * creating a window or calling main. GL/platform symbols are linked only. */
 #define main renderer_application_main
-#include "../maneuver_render/main.c"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/main.c"
 #undef main
-#include "../maneuver_render/maneuver.c"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/maneuver.c"
 #include <assert.h>
 #include <math.h>
-#include "../maneuver_render/visible_area.h"
+#include "../Toolbox/carplay_alt_screen/rgi_renderer/src/visible_area.h"
 
 static void build_settled_mesh(const maneuver_state_t *state, route_mesh_t *mesh) {
     route_path_t path;

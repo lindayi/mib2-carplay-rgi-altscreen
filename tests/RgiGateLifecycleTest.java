@@ -1,7 +1,7 @@
 package com.luka.carplay.core;
 
 import com.luka.carplay.framework.Log;
-import com.luka.carplay.rgd.GatedCombiService;
+import com.luka.carplay.routeguidance.GatedCombiService;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import de.audi.tghu.navi.app.Navigation;
 import de.audi.tghu.navi.app.cluster.ClusterService;
@@ -92,8 +92,43 @@ public final class RgiGateLifecycleTest {
         g.updateRGStatus(5);
         check(c.writes == writes, "retired service published stale state");
     }
+    static void upstreamTextOnlyReplay() {
+        Capture c = new Capture(); GatedCombiService g = new GatedCombiService(c.service());
+        g.setCurrentPositionInfoBlocked(true);
+        g.updateCurrentPositionInfo("Audi road");
+        g.updateDistanceToDestination(55, 1, false);
+        g.updateTimeToDestination(1, 2, 66L);
+        g.setCurrentPositionTextOnly(true);
+        check(!c.values.containsKey("updateCurrentPositionInfo")
+            && ((Integer)c.values.get("updateDistanceToDestination")[0]) == 55
+            && ((Long)c.values.get("updateTimeToDestination")[2]) == 66L,
+            "upstream text-only transition did not restore only the released OEM fields");
+        g.setCurrentPositionInfoBlocked(false);
+        check(c.values.get("updateCurrentPositionInfo")[0].equals("Audi road"),
+            "text-only release did not restore the held road");
+    }
+    static void upstreamTextOnlyBeforeBlock() {
+        Capture c = new Capture(); GatedCombiService g = new GatedCombiService(c.service());
+        g.setCurrentPositionTextOnly(true);
+        g.setCurrentPositionInfoBlocked(true);
+        g.updateCurrentPositionInfo("held road");
+        g.updateDistanceToDestination(55, 1, false);
+        g.updateTimeToDestination(1, 2, 66L);
+        check(!c.values.containsKey("updateCurrentPositionInfo")
+            && c.values.containsKey("updateDistanceToDestination")
+            && c.values.containsKey("updateTimeToDestination"),
+            "upstream text-only-before-block order lost stock travel fields");
+        g.setCurrentPositionInfoBlocked(false);
+        check(c.values.get("updateCurrentPositionInfo")[0].equals("held road"),
+            "upstream ordered release did not restore road");
+        c.values.clear();
+        g.setCurrentPositionInfoBlocked(true);
+        g.updateDistanceToDestination(77, 1, false);
+        check(!c.values.containsKey("updateDistanceToDestination"),
+            "release retained text-only policy for a later full block");
+    }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); boundedReplay();
+        Log.setLevel(-1); boundedReplay(); upstreamTextOnlyReplay(); upstreamTextOnlyBeforeBlock();
         Queue q = (Queue)U.allocateInstance(Queue.class); q.tasks = new ArrayList<>();
         Navi navi = (Navi)U.allocateInstance(Navi.class);
         ClusterService cs = (ClusterService)U.allocateInstance(ClusterService.class);

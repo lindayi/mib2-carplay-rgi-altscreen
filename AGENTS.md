@@ -25,6 +25,54 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ## Resume here: workspace and source history
 
+### Canonical RGI baseline and source paths
+
+- Q5 development remains on `q5-mu1316-build-fixes`; use temporary branches and
+  PRs into Q5. Do not change `main` or the GitHub fork relationship as a side
+  effect of source integration. The original integration branch was fast-forwarded
+  into Q5 at `b2133b9` and deleted after verifying both tips.
+- GPL RGI source now uses yuedizhibo's `Toolbox/carplay_alt_screen` layout:
+  `rgi_native/src` replaces root `hook`, `hmi/src` replaces `java_patch`,
+  `hmi/resources` replaces `java_resources`, and `rgi_renderer/src`, `common`,
+  `toolchain` replace the corresponding old renderer roots. Historical paths
+  below refer to those earlier locations. The independent PolyForm
+  `altscreen_native/hook` did not move.
+- Java uses upstream `com.luka.carplay.routeguidance`, not `.rgd`. Update direct
+  imports, reflection/ASM names, tests and resource paths together; do not compile
+  a second legacy package or substitute the opaque upstream baseline JAR.
+- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins 109 upstream source/data files,
+  including the Unicode table/license and renderer flag atlas. Binary updates
+  use exact bytes; divergent edits require review, never text normalization.
+  The 9 explicit integration replacements are not claimed as identical upstream
+  behavior. In particular, keep MU1316 context roles, the single zoom sender,
+  NavigationJobs model writes, and SI-owned supervision until an explicit
+  migration reconciles their contracts. Never silently omit a changed adapter
+  or newly added upstream file during synchronization.
+- `tools/yuedizhibo_baseline.py check` verifies complete upstream inventory and
+  raw blob hashes. `plan` uses the pinned upstream blob as the merge base, current
+  source as ours, and the fetched revision as theirs. It writes only a new
+  ignored build directory; conflicts, additions/deletions and changed replacements
+  require review. The live source and pin never advance automatically.
+- Python 3.9+ and Git are needed for the baseline tool/tests. The native test
+  image now includes Git; local `mib2-rgi-baseline-test` also adds it to the
+  existing FFmpeg-capable image. Compare runtime artifact names separately from
+  source paths: installed `maneuver_render` and `/tmp/maneuver_render.log` did
+  not acquire the new source-directory prefix.
+- See `docs/upstream-baseline.md`. This is a component baseline with documented
+  local deltas, not a merge of every upstream file or a whole-fork reparenting.
+- The first Opus review rejected path-only lifecycle/context adoption. Source now
+  runs upstream `CarPlayHook` and `ClusterStateController`: CarPlayApp is an API
+  facade, ScreenModule has no context loop, and RgdModule is removed. Keep the
+  local feature hooks separate; never reintroduce a competing actor or writer.
+- Preserve 80/Audi-map, 81/video, 82/video-refresh roles in the upstream state
+  machine. Reject old-generation readback/failures; acknowledge only the current
+  verified target and renderer ticket. Return cluster rate to 30 after release.
+  The upstream refresh-table hook is called before MU1316 DSI declaration.
+- Upstream observer diagnostics follow session-verified Verbose logging. Their
+  `/ramdisk/carplay_upstream_*` snapshots are diagnostics, not native ownership
+  leases. Full private export includes them; atomic writes never fall back to
+  `/tmp` rename or delete-before-rename.
+
 ### Source integration candidate: 2026-10-18
 
 - Prefer upstream implementation with local additions and narrow MU1316 adapters.
@@ -136,9 +184,18 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - Accepted Fct44/Fct54 Status forwarding belongs in `GatedCombiService`, including
   initial replay. Do not also forward request intent in `ScreenCombiBAPListener`.
   Keep VC-panel and speed-badge replay notifications.
-- The resident lifecycle worker retries service/cleanup state outside the small
-  app lock, with RGI refresh serialized by `lifecycleLock`. It must not restart
-  every module on its maintenance tick.
+- Keep upstream CarPlayHook's queued actor, resident monitor and bounded-cadence
+  retry worker. Serialize module/service work with `RGI_LOCK`, never the small
+  publication lock. Pending intent/service generations block monitor/retry work;
+  a captured retry generation must survive every blocking call unchanged.
+  Retried cleanup must eventually initialize the new context, not retain the old
+  FrameworkRef or wait for another physical reconnect. Maintenance must not
+  restart every module.
+- A service-generation edge must retire the old RGI even when another cleanup
+  is pending. Only initNow pairs the active context and FrameworkRef; do not
+  publish a new context over a FrameworkRef retained for old-session teardown.
+  Keep upstream's temporary restore handshake and device-running start/stop
+  policy out of this local SI/session contract.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
 - Corrected INSTALL includes boot-only START arming inside a unit-bound,
@@ -403,7 +460,8 @@ The original AltScreen preset explicitly stores the base `/map` URL.
   `maneuver_render` is a restartable native client.
 - Renderer commands are fixed **48-byte packets**. Update both Java/C definitions
   and `scripts\check_local_protocols.py` together.
-- `ScreenModule` is the sole cluster-context writer:
+- `ClusterStateController` is the sole cluster-context writer; `ScreenModule`
+  is its worker-free Q5 feature facade:
   **81** = custom maneuver/backings over CarPlay video,
   **80** = custom maneuver/backings over the Audi map,
   **74** = released/stock context. Do not add a competing `dmdt` context writer.
@@ -880,7 +938,7 @@ They are machine-local helpers; on another machine use the repository scripts wi
 the documented toolchain/private inputs and recreate the Windows adapter if needed.
 
 - Java source/target is **1.4**, class version **48.0**, built in JDK 8. Modern Java
-  syntax belongs only in host tools/tests, not `java_patch`.
+  syntax belongs only in host tools/tests, not `Toolbox/carplay_alt_screen/hmi/src`.
 - QNX image is `qnx65-armv7-toolchain:8.5` (also tagged `:latest` locally), ARMv7
   QNX 6.5, EABI5/softfp. The C/C++-only image is enough; Go/Rust are unnecessary.
 - The native helper compiles in a temporary **Linux Docker volume** and copies

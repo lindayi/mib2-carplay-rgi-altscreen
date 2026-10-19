@@ -1,4 +1,5 @@
 import com.luka.carplay.cluster.AltScreenVideo;
+import com.luka.carplay.cluster.ClusterStateController;
 import com.luka.carplay.core.FrameworkRef;
 import com.luka.carplay.core.ScreenModule;
 import com.luka.carplay.framework.Log;
@@ -13,12 +14,27 @@ import java.util.concurrent.TimeUnit;
 /** Real ScreenModule worker against a fake DisplayManager: AltScreen video markers select ctx 81. */
 public final class AltScreenContextTest implements InvocationHandler {
     final List switches = Collections.synchronizedList(new ArrayList());
+    final List rates = Collections.synchronizedList(new ArrayList());
     volatile int current = 74;
     volatile boolean pauseReconcile;
     volatile boolean rejectRefresh, ignoreVideoWrites;
     final CountDownLatch paused = new CountDownLatch(1);
     final CountDownLatch resume = new CountDownLatch(1);
     Object dm;
+
+    public static final class ContextDM extends de.audi.tghu.fwhmi.DisplayManagerMIB2High {
+        AltScreenContextTest capture;
+        private ContextDM() { super(null); }
+        public void switchContext(int context, int terminal, de.audi.atip.hmi.view.IDisplayListener listener) {
+            capture.switchTo(context);
+        }
+        public int getCurrentContextID(int terminal) { return capture.readContext(); }
+        public void setUpdateRate(int terminal, int rate) { capture.rates.add(rate); }
+        public void setOpacity(int displayable, int terminal, int opacity) { }
+        public void setPosition(int displayable, int terminal, int x, int y) { }
+        public void setCropping(int displayable, int terminal, int x, int y,
+                int width, int height, int dx, int dy, int dw, int dh) { }
+    }
 
     static void check(boolean b, String message) { if (!b) throw new AssertionError(message); }
 
@@ -29,18 +45,10 @@ public final class AltScreenContextTest implements InvocationHandler {
     public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
         if (method.getName().equals("getDisplayManager")) return dm;
         if (method.getName().equals("switchContext") && ((Integer)args[1]).intValue() == 1) {
-            int requested = ((Integer)args[0]).intValue();
-            switches.add(Integer.valueOf(requested));
-            if (requested == 82 && rejectRefresh) throw new IllegalStateException("refresh context rejected");
-            if (requested != 81 || !ignoreVideoWrites) current = requested;
+            switchTo(((Integer)args[0]).intValue());
         }
         if (method.getName().equals("getCurrentContextID")) {
-            if (pauseReconcile && ScreenModule.isClusterContextWriterThread()) {
-                paused.countDown();
-                check(resume.await(5, TimeUnit.SECONDS), "resume context worker");
-                pauseReconcile = false;
-            }
-            return Integer.valueOf(current);
+            return Integer.valueOf(readContext());
         }
         Class type = method.getReturnType();
         if (type == Boolean.TYPE) return Boolean.FALSE;
@@ -48,6 +56,23 @@ public final class AltScreenContextTest implements InvocationHandler {
         if (type == Long.TYPE) return Long.valueOf(0);
         if (type.isInterface()) return proxy(type);
         return null;
+    }
+
+    void switchTo(int requested) {
+        check(ClusterStateController.isContextWriterThread(), "context written outside upstream controller");
+        switches.add(Integer.valueOf(requested));
+        if (requested == 82 && rejectRefresh) throw new IllegalStateException("refresh context rejected");
+        if (requested != 81 || !ignoreVideoWrites) current = requested;
+    }
+
+    int readContext() {
+        if (pauseReconcile && ScreenModule.isClusterContextWriterThread()) {
+            paused.countDown();
+            try { check(resume.await(5, TimeUnit.SECONDS), "resume context worker"); }
+            catch (InterruptedException error) { throw new AssertionError(error); }
+            pauseReconcile = false;
+        }
+        return current;
     }
 
     static void set(Class c, String name, Object value) throws Exception {
@@ -59,6 +84,20 @@ public final class AltScreenContextTest implements InvocationHandler {
         m.setAccessible(true);
         return ((Integer)m.invoke(null, new Object[]{Boolean.valueOf(connected),
             Boolean.valueOf(video), Boolean.valueOf(nav)})).intValue();
+    }
+
+    static void snapshotContract() throws Exception {
+        byte[] body = "schema=1\nname=\u4e2d\u6587\n".getBytes("UTF-8");
+        long hash = 2166136261L;
+        for (byte value : body) hash = ((hash ^ (value & 255)) * 16777619L) & 0xffffffffL;
+        String hex = String.format("%08x", hash);
+        String header = "snapshot_format=2\nsnapshot_bytes=" + body.length + "\nsnapshot_hash=" + hex + "\n";
+        byte[] framed = (header + new String(body, "UTF-8") + "snapshot_end=" + hex + "\n").getBytes("UTF-8");
+        check(com.luka.carplay.cluster.DisplayStateSnapshot.decode(framed, framed.length)
+            .equals(new String(body, "UTF-8")), "upstream snapshot decoder lost UTF-8 byte boundaries");
+        framed[header.length()] ^= 1;
+        check(com.luka.carplay.cluster.DisplayStateSnapshot.decode(framed, framed.length).equals(""),
+            "torn framed snapshot accepted");
     }
 
     void await(int ctx, String message) throws Exception {
@@ -93,7 +132,8 @@ public final class AltScreenContextTest implements InvocationHandler {
 
         static void compositionContract(AltScreenContextTest capture)throws Exception {
             Class type=de.audi.tghu.fwhmi.DisplayManagerMIB2High.class;
-            Object actual=unsafe().allocateInstance(type);
+            ContextDM actual=(ContextDM)unsafe().allocateInstance(ContextDM.class);
+            actual.capture=capture;capture.dm=actual;
             field(type,"framework").set(actual,capture.proxy(de.audi.atip.base.IFrameworkAccess.class));
             Method define=type.getDeclaredMethod("defineContexts");define.setAccessible(true);define.invoke(actual);
             Object[] contexts=(Object[])field(type,"dc").get(actual);
@@ -104,9 +144,15 @@ public final class AltScreenContextTest implements InvocationHandler {
                     if(f.getType()==int[].class)layers=(int[])f.get(contexts[80+i]);
                 check(Arrays.equals(layers,expected[i]),"actual context "+(80+i)+" composition changed");
             }
+            Object video=contexts[81];
+            contexts[82]=null;
+            ClusterStateController.configureRgiRefreshContext(actual);
+            check(contexts[81]==video && Arrays.equals(
+                (int[])contexts[82].getClass().getField("displayableList").get(contexts[82]),
+                new int[]{101,102,3}),"upstream refresh hook replaced video 81 or failed to configure 82");
         }
 
-        static final class Renderer extends com.luka.carplay.rgd.RendererServer {
+        static final class Renderer extends com.luka.carplay.routeguidance.RendererServer {
             boolean framed;int peer=1;
             public boolean connect(){return true;}
             public boolean isReady(){return true;}
@@ -119,7 +165,7 @@ public final class AltScreenContextTest implements InvocationHandler {
         }
 
         void rendererBinding()throws Exception {
-            com.luka.carplay.rgd.BAPBridge bridge=new com.luka.carplay.rgd.BAPBridge();
+            com.luka.carplay.routeguidance.BAPBridge bridge=new com.luka.carplay.routeguidance.BAPBridge();
             Renderer renderer=new Renderer();
             field(bridge.getClass(),"initialized").setBoolean(bridge,true);
             field(bridge.getClass(),"bapSessionStarted").setBoolean(bridge,true);
@@ -147,6 +193,7 @@ public final class AltScreenContextTest implements InvocationHandler {
         }
     public static void main(String[] args) throws Exception {
         Log.setLevel(-1);
+        snapshotContract();
         check(contextFor(false, true, true) == 74, "disconnected is always stock");
         check(contextFor(true, false, false) == 74, "idle session stays stock");
         check(contextFor(true, false, true) == 80, "nav without video uses the stock map");
@@ -161,7 +208,6 @@ public final class AltScreenContextTest implements InvocationHandler {
 
         AltScreenContextTest capture = new AltScreenContextTest();
         compositionContract(capture);
-        capture.dm = capture.proxy(IDisplayManagerKombiControl.class);
         FrameworkRef fw = new FrameworkRef((IContext)capture.proxy(IContext.class));
         final ScreenModule module = new ScreenModule();
         check(module.start(fw), "start actual screen module");
@@ -213,6 +259,11 @@ public final class AltScreenContextTest implements InvocationHandler {
             module.stop();
             check(!ScreenModule.isRendererBindingApplied(unconfirmed),"disconnect retained old renderer binding");
             check(module.start(fw), "restart actual screen module with unchanged markers");
+            int failures = field(ClusterStateController.class,"contextWriteFailures").getInt(null);
+            Method failed = ClusterStateController.class.getDeclaredMethod("contextFailure",String.class);
+            failed.setAccessible(true);failed.invoke(null,"retired readback failed");
+            check(field(ClusterStateController.class,"contextWriteFailures").getInt(null)==failures,
+                "retired context error consumed the new session retry budget");
         } finally {
             capture.resume.countDown();
         }
@@ -225,6 +276,8 @@ public final class AltScreenContextTest implements InvocationHandler {
         capture.await(74, "disconnect restores stock");
         Thread.sleep(400);
         check(capture.current == 74 && !ScreenModule.isAltScreenVideo(), "stale markers ignored while disconnected");
+        check(!capture.rates.isEmpty() && capture.rates.get(capture.rates.size()-1).equals(30),
+            "controller left cluster frame rate stopped");
 
         active.delete(); ready.delete(); dir.delete();
         System.out.println("AltScreenContextTest: real context composition, map-preserving renderer rebind, readback/fallback, peer replacement, video loss, drift, reconnect and disconnect PASS");

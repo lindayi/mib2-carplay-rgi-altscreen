@@ -7,7 +7,7 @@ static void *test_malloc(size_t);
 static ssize_t test_send(int, const void *, size_t, int);
 #define malloc test_malloc
 #define send test_send
-#include "../hook/framework/bus.c"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c"
 #undef malloc
 #undef send
 

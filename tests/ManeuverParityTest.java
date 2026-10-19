@@ -1,4 +1,4 @@
-import com.luka.carplay.rgd.*;
+import com.luka.carplay.routeguidance.*;
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 import java.lang.reflect.Method;
@@ -31,7 +31,7 @@ public final class ManeuverParityTest {
         check(ManeuverMapper.map(8,-1,0,0,false)[1]==224,"missing RHT off-ramp");
         check(ManeuverMapper.map(20,-1,0,0,true)[1]==32,"real -1 left end-of-road");
         check(ManeuverMapper.map(20,-1,0,0,false)[1]==64,"missing left end-of-road");
-        Method roads=Class.forName("com.luka.carplay.rgd.SideStreets").getDeclaredMethod(
+        Method roads=Class.forName("com.luka.carplay.routeguidance.SideStreets").getDeclaredMethod(
             "calcSideStreetsBytes",Integer.TYPE,Integer.TYPE,Integer.TYPE,int[].class,Integer.TYPE);
         roads.setAccessible(true);
         for(int mt=0;mt<=53;mt++) for(int j=-1;j<=1;j++) for(int side=0;side<2;side++) {

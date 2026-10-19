@@ -12,8 +12,8 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build/rgd-native-contract'
 BUILD.mkdir(parents=True, exist_ok=True)
-hook = (ROOT / 'hook/routeguidance/rgd_hook.c').read_text()
-bus = (ROOT / 'hook/framework/bus.c').read_text()
+hook = (ROOT / 'Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_hook.c').read_text()
+bus = (ROOT / 'Toolbox/carplay_alt_screen/rgi_native/src/framework/bus.c').read_text()
 slot_start = hook.index('static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_maneuver_t* man) {')
 slot_writer = hook[slot_start:hook.index('\nstatic void write_lane_data_keys(', slot_start)]
 text_writer = bus[bus.index('static void bt_append(bus_text_builder_t* b,'):bus.index('\nvoid bus_text_bool(')]
@@ -140,11 +140,11 @@ int main(int argc,char **argv) {
 }
 '''
 (BUILD / 'native_input.c').write_text(c)
-subprocess.run(['cc','-std=c99','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DENABLE_LOGGING=0','-I'+str(ROOT/'hook'),str(BUILD/'native_input.c'),str(ROOT/'hook/routeguidance/rgd_tlv.c'),'-o',str(BUILD/'native_input')],check=True)
+subprocess.run(['cc','-std=c99','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-DENABLE_LOGGING=0','-I'+str(ROOT/'Toolbox/carplay_alt_screen/rgi_native/src'),str(BUILD/'native_input.c'),str(ROOT/'Toolbox/carplay_alt_screen/rgi_native/src/routeguidance/rgd_tlv.c'),'-o',str(BUILD/'native_input')],check=True)
 frames = [BUILD / name for name in ('old-slot.txt','new-no-angle.txt','new-known-angle.txt','new-generation.txt')]
 subprocess.run([str(BUILD/'native_input'),*map(str,frames),str(BUILD)],check=True)
 java = r'''
-import com.luka.carplay.rgd.*;
+import com.luka.carplay.routeguidance.*;
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 import java.nio.file.*;

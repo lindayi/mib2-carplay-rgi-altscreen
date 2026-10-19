@@ -9,10 +9,10 @@ CP="$STOCK:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osg
 ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm-tree-9.7.jar"
 rm -rf "$OUT/classes" "$OUT/tools" "$OUT/tests"
 mkdir -p "$OUT/classes" "$OUT/tools" "$OUT/tests"
-find "$ROOT/java_patch" -name '*.java' -type f > "$OUT/sources"
+find "$ROOT/Toolbox/carplay_alt_screen/hmi/src" -name '*.java' -type f > "$OUT/sources"
 javac -source 1.4 -target 1.4 -encoding UTF-8 -Xlint:-options -cp "$CP" \
     -d "$OUT/classes" @"$OUT/sources"
-cp -R "$ROOT/java_resources/." "$OUT/classes/"
+cp -R "$ROOT/Toolbox/carplay_alt_screen/hmi/resources/." "$OUT/classes/"
 javac -cp "$ASM" -d "$OUT/tools" "$ROOT/tools/PatchNativeRouteState.java" \
     "$ROOT/tests/NativeRouteStatePatchTest.java"
 java -cp "$OUT/tools:$ASM" NativeRouteStatePatchTest "$STOCK"
@@ -23,5 +23,5 @@ javac -encoding UTF-8 -cp "$OUT/classes:$CP" -d "$OUT/tests" \
 java -Xverify:all -cp "$OUT/tests:$OUT/classes:$CP" NativeRouteStateOverlayTest
 # Reconstructed IBM J9 Navigation bytecode requires the existing isolated-probe policy.
 java -Xverify:none -cp "$OUT/tests:$OUT/classes:$CP" com.luka.carplay.core.RgiGateLifecycleTest
-java -Xverify:none -cp "$OUT/tests:$OUT/classes:$CP" com.luka.carplay.rgd.RgiServiceRecoveryTest
+java -Xverify:none -cp "$OUT/tests:$OUT/classes:$CP" com.luka.carplay.routeguidance.RgiServiceRecoveryTest
 echo RGI_UPSTREAM_LIFECYCLE=PASS

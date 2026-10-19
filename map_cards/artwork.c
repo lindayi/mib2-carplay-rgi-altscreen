@@ -21,7 +21,7 @@ static void *bounded_realloc(void *p,size_t size) {return size<=ART_MAX_ALLOCATI
 #define STB_IMAGE_IMPLEMENTATION
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
-#include "../hook/coverart/stb_image.h"
+#include "../Toolbox/carplay_alt_screen/rgi_native/src/coverart/stb_image.h"
 #pragma GCC diagnostic pop
 
 uint32_t cards_crc32(const unsigned char *data,size_t size) {

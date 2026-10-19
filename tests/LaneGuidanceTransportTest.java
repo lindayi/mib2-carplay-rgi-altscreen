@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
 public class LaneGuidanceTransportTest {

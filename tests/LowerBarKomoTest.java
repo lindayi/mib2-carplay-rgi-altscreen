@@ -1,4 +1,4 @@
-package com.luka.carplay.rgd;
+package com.luka.carplay.routeguidance;
 
 import com.luka.carplay.framework.Log;
 import de.audi.atip.hmi.modelaccess.LabelModelApp;
@@ -92,7 +92,7 @@ public final class LowerBarKomoTest {
         String label;
         Fixture()throws Exception {
             q.tasks=new ArrayList<>();komo.queue=q;n.install(q,cs);
-            Constructor<?> c=Class.forName("com.luka.carplay.rgd.BAPBridge$SilentLogChannel").getDeclaredConstructor();
+            Constructor<?> c=Class.forName("com.luka.carplay.routeguidance.BAPBridge$SilentLogChannel").getDeclaredConstructor();
             c.setAccessible(true);de.audi.atip.log.LogChannel log=(de.audi.atip.log.LogChannel)c.newInstance();
             Env env=(Env)U.allocateInstance(Env.class);
             InvocationHandler model=(p,m,a)->{

@@ -11,7 +11,12 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
     int cropWidth;
     static void check(boolean b, String message) { if (!b) throw new AssertionError(message); }
     static void field(String name, Object value) throws Exception {
-        Field f=ScreenModule.class.getDeclaredField(name); f.setAccessible(true);f.set(null,value);
+        Class type = ScreenModule.class;
+        if (name.equals("connected") || name.equals("navActive")) {
+            type = com.luka.carplay.cluster.ClusterStateController.class;
+            name = name.equals("connected") ? "carPlaySessionActive" : "rgiPresentationActive";
+        }
+        Field f=type.getDeclaredField(name); f.setAccessible(true);f.set(null,value);
     }
     public Object invoke(Object proxy, Method method, Object[] args) {
         if (method.getName().equals("setOpacity")) opacity.put(args[0],args[2]);
