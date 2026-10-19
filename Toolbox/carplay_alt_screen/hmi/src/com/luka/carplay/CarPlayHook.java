@@ -183,16 +183,14 @@ public final class CarPlayHook {
         if (savedContext != null && savedContext != context) deactivateNow();
         if (!active || !current(generation, (IContext)context)) return;
         startRgiRuntimeMonitor();
+        applyServiceChange();
         if (cleanupPending()) return;
         Log.refreshLevel();
         Log.i(TAG, "onActivate build=" + CarPlayApp.BUILD_ID);
         CarplayBus.getInstance().start();
-        savedContext = context;
         lastServiceProbe = ElapsedClock.nowMs();
         try {
-            if (fwRef == null) fwRef = new FrameworkRef((IContext)context);
             if (!current(generation, (IContext)context)) return;
-            applyServiceChange();
             if (tryInit(context, generation)) {
                 Log.i(TAG, "Initialized on first attempt");
                 return;

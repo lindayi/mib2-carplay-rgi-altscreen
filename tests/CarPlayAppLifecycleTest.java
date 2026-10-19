@@ -160,6 +160,39 @@ public final class CarPlayAppLifecycleTest {
             awaitCount(2, 2);
             check(fixture.acquired == fixture.released && next.adds == 1,
                 "pending old cleanup prevented the new session from starting");
+        } else if (scenario.equals("pending-service-rebind")) {
+            fixture.identity = false; fixture.wrappers = true;
+            CarPlayApp.onActivate(context); settled();
+            synchronized (value("RGI_LOCK")) {
+                fixture.releaseFailures = 100;
+                set("lastServiceProbe", Long.valueOf(0));
+                CarPlayHook.pollRgiRuntime();
+                check(!((java.util.Vector)value("pendingReleases")).isEmpty(),
+                    "probe-release failure was not injected");
+                CarPlayApp.onNavigationServiceChanged();
+            }
+            settled();
+            fixture.releaseFailures = 0;
+            awaitCount(1, 2);
+            check(LifecycleTestModule.count(0) == 1 && LifecycleTestModule.count(2) == 1,
+                "service-only rebind restarted unrelated modules");
+        } else if (scenario.equals("cleanup-context-rebind")) {
+            CarPlayApp.onActivate(context); settled();
+            RouteGuidance.stopFailures = 100;
+            CarPlayApp.onDeactivateAndWait();
+            LifecycleContext next = new LifecycleContext();
+            CarPlayApp.onActivate(next.context); settled();
+            synchronized (value("RGI_LOCK")) {
+                RouteGuidance.stopFailures = 0;
+                set("lastServiceProbe", Long.valueOf(com.luka.carplay.framework.ElapsedClock.nowMs()));
+                CarPlayHook.pollRgiRuntime();
+                check(LifecycleTestModule.count(1) == 1, "fixture did not pause before next init probe");
+                CarPlayApp.onNavigationServiceChanged();
+            }
+            settled();
+            awaitCount(2, 2);
+            check(((FrameworkRef)value("fwRef")).context == next.context,
+                "new activation reused the old FrameworkRef after deferred cleanup");
         } else if (scenario.equals("late-device")) {
             fixture.deviceAvailable = false;
             CarPlayApp.onActivate(context); settled();

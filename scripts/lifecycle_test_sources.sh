@@ -19,4 +19,4 @@ LIFECYCLE_SOURCES=(
   "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java"
   "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java"
 )
-LIFECYCLE_SCENARIOS="publication during-start replug failure framework-retry bounce menu maintenance retry-worker retry-replug cleanup-replug late-device services stale-device takeover cleanup g24 release-retry partial-start partial-throw stale-service service-edge"
+LIFECYCLE_SCENARIOS="publication during-start replug failure framework-retry bounce menu maintenance retry-worker retry-replug cleanup-replug pending-service-rebind cleanup-context-rebind late-device services stale-device takeover cleanup g24 release-retry partial-start partial-throw stale-service service-edge"

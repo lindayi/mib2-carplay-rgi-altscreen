@@ -6,7 +6,9 @@ import de.audi.atip.base.IFrameworkAccess;
 public final class FrameworkRef {
     public static Module telephonyFixture() { return new LifecycleTestModule(4) {}; }
     static volatile boolean failNext;
+    public final IContext context;
     public FrameworkRef(IContext context) {
+        this.context = context;
         LifecycleProbe.checkLock();
         if (failNext) { failNext = false; throw new IllegalStateException("injected framework failure"); }
     }

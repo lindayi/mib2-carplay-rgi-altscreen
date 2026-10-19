@@ -191,6 +191,11 @@ Do not turn this into a raw conversation log or store credentials/private captur
   Retried cleanup must eventually initialize the new context, not retain the old
   FrameworkRef or wait for another physical reconnect. Maintenance must not
   restart every module.
+- A service-generation edge must retire the old RGI even when another cleanup
+  is pending. Only initNow pairs the active context and FrameworkRef; do not
+  publish a new context over a FrameworkRef retained for old-session teardown.
+  Keep upstream's temporary restore handshake and device-running start/stop
+  policy out of this local SI/session contract.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
 - Corrected INSTALL includes boot-only START arming inside a unit-bound,

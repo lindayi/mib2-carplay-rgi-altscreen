@@ -106,6 +106,12 @@ The upstream FD-9/port-19801 supervisor lease is **not enabled**. The existing
 supervisor is not claimed to be that implementation. Changing these integration
 contracts requires a separate reviewed adaptation, not silent replacement during
 an upstream refresh.
+The upstream `/tmp/mmi-rgi.disabled` / `mmi-rgi.stopped` restore handshake is
+also not used; the local transaction and SI cleanup retain their existing
+contract. RGI start/stop follows the local physical-session and preference gates,
+not upstream's `carplayPresent` / `carplayRunning` demand. Parking-related
+inactive/unselected callbacks must not stop RGI. The device running flag is
+observational, not a second lifecycle owner.
 
 The local tests cover async lifecycle intent, duplicate/stale activation, late
 navigation services and service replacement, Master Off, one context writer,
