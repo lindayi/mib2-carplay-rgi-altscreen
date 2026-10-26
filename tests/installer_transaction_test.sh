@@ -93,7 +93,9 @@ fixture(){
     F=/fixture/ORIGINAL/files
     mkdir -p "$VOL" "$ROOT/eso/bin/apps" "$ROOT/eso/lib" "$ROOT/armle/usr/lib" "$P" \
         "$ROOT/mnt/system/etc/boot" "$ROOT/mnt/app/root" "$ROOT/mnt/app/eso/hmi/lsd/jars" \
-        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk"
+        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk" "$ROOT/armle/sbin"
+    cp /work/tests/fixtures/pfctl-filter-validator.sh "$ROOT/armle/sbin/pfctl"
+    chmod 755 "$ROOT/armle/sbin/pfctl"
     cp -a /sd/. "$VOL/"
     if [ "$PACKAGE_MODE" = staged ]; then
         diff -qr /sd "$VOL" > "$CASE_DIR/package-copy.log" || {
@@ -113,6 +115,7 @@ fixture(){
     cp "$F/_mnt_system_etc_eso_production_dio_manager.json" "$P/dio_manager.json"
     cp /fixture/firewall-original/pf.conf "$ROOT/mnt/system/etc/pf.conf"
     cp /fixture/firewall-original/pf.conf "$ROOT/mnt/system/etc/pf.ecm0.conf"
+    printf 'altq on ppp0 cbq bandwidth 256Kb queue { normal }\nqueue normal bandwidth 100%% cbq(default)\nblock in quick on carplay0 all\n' > "$ROOT/mnt/system/etc/pf.ppp0.conf"
     chmod 755 "$ROOT/mnt/system/etc/pf.ecm0.conf"
     cp /fixture/boot-diagnostics/startup.sh "$ROOT/mnt/system/etc/boot/startup.sh"
     printf '\n# unrelated startup setting preserved\n' >> "$ROOT/mnt/system/etc/boot/startup.sh"

@@ -1,15 +1,39 @@
 {
   "repository": "https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen.git",
-  "commit": "141e7ed33775af02a5af0b8616ee3c6250eea997",
+  "commit": "652448ddc1d5c9dd2f4a673b9950cf3c6a9195a4",
   "scope": "GPL RGI source and data baseline, including the running CarPlayHook lifecycle actor and ClusterStateController context writer. Local settings/platform/ownership hooks and remaining explicit replacements are recorded below.",
   "excluded": [
-    {"path": "Toolbox/carplay_alt_screen/hmi/stubs", "reason": "Tests compile against exact private MU1316 ABI, not permissive upstream platform stubs."},
-    {"path": "Toolbox/carplay_alt_screen/hmi/vendor", "reason": "Opaque upstream baseline JAR is not a build input; local Java implementation is source-built against the stock platform."},
-    {"path": "Toolbox/carplay_alt_screen/hmi/release", "reason": "Prebuilt upstream HMI artifacts are not deployed."},
-    {"path": "Toolbox/carplay_alt_screen/rgi_native/release", "reason": "Native runtime is cross-built from the pinned source, not imported from release artifacts."},
-    {"path": "Toolbox/carplay_alt_screen/rgi_renderer/release", "except": ["flag_atlas.rgba"], "reason": "Only the runtime flag atlas is an input; upstream build metadata and checksums do not describe our rebuilt artifacts."},
-    {"path": "Toolbox/carplay_alt_screen/src", "reason": "Separate source-available AltScreen component is tracked by altscreen_native provenance and source manifest, not this GPL RGI pin."},
-    {"path": "Toolbox/carplay_alt_screen/mirror_display", "reason": "Separate mirror component is tracked by altscreen_native provenance and source manifest; do not mix its license boundary with GPL objects."}
+    {
+      "path": "Toolbox/carplay_alt_screen/hmi/stubs",
+      "reason": "Tests compile against exact private MU1316 ABI, not permissive upstream platform stubs."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/hmi/vendor",
+      "reason": "Opaque upstream baseline JAR is not a build input; local Java implementation is source-built against the stock platform."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/hmi/release",
+      "reason": "Prebuilt upstream HMI artifacts are not deployed."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/rgi_native/release",
+      "reason": "Native runtime is cross-built from the pinned source, not imported from release artifacts."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/rgi_renderer/release",
+      "except": [
+        "flag_atlas.rgba"
+      ],
+      "reason": "Only the runtime flag atlas is an input; upstream build metadata and checksums do not describe our rebuilt artifacts."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/src",
+      "reason": "Separate source-available AltScreen component is tracked by altscreen_native provenance and source manifest, not this GPL RGI pin."
+    },
+    {
+      "path": "Toolbox/carplay_alt_screen/mirror_display",
+      "reason": "Separate mirror component is tracked by altscreen_native provenance and source manifest; do not mix its license boundary with GPL objects."
+    }
   ],
   "files": [
     {
@@ -34,7 +58,7 @@
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
-      "sha256": "1fb7cada02f54989ef93af22cd802c31fc9ed1fded63b9ba703115ca152e0707",
+      "sha256": "a9b27a8c0d72d12efb48f1ab798c394d0c1b932a609cc33a27c4d46adb4f64e3",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/CarPlayHook.java",
       "reason": "Upstream queued lifecycle actor, separate resident monitor and retry worker, serialized RGI initialization and service discovery. Initialization/retirement hooks retain substantial Q5 adaptations: always-on transport, Master Off versus physical connection, guidance mode, ordered local modules, takeover and generation/cleanup fences. CarPlayApp is only an API facade; RgdModule is removed."
     },
@@ -46,7 +70,7 @@
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterLayerController.java",
-      "sha256": "ae0dd9c4fe68d2f15386d878f6581388e6004346b312717c939351edb104c2b0",
+      "sha256": "d836635d432d233b3d9ecedf819df683c9a479314b4cc1be8702d787f66f3c70",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/cluster/ClusterLayerController.java",
       "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
     },
@@ -245,7 +269,7 @@
     },
     {
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneService.java",
-      "sha256": "72d7b612ef916d2a1555667648371283b71f48d54fefe55b989494e1abfa0612",
+      "sha256": "592f9ef7e9678f3443fea9ac1d53d958d7a465c366872523b6ce6bc973ee271a",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/GatedPhoneService.java",
       "reason": "Upstream Java integration with source-built MU1316 ABI adapters, one bus, local settings/input/card observers and lifecycle fences."
     },
@@ -698,6 +722,12 @@
       "sha256": "ef5a84ba14512f33cfeb601112fb90e8be94e5917881d242cbf826b2df8c41f9",
       "local": "Toolbox/carplay_alt_screen/rgi_renderer/toolchain/qnx65-abi/include/screen/screen.h",
       "reason": "Upstream renderer/scene baseline with local distance-road footer, display options, visibility framing and SI supervision/build adapter."
+    },
+    {
+      "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/StockPhoneKeyFilter.java",
+      "sha256": "a27ca31df18e6123c730c64befb967e11e5c6bc969667ae447cbdd250764f149",
+      "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/StockPhoneKeyFilter.java",
+      "reason": "Upstream duplicate MFL phone-key policy via the exact-MU1316 PatchPhoneKeyController getter weave. The filter wraps a value read by stock and never replaces/restores the volatile OEM controller, avoiding the upstream re-arm race. GatedPhoneService retains physical-session and emergency-call eligibility."
     }
   ]
 }

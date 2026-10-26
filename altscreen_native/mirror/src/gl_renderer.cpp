@@ -435,6 +435,20 @@ void GlRenderer::draw() {
     draw_texture(texture_, vertices_, swap_rb_, 1.0f);
 }
 
+void GlRenderer::draw_faded(float opacity) {
+    if (!ready_) return;
+    if (opacity < 0.0f) opacity = 0.0f;
+    if (opacity > 1.0f) opacity = 1.0f;
+    glViewport(0, 0, output_width_, output_height_);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    if (!texture_ || opacity <= 0.0f) return;
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+    draw_texture(texture_, vertices_, swap_rb_, opacity);
+    glDisable(GL_BLEND);
+}
+
 void GlRenderer::draw_texture(GLuint texture, const GLfloat *vertices,
                               bool swap_rb, float opacity) {
 

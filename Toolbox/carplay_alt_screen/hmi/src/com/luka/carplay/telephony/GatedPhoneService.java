@@ -20,8 +20,8 @@
  *
  * Ported from LuKa's mib2q-carplay-rgi (GPL-3.0).  Differences: call state and dial
  * use MU1316's stock event bus instead of a patched CarplayDSILifecycleController;
- * the stock steering-wheel HID copy is not
- * filtered (stock CarPlay FLASH did nothing on the MHI2Q car it was tested on).
+ * StockPhoneKeyFilter drops the duplicate steering-wheel HID copy only during
+ * a live, eligible CarPlay call. A guarded getter weave leaves OEM assignments untouched.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -40,6 +40,9 @@ import de.audi.atip.interapp.combi.bap.phone.data.CombiBAPhoneMobileBatteryLevel
 import de.audi.atip.interapp.combi.bap.phone.data.FsgSetup;
 import de.audi.atip.interapp.phone.TelAdbEntryStruct;
 import java.util.Calendar;
+import java.util.TimeZone;
+import com.luka.carplay.CarPlayHook;
+import de.audi.atip.base.IFrameworkAccess;
 
 public class GatedPhoneService implements CombiBAPServicePhone {
     private static final String TAG = "Telephony";
@@ -187,6 +190,16 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     static boolean onVcAction(int action, String number) {
         GatedPhoneService g = instance;
         return g != null && g.handle(action, number);
+    }
+
+    public static boolean dropStockPhoneKey(int id) {
+        if (id != 13 && id != 14 && id != 20) return false;
+        GatedPhoneService g = instance;
+        return g != null && g.gatedWithCall();
+    }
+
+    private synchronized boolean gatedWithCall() {
+        return gated && eligible() && liveCalls() > 0;
     }
 
     private synchronized boolean handle(int action, String number) {
@@ -525,15 +538,33 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         }
     }
 
+    private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+    private static boolean loggedUtcRecents;
+
     private static CombiBAPCallStackEntry recent(int pos, String name, String num, int mode, long ts) {
         if (ts <= 0) return new CombiBAPCallStackEntry(pos, name, num, 0, mode);
-        Calendar c = Calendar.getInstance();
-        c.setTime(new java.util.Date(ts > 100000000000L ? ts : ts * 1000L));  /* s or ms */
+        long utcMs = ts > 100000000000L ? ts : ts * 1000L;
+        Calendar c = Calendar.getInstance(GMT);
+        c.setTime(new java.util.Date(huLocalMs(utcMs)));
         return new CombiBAPCallStackEntry(pos, name, num, 0, mode,
             (short)c.get(Calendar.DAY_OF_MONTH), (short)(c.get(Calendar.MONTH) + 1),
             (short)c.get(Calendar.YEAR), (short)c.get(Calendar.HOUR_OF_DAY),
             (short)c.get(Calendar.MINUTE), (short)c.get(Calendar.SECOND),
             new TelAdbEntryStruct());
+    }
+
+    private static long huLocalMs(long utcMs) {
+        try {
+            IFrameworkAccess fw = CarPlayHook.getFrameworkAccess();
+            if (fw != null) return fw.convertUTCTimeToLocalTime(utcMs);
+        } catch (Throwable t) {
+            if (!loggedUtcRecents) Log.w(TAG, "recent-call time conversion failed: " + t);
+        }
+        if (!loggedUtcRecents) {
+            loggedUtcRecents = true;
+            Log.w(TAG, "recents times stay UTC: HU framework time conversion unavailable");
+        }
+        return utcMs;
     }
 
     /* ---------------- publishing ---------------- */

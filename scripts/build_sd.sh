@@ -83,14 +83,16 @@ cp "$NATIVE/carplay-alt111-mirror-display" "$NATIVE/SOURCES.sha256" "$NATIVE/ELF
 for name in NOTICE.md LICENSE.POLYFORM-NONCOMMERCIAL-1.0.0.md LICENSE.ADDITIONAL-TERMS.md PROVENANCE.md; do
     cp "$PROJECT_DIR/altscreen_native/$name" "$OUT/$ALTS_MIRROR_DIR/$name"
 done
-cat > "$OUT/$ALTS_MIRROR_DIR/BUILD_INFO.txt" <<'EOF'
+UPSTREAM_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' \
+    "$PROJECT_DIR/Toolbox/carplay_alt_screen/UPSTREAM.json")
+cat > "$OUT/$ALTS_MIRROR_DIR/BUILD_INFO.txt" <<EOF
 release_binary_status=SOURCE_BUILT_PRIVATE111_V38
 vehicle_validation=REQUIRED
-upstream_commit=141e7ed33775af02a5af0b8616ee3c6250eea997
-source_build_id=carplay-private111-mu1316-source-v3.8-java-placement
+upstream_commit=$UPSTREAM_COMMIT
+source_build_id=carplay-private111-mu1316-source-v3.8-fix1-java-placement
 source_manifest=SOURCES.sha256
 rgd_owner=LOCAL_SINGLE_IMPLEMENTATION
-cluster_context_owner=JAVA_SCREENMODULE
+cluster_context_owner=JAVA_CLUSTERSTATECONTROLLER
 EOF
 chmod 755 "$OUT/$ALTS_LIB" "$OUT/$ALTS_MIRROR_DIR/carplay-alt111-mirror-display"
 ALTS_FPS="source V3.8 NV12/GLES (vehicle validation required)"

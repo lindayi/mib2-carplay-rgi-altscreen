@@ -175,8 +175,8 @@ int main(void) {
         assert(get(safe,"originXPixels")->number==(i?300:370));
         assert(get(safe,"widthPixels")->number==(i?840:700));
         safe=get(areas->values[1],"safeArea");
-        assert(get(safe,"originXPixels")->number==(i?470:490));
-        assert(get(safe,"widthPixels")->number==(i?500:460));
+        assert(get(safe,"originXPixels")->number==490);
+        assert(get(safe,"widthPixels")->number==460);
         release(info);
         hmi(epoch,"FULL");info=alt_build_cluster_display();
         assert(get(info,"initialViewArea")->number==0);release(info);

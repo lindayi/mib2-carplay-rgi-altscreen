@@ -9,8 +9,17 @@
  *   101 = stock 987 KDK backing  (Image, 328x180)      — sport/full size
  *   102 = stock 987 KDK backing  (Image, 210x153)      — popup size
  *
+ * Local background preferences remain in force during the upstream opacity ramp.
+ * Stock gets its backing model back on release.
+ *
  * CarPlay ownership/navigation gates eligibility; VC FctID44 gates actual visibility,
  * and VC FctID54 selects the KDK stage. The requested View mode never reveals a layer.
+ * The arrow fades with the VC's own 200 ms linear KDK animation instead of popping: FctID44
+ * withdraws visibility at 30 % of the VC fade-out (the remaining 140 ms is ours) and returns it
+ * just before the VC reopens the KDK.  A visible arrow is never moved; it is hidden first.
+ * Q7: the cluster may never send FctID44 for a CarPlay route.  Like stock's Q7-FPK fallback
+ * (ClusterKDKHandlerImpl: "did not get request from Kombi in time... setting expected KDK
+ * visibility"), the arrow is shown when no FctID44 has arrived 1.5 s after guidance began.
  * Stock hints are retained for restoration when CarPlay releases the cluster.  ctx 80/81 (ScreenModule) already removes the layers from composition on nav-off; the
  * opacity=0 here is the belt to that suspenders.
  *
@@ -43,8 +52,24 @@ public final class ClusterLayerController {
     private static final int LC_IN_TUBE_CROP_W = 124, LC_IN_TUBE_CROP_H = 125;
     /* Stock map-only offset, recorded for diagnostics; never applied to KDK. */
     private static final int LC_SMALL_STAGE_DX = 80, LC_SMALL_STAGE_DY = 81;
+    /* Full-range durations; a reversed fade takes the share it still has to cover. */
+    private static final int FADE_IN_MS = 200, FADE_OUT_MS = 140, FADE_STEP_MS = 33;
+    private static final long Q7_KDK_FALLBACK_MS = 1500L;
     private static final Object LOCK = new Object();
     private static final Object APPLY_LOCK = new Object();
+    /* Arrow fade and Q7 fallback state; guarded by APPLY_LOCK like every DM write. */
+    private static int maneuverOpacity = -1;       /* last value written to 98, -1 unknown */
+    private static boolean fading;
+    private static int fadeFrom, fadeTo, fadeDuration, fadeTerminal, fadeBacking;
+    private static long fadeStart;
+    private static IDisplayManagerKombiControl fadeDm;
+    private static String lastCrop;
+    private static long guidanceSince;             /* 0 = CarPlay not guiding */
+    private static long q7FallbackAt;              /* 0 = nothing scheduled */
+    private static boolean q7FallbackLogged;
+    private static final Object FADE_WAKE = new Object();
+    private static boolean fadeWakePending;
+    private static Thread fader;
     private static IDisplayManagerKombiControl lastDm;
     private static int lastTerminal;
     private static boolean lastStockPopup = true;
@@ -290,18 +315,41 @@ public final class ClusterLayerController {
                                  boolean stockVisible, int stockOpacity) {
         boolean popup;
         boolean carplayOwnsCluster = com.luka.carplay.core.ScreenModule.isConnected();
+        boolean navActive = com.luka.carplay.core.ScreenModule.isNavActive();
+        boolean vcReported;
         int permittedOpacity;
         synchronized (LOCK) {
             popup = carplayOwnsCluster && haveVcStage ? vcPopup : lastStockPopup;
+            vcReported = haveVcVisibility;
             permittedOpacity = haveVcVisibility ? (vcVisible ? 100 : 0)
                 : (stockVisible ? stockOpacity : 0);
+        }
+        long now = System.currentTimeMillis();
+        if (!carplayOwnsCluster || !navActive) {
+            guidanceSince = 0L;
+            q7FallbackLogged = false;
+        } else if (guidanceSince == 0L || now < guidanceSince) {
+            guidanceSince = now;
+        }
+        q7FallbackAt = 0L;
+        if (guidanceSince != 0L && !vcReported && geometry.layoutName.indexOf("Q7") >= 0) {
+            long due = guidanceSince + Q7_KDK_FALLBACK_MS;
+            if (now >= due) {
+                permittedOpacity = 100;
+                if (!q7FallbackLogged) {
+                    q7FallbackLogged = true;
+                    Log.w("ClusterLayers", "Q7 KDK fallback: no VC FctID44 " + Q7_KDK_FALLBACK_MS
+                        + " ms after CarPlay guidance began, showing the arrow");
+                }
+            } else {
+                q7FallbackAt = due;
+            }
         }
         /* Do NOT apply the layout's small-stage offset (80/81) here.  Stock adds it to the map
          * planes 33/58 only; the KDK panel and its backing have no view-size dependency at all
          * (positionKDKBackgrounds / handleKdkDualTerminal read no view size).  Moving the panel
          * by -476 in Sport singlescreen was measured on the car to break a view that stock keeps
          * correct.  The offset is logged below for diagnosis, never applied. */
-        boolean navActive = com.luka.carplay.core.ScreenModule.isNavActive();
         int carplayOpacity = carplayOwnsCluster && navActive ? permittedOpacity : 0;
         logDecision(geometry, popup, carplayOpacity);
         try {
@@ -309,6 +357,9 @@ public final class ClusterLayerController {
              * when CarPlay releases terminal 1; otherwise a disconnect can leave
              * Audi navigation's backing permanently transparent until an unrelated KDK delta. */
             if (!carplayOwnsCluster) {
+                fading = false;
+                lastCrop = null;
+                maneuverOpacity = 0;
                 dm.setOpacity(MANEUVER, terminal, 0);
                 if (stockVisible) {
                     dm.setOpacity(popup ? BACKING_POPUP : BACKING_SPORT,
@@ -323,6 +374,9 @@ public final class ClusterLayerController {
                 return;
             }
             if (!navActive) {
+                fading = false;
+                lastCrop = null;
+                maneuverOpacity = 0;
                 dm.setOpacity(MANEUVER, terminal, 0);
                 dm.setOpacity(BACKING_SPORT, terminal, 0);
                 dm.setOpacity(BACKING_POPUP, terminal, 0);
@@ -335,21 +389,167 @@ public final class ClusterLayerController {
             int ch = popup ? geometry.popupCropH : geometry.inTubeCropH;
             int dx = popup ? geometry.popupX : geometry.inTubeX;
             int dy = popup ? geometry.popupY : geometry.inTubeY;
+            String crop = cx + "," + cy + " " + cw + "x" + ch + "@" + dx + "," + dy + "/" + terminal;
+            if ((!crop.equals(lastCrop) || fadeDm != dm) && maneuverOpacity != 0) {
+                /* FctID54 lands mid-morph, normally after FctID44 hid the arrow.  If it is
+                 * still visible, cut it rather than slide it across the cluster. */
+                fading = false;
+                dm.setOpacity(MANEUVER, terminal, 0);
+                maneuverOpacity = 0;
+            }
+            dm.setCropping(MANEUVER, terminal, cx, cy, cw, ch, dx, dy, cw, ch);
             int backing = popup ? BACKING_POPUP : BACKING_SPORT;
             int otherBacking = popup ? BACKING_SPORT : BACKING_POPUP;
-            dm.setCropping(MANEUVER, terminal, cx, cy, cw, ch, dx, dy, cw, ch);
-            dm.setOpacity(MANEUVER, terminal, carplayOpacity);
             dm.setPosition(backing, terminal, dx, dy);
-            int backingOpacity=com.luka.carplay.settings.Preferences.get().snapshot()
-                .get(com.luka.carplay.settings.Setting.BACKGROUND)==0?carplayOpacity:carplayOpacity*65/100;
-            dm.setOpacity(backing, terminal, backingOpacity);
             dm.setOpacity(otherBacking, terminal, 0);
+            fadeBacking = backing;
+            lastCrop = crop;
+            fadeManeuverTo(dm, terminal, carplayOpacity, now);
+            dm.setOpacity(backing, terminal, backingOpacity(maneuverOpacity));
             errorLogged = false;
         } catch (Throwable t) {
             /* Never throw into HMI/DM threads, but keep the first failure diagnosable. */
+            fading = false;
+            maneuverOpacity = -1;
             if (!errorLogged) {
                 errorLogged = true;
                 Log.w("ClusterLayers", "apply failed: " + t);
+            }
+        }
+        if (q7FallbackAt != 0L) wakeFader();
+    }
+
+    /** Called under APPLY_LOCK.  Starts (or retargets) the ramp of 98 toward target. */
+    private static void fadeManeuverTo(IDisplayManagerKombiControl dm, int terminal, int target,
+                                       long now) {
+        if (fading && fadeTo == target && fadeDm == dm && fadeTerminal == terminal) return;
+        int from = maneuverOpacity;
+        if (fading) {
+            stepFade(now);      /* resume from the value on screen, not the old start */
+            from = maneuverOpacity;
+        }
+        fading = false;
+        if (from < 0) {
+            dm.setOpacity(MANEUVER, terminal, 0);
+            maneuverOpacity = from = 0;
+        }
+        if (from == target) return;
+        int span = target > from ? target - from : from - target;
+        fadeFrom = from;
+        fadeTo = target;
+        fadeStart = now;
+        fadeDuration = (target > from ? FADE_IN_MS : FADE_OUT_MS) * span / 100;
+        fadeDm = dm;
+        fadeTerminal = terminal;
+        fading = true;
+        wakeFader();
+    }
+
+    /** Called under APPLY_LOCK.  Writes the current ramp value; ends the ramp at its target. */
+    private static void stepFade(long now) {
+        if (!fading) return;
+        synchronized (LOCK) {
+            if (lastDm != fadeDm || lastTerminal != fadeTerminal) {
+                fading = false;
+                return;
+            }
+        }
+        if (!com.luka.carplay.core.ScreenModule.isConnected()
+                || !com.luka.carplay.core.ScreenModule.isNavActive()) {
+            fading = false;
+            reapplySerialized();
+            return;
+        }
+        long elapsed = now - fadeStart;
+        int value;
+        if (elapsed < 0L || elapsed >= fadeDuration) {      /* a clock jump ends the ramp */
+            value = fadeTo;
+            fading = false;
+        } else {
+            value = fadeFrom + (int) ((fadeTo - fadeFrom) * elapsed / fadeDuration);
+        }
+        try {
+            fadeDm.setOpacity(MANEUVER, fadeTerminal, value);
+            maneuverOpacity = value;
+            fadeDm.setOpacity(fadeBacking, fadeTerminal, backingOpacity(value));
+        } catch (Throwable t) {
+            fading = false;
+            maneuverOpacity = -1;
+            if (!errorLogged) {
+                errorLogged = true;
+                Log.w("ClusterLayers", "fade failed: " + t);
+            }
+        }
+    }
+
+    private static int backingOpacity(int opacity) {
+        return com.luka.carplay.settings.Preferences.get().snapshot()
+            .get(com.luka.carplay.settings.Setting.BACKGROUND)==0?opacity:opacity*65/100;
+    }
+
+    private static void wakeFader() {
+        synchronized (FADE_WAKE) {
+            fadeWakePending = true;
+            if (fader == null || !fader.isAlive()) {
+                fader = new Thread(new Runnable() {
+                    public void run() { fadeLoop(); }
+                }, "cluster-arrow-fade");
+                fader.setDaemon(true);
+                try { fader.start(); }
+                catch (Throwable t) {
+                    fader = null;
+                    fading = false;
+                    throw new IllegalStateException("Cannot start arrow fade worker: " + t);
+                }
+            }
+            FADE_WAKE.notifyAll();
+        }
+    }
+
+    /* Own thread: DM writes only, no file I/O.  Sleeps until a ramp or the Q7 deadline. */
+    private static void fadeLoop() {
+        while (true) {
+            long wait = 0L;
+            boolean q7Due = false;
+            try {
+                synchronized (APPLY_LOCK) {
+                    long now = System.currentTimeMillis();
+                    stepFade(now);
+                    if (fading) wait = FADE_STEP_MS;
+                    if (q7FallbackAt != 0L) {
+                        long left = q7FallbackAt - now;
+                        if (left <= 0L) {
+                            q7FallbackAt = 0L;
+                            q7Due = true;
+                        } else if (wait == 0L || left < wait) {
+                            wait = left;
+                        }
+                    }
+                }
+                if (q7Due) {
+                    reapply();
+                    continue;
+                }
+                synchronized (FADE_WAKE) {
+                    if (!fadeWakePending) {
+                        if (wait == 0L) FADE_WAKE.wait();
+                        else FADE_WAKE.wait(wait);
+                    }
+                    fadeWakePending = false;
+                }
+            } catch (InterruptedException e) {
+                synchronized (FADE_WAKE) { fader = null; }
+                return;
+            } catch (Throwable t) {
+                if (!errorLogged) {
+                    errorLogged = true;
+                    Log.w("ClusterLayers", "fade loop: " + t);
+                }
+                try { Thread.sleep(FADE_STEP_MS); }     /* never spin on a repeating failure */
+                catch (InterruptedException e) {
+                    synchronized (FADE_WAKE) { fader = null; }
+                    return;
+                }
             }
         }
     }

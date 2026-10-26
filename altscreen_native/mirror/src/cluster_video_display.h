@@ -13,6 +13,8 @@ public:
 
     bool init(const Mhi2qBackendConfig &cfg);
     bool present_frame(const VideoFrame &frame);
+    bool present_frame_faded(const VideoFrame &frame, float opacity);
+    bool present_faded(float opacity);
     bool present_overlay_frame();
     bool present_logo_frame(const unsigned char *rgba, int width, int height);
     bool present_logo_fade_frame(const VideoFrame &frame, float logo_opacity);

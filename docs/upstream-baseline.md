@@ -2,7 +2,7 @@
 
 The primary RGI source reference is
 `yuedizhibo/MHI2Q-CarPlay-AltScreen` at
-`141e7ed33775af02a5af0b8616ee3c6250eea997` (V3.8).
+`652448ddc1d5c9dd2f4a673b9950cf3c6a9195a4` (V3.8 Fix1).
 This migration does not change the GitHub fork network, `main`, vehicle scope,
 preferences, on-vehicle paths or installation procedure.
 
@@ -24,11 +24,11 @@ source callers, reflection/weave names, tests and resources use it.
 The independent source-available AltScreen transport/mirror remains in
 `altscreen_native`, under its existing license boundary.
 
-The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 109 files
+The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 110 files
 in the five source trees, `hmi/resources`, and the runtime flag atlas from
 `rgi_renderer/release`. It includes the Unicode license. It also lists excluded
 vendor/stub/release trees and the separately tracked AltScreen native components.
-At this checkpoint, 51 files match, 49 have local deltas, and 9 have explicit
+At this checkpoint, 51 files match, 50 have local deltas, and 9 have explicit
 replacement mappings. Text comparisons normalize CRLF/LF; binary resource
 comparisons use exact bytes. These counts are not a feature-coverage percentage.
 
@@ -123,6 +123,135 @@ changes to the adopted controller paths and explicitly reports changes to
 the remaining replaced files for manual review.
 
 ## Updating the baseline
+
+### 2026-10-25 synchronization
+
+Allemon `main` is unchanged at `1289981`. Allemon PR 7 remains included; PR 14
+is unchanged at `3282773` and remains excluded because its night opcode collides
+with telephony and its delayed sends lack session fencing.
+
+| Yuedizhibo Fix1 change | Q5 integration |
+| --- | --- |
+| Duplicate steering-wheel phone action | Upstream policy through a hash-guarded MU1316 getter weave. It wraps the controller value read by stock, never overwrites an OEM assignment or restores an obsolete controller. Call suppression requires current receiver/call eligibility and no OEM emergency takeover. |
+| UTC recent-call times | Use the HU's UTC-to-local conversion, then split in GMT. Missing conversion produces an explicit UTC warning. |
+| Arrow fade and hide-before-move | Upstream ramp/fader retained; preserve Solid/Reduced backing preferences and stock restoration rather than forcing both backings transparent. A replaced DisplayManager cannot receive old fade ticks. |
+| Sport map transition | Bounded black hold and fade in the mirror's existing loop. Observe the PID/epoch/lease-bound Java geometry; never move the plane from native code. Cached fade swaps use the overlay counter, not source-progress telemetry. |
+| Phone-card SMALL geometry | Owner approved the normal SMALL `(490,72,460,378)` area and stock Sport `-476` pan for both profiles. The card FULL area stays `(300,72,840,378)`. |
+| QNX FAT parent-entry errors | File-by-file transaction snapshots tolerate only the known parent-entry diagnostic. Hash/byte comparisons, empty directories, real I/O errors and special-node refusal remain enforced for install and restore. |
+| Generic upstream config-layout fallback | Not copied: our installed runtime and unit-bound snapshot/restore contract are different. Exact original-backup checks remain; no global whitespace/comment/ID stripping is added to weaken identity checks. |
+| Crash breadcrumbs | No new synchronous Java crash writer is present in this source release. Existing bounded Java/native logs and private export remain authoritative; no core dump payloads are collected. |
+
+#### Review corrections and the returned installation failure
+
+Independent review found three runtime defects in the initial Fix1 integration:
+the upstream filter's non-atomic controller replacement could overwrite a stock
+device change; cancelling a map veil could leave black pixels while video was
+idle; a failed backing write could leave an incorrect maneuver-opacity cache.
+The repairs use the exact-stock getter weave, preserve a fade through a
+same-session geometry gap and require a successful cached redraw on cancellation,
+and invalidate uncertain opacity state so a later hide cannot be skipped.
+
+`tools/PatchPhoneKeyController.java` hash-guards the private MU1316
+`DSISmartphoneManagerProxy` and intercepts only its `access$900` getter. The
+original `access$902` writer and its volatile-field semantics remain unchanged.
+The generated OEM class is class48 and stays in ignored build output. This is a
+necessary local deviation from the upstream reflection-based install/re-arm;
+additional comparisons around a reflective write would not fix that race.
+
+The owner also returned the **58c7ea0 October 18 card** after INSTALL failed:
+`pfctl: SIOCGIFMTU: No such device or address`, then
+`FAIL: firewall syntax rejected: /mnt/system/etc/pf.ppp0.conf`.
+The card's 76 package hashes match that build. Its transaction log records two
+failed attempts and successful pre-operation rollback, not a successful new
+vehicle installation. All firewall candidates were validated before publication,
+so no candidate firewall variant had been published at the failure point.
+
+The earlier installer parsed each complete variant with `pfctl -n -f`.
+`-n` prevents loading, but ALTQ evaluation can still request an interface MTU.
+The PPP variant contains an ALTQ definition for `ppp0`; requiring this during
+offline installation was wrong. The returned capture does not include a
+simultaneous interface inventory, so it does not independently prove which
+interface existed at that instant.
+
+The corrected installer validates only its self-contained literal filter rule.
+It separately reconstructs and byte-compares the unchanged OEM remainder,
+preserving CRLF and a missing final newline. It does not remove ALTQ, change
+NAT/options, ignore validator failures, or activate an interface to pass.
+Testing mode no longer bypasses this branch: a controlled validator models
+the absent-PPP failure and rejects unexpected input. That fixture is not a
+substitute for QNX execution of the parser.
+
+Review also found an independent earlier native fallback bug: `pfctl -sr`
+was reloaded with unrestricted `-f`, although the snapshot contains no NAT,
+ALTQ or global options. The fallback now uses documented filter-only `-R -f`,
+preserves scrub and queue references, and refuses a detected intervening reload
+instead of submitting that stale snapshot. A failed second capture retains its
+original error and diagnostic stage; only a successful but different snapshot
+is reported as a concurrent reload. `-R` is still a replacement of the
+filter domain, not a kernel-level atomic rule insertion; the project's lock
+does not serialize an unrelated OEM loader. Do not claim that the extra read
+eliminates every external-loader race or that host tests prove vehicle behavior.
+See [QNX 6.5 pfctl options](https://www.qnx.com/developers/docs/6.5.0SP1.update/com.qnx.doc.neutrino_utilities/p/pfctl.html).
+
+The Q7 fallback is retained in the upstream controller source, but the project
+scope and platform gates are not broadened and there is no Q7 validation claim.
+Yuedizhibo explicitly withdrew PR 62's faster startup/frame-reuse changes from
+Fix1. The net source comparison, not the intermediate merge title or stale
+BUILD_INFO fields, determines this update. No opaque upstream JAR or binary is
+used to obtain a feature missing from the released source.
+
+#### Separate Luka performance investigation
+
+Luka was inspected at `a63d54741839c7d30d32dd4e149f693856bcb0db`.
+These three new features are **not enabled by this sync**:
+They are on hold at the owner's request; the read-only exporter below does not
+implement or enable any of them.
+
+| Feature | Evidence and remaining requirement |
+| --- | --- |
+| Maps 30-FPS PPID selector | Upstream's real wire-format tests pass with sanitizers, including existing-identity preservation and moving-buffer growth. Our older Identify dispatcher has no `hook_identify_grow` contract. A proper port must reconcile the GPL dispatcher with the existing AltScreen Identify hook; copying only the header would not be a safe integration. A phone policy target is not guaranteed on-car FPS. |
+| Stock `libairplay.so` queue depth 4 to 2 | Both unique upstream signatures match the owner's retained P5145 library, at `0x8c694` and `0x8c6f4`. In-memory tests change exactly two bytes and reject a half-patched input. This is byte compatibility only. It affects the stock main-screen decoder, not our separate AltScreen decoder. Transactional install/restore integration and parked stability testing are still required before enabling it. |
+| Stock `mcd` patch and detector priority | The retained unit export does not include `mcd` or `mcd.conf`. Upstream's P5087/P5092/K1004 equivalence claim is not exact P5145 evidence. Obtain the unit's originals privately before checking signatures, priority settings and rollback; do not distribute upstream stock binaries. |
+
+The local compatibility checks do not alter the backed-up library, a vehicle,
+or the SD. These findings are not blanket approval for stock-library or daemon
+modifications. Other Luka changes target its different wireless, vehicle-data,
+decoder, audio and M.I.B. installation stack, not components active in this
+Q5 deployment.
+
+#### Exporting the unit's originals
+
+The versioned exporter is
+`altscreen/Toolbox/scripts/export_mcd_originals.sh`. New staged packages include
+it at `Toolbox/scripts/export_mcd_originals.sh`, covered by the SD manifest.
+It is not part of the normal log export and is never run by INSTALL.
+
+To use the existing Toolbox without reinstalling or updating it:
+
+1. Back up the SD, then copy the exporter to its root as `test.sh`. Preserve an
+   existing `test.sh` instead of silently replacing it.
+2. Park with MMI on and put the Toolbox card in SD slot 1.
+3. Select **Green menu -> MQBCoding -> Customization -> Various ->
+   DEV: copy testfiles**. This existing action runs `/net/mmx/fs/sda0/test.sh`.
+4. Wait for **MCD_EXPORT=PASS**, then return the card to the computer.
+   On FAIL, retain the partial output and the message; do not use a restore action.
+
+Each run creates a new `Dump/mcd-original-<date>-<pid>` directory. It contains
+the unit's `mcd`, active `/etc/mcd.conf`, stored `/mnt/system/etc/mcd.conf`,
+and source/export POSIX checksums. Source checksums before and after each copy
+must agree with the copy. A read, copy, comparison or flush failure cannot
+report PASS. The checksum command is explicitly chained to its directory change:
+`set -e` alone does not protect a subshell used in an OR list. A failed `cd`
+must not create a checksum file in the caller's directory.
+The exporter writes only to the SD; if needed it remounts only
+that SD writable. It does not alter installed files, restart a process, run
+a patch, or request a reboot. Keep the export private.
+
+Old process logs name the daemon and configuration but do not contain their
+bytes. The SDK's `mcd` and `mcd.conf` are not unit backups and must not substitute
+for this export. Host fixture success is not QNX/vehicle execution evidence.
+
+### Procedure
 
 Use a temporary branch from Q5. Fetch the public upstream before checking its
 recorded Git blobs. The remote name is `altscreen-upstream`; its URL is

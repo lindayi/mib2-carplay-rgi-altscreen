@@ -23,6 +23,7 @@ public:
     void draw_logo(float opacity, bool over_carplay);
     void release_logo();
     void draw();
+    void draw_faded(float opacity);
     void shutdown();
 
 private:

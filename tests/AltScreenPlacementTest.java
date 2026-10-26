@@ -69,10 +69,10 @@ public final class AltScreenPlacementTest implements InvocationHandler {
         AltScreenPlacement.onVideoReady();
         check(t.moves.isEmpty(),"unknown receiver profile must not guess physical placement");
         AltScreenPlacement.setPhoneProfile(1);
-        check(t.last().equals("3@-445,26"),"card Sport translation: "+t.moves);
+        check(t.last().equals("3@-476,26"),"card Sport keeps stock small-map translation: "+t.moves);
         write(cfg, "full_dx=-120\nsmall_dx=-476\n");
         AltScreenPlacement.poll();
-        check(t.last().equals("3@-445,26") && cfg.isFile(),"legacy shift must not stack or be deleted");
+        check(t.last().equals("3@-476,26") && cfg.isFile(),"legacy shift must not stack or be deleted");
         AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,false);
         check(t.last().equals("3@0,26"),"card full View restores origin");
         AltScreenPlacement.onMapPlacement(dm,1,sport,0,26,-476,0,true);
@@ -92,6 +92,6 @@ public final class AltScreenPlacementTest implements InvocationHandler {
         check(t.moves.size() == before, "inactive must not reclaim video plane");
         cfg.delete();
 
-        System.out.println("AltScreenPlacementTest: PASS (map -476, card -445, no double legacy offset, release and unknown-profile gates)");
+        System.out.println("AltScreenPlacementTest: PASS (map/card -476, no double legacy offset, release and unknown-profile gates)");
     }
 }

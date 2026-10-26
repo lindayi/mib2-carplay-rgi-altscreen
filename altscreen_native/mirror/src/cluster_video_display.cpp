@@ -72,6 +72,29 @@ bool ClusterVideoDisplay::present_overlay_frame() {
     return true;
 }
 
+bool ClusterVideoDisplay::present_frame_faded(const VideoFrame &frame, float opacity) {
+    if (!ready_ || !renderer_.upload_frame(frame)) {
+        fprintf(stderr, "display: faded frame texture upload failed\n");
+        return false;
+    }
+    if (!present_faded(opacity)) return false;
+    --overlay_frame_count_;
+    ++frame_count_;
+    first_frame_presented_ = true;
+    return true;
+}
+
+bool ClusterVideoDisplay::present_faded(float opacity) {
+    if (!ready_) return false;
+    renderer_.draw_faded(opacity);
+    if (!backend_.swap()) {
+        fprintf(stderr, "display: PHASE=EGL_SWAP_FAILED present=faded\n");
+        return false;
+    }
+    ++overlay_frame_count_;
+    return true;
+}
+
 bool ClusterVideoDisplay::present_logo_frame(const unsigned char *rgba,
                                               int width, int height) {
     if (!ready_ || !renderer_.upload_logo_rgba(rgba, width, height))

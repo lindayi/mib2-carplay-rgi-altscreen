@@ -40,7 +40,7 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - Java uses upstream `com.luka.carplay.routeguidance`, not `.rgd`. Update direct
   imports, reflection/ASM names, tests and resource paths together; do not compile
   a second legacy package or substitute the opaque upstream baseline JAR.
-- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins 109 upstream source/data files,
+- `Toolbox/carplay_alt_screen/UPSTREAM.json` pins 110 upstream source/data files,
   including the Unicode table/license and renderer flag atlas. Binary updates
   use exact bytes; divergent edits require review, never text normalization.
   The 9 explicit integration replacements are not claimed as identical upstream
@@ -74,6 +74,31 @@ Do not turn this into a raw conversation log or store credentials/private captur
   `/tmp` rename or delete-before-rename.
 
 ### Source integration candidate: 2026-10-18
+
+- The 2026-10-25 source sync advances yuedizhibo to V3.8 Fix1 `652448d`.
+  Keep the released net diff: upstream withdrew PR 62 startup/frame reuse.
+  Preserve Solid/Reduced backing choices while porting arrow fades. Mirror
+  black/fade transitions remain on its one loop; cached swaps never advance
+  source-progress counters. Phone-key duplicate suppression is gated by live
+  receiver/call/emergency state; the exact-stock getter weave never overwrites
+  the volatile OEM controller. Reflection-based install/re-arm/restore races
+  stock's unsynchronized active-device assignment.
+- The owner approved Fix1's SMALL safe area for both map/card profiles:
+  `(490,72,460,378)`, with Sport `-476`; only FULL retains the wider card area.
+  This supersedes the historical card `-445`/500-pixel SMALL policy below.
+- Luka's new performance features were investigated, not enabled. The exact
+  retained P5145 libairplay matches both queue-depth patch sites, but byte
+  compatibility is not install/rollback or vehicle validation. No unit mcd or
+  mcd.conf is retained. Maps30 PPID needs Identify-dispatcher/growth integration,
+  not a header-only copy. See docs/upstream-baseline.md for the evidence limits.
+- `altscreen/Toolbox/scripts/export_mcd_originals.sh` is a standalone, private
+  SD export, not an installer or optimization. Copy it as SD-root `test.sh`
+  for Toolbox's existing Various -> DEV entry. It must preserve source files,
+  old exports and explicit failure results; SDK daemon/config copies are not
+  vehicle originals. Stage it with the SD checksum manifest, never run it from
+  INSTALL or ordinary log export.
+  Explicitly chain its checksum command after successful `cd`; an OR-list
+  subshell suppresses `set -e` and can otherwise write outside the export.
 
 - Prefer upstream implementation with local additions and narrow MU1316 adapters.
   Do not treat an existing local path as a reason to omit an upstream feature.
@@ -198,6 +223,20 @@ Do not turn this into a raw conversation log or store credentials/private captur
   policy out of this local SI/session contract.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
+- The returned58c7ea0 card failed INSTALL while complete pf.ppp0.conf validation
+  made pfctl query an ALTQ interface MTU. Both attempts logged pre-operation
+  rollback; this is not a successful Fix1 installation. Validate only the
+  inserted literal filter fragment and byte-check the unchanged OEM remainder,
+  including CRLF/final-newline state. Never bypass the validator in host fixtures.
+  Dynamic `-sr` snapshots may load only with `-R`; preserve scrub/queue rules and
+  refuse detected concurrent reloads. The process lock does not serialize OEM
+  loaders, and filter-only loading is not an atomic insertion guarantee.
+  Preserve a failed capture's errno/stage; reserve concurrent-reload diagnostics
+  for a successfully captured ruleset that actually differs.
+- After partial opacity writes, record success or invalidate cached state so
+  a later hide cannot be skipped. A cancelled map veil must finish a cached
+  full-opacity swap even without phone frames or active overlays; geometry
+  gaps must not strand black pixels. Test the real reconciliation path.
 - Corrected INSTALL includes boot-only START arming inside a unit-bound,
   checksummed transaction. Keep runtime boot-inert until commit/activation.
   Preserve pre-operation snapshots separately from original stock backups;

@@ -7,12 +7,18 @@
 FIREWALL_STATIC_RULE="pass in quick on carplay0 proto tcp from any to any port = 6031 allow-opts"
 FIREWALL_VARIANT_BACKUP_DIR="$BACKUP_ROOT/firewall-variants-original"
 
+firewall_final_newline(){
+    last=$(tail -c 1 "$1" && printf '.') || return 1
+    if [ "$last" = "$(printf '\n.')" ]; then echo 1; else echo 0; fi
+}
 strip_firewall_block(){
-    awk -v begin="$FIREWALL_BEGIN" -v end="$FIREWALL_END" '
+    final_nl=$(firewall_final_newline "$1") || return 1
+    awk -v begin="$FIREWALL_BEGIN" -v end="$FIREWALL_END" -v final_nl="$final_nl" '
+      function emit(line){if(wrote)printf "\n";printf "%s",line;wrote=1}
       $0==begin {if(inside||seen++)exit 9;inside=1;next}
       $0==end {if(!inside)exit 9;inside=0;next}
-      !inside {print}
-      END{if(inside)exit 9}
+      !inside {emit($0)}
+      END{if(inside)exit 9;if(wrote&&final_nl)printf "\n"}
     ' "$1"
 }
 pf_variant_names(){
@@ -68,15 +74,17 @@ backup_firewall_variants() (
 stage_static_firewall_file() (
     live=$1; staged=$2
     strip_firewall_block "$live" > "$staged.clean" || return 1
-    awk -v begin="$FIREWALL_BEGIN" -v end="$FIREWALL_END" -v rule="$FIREWALL_STATIC_RULE" '
+    final_nl=$(firewall_final_newline "$staged.clean") || return 1
+    awk -v begin="$FIREWALL_BEGIN" -v end="$FIREWALL_END" -v rule="$FIREWALL_STATIC_RULE" -v final_nl="$final_nl" '
+      function emit(line){if(wrote)printf "\n";printf "%s",line;wrote=1}
       {
         key=$0; sub(/\r$/, "", key)
         if(!done && key ~ /^[ \t]*block[ \t]+((drop|return)[ \t]+)?in[ \t]+(quick[ \t]+)?on[ \t]+carplay0[ \t]+all[ \t]*$/) {
-          print begin; print rule; print end; done=1
+          emit(begin); emit(rule); emit(end); done=1
         }
-        print
+        emit($0)
       }
-      END{if(!done)exit 9}
+      END{if(!done)exit 9;if(wrote&&final_nl)printf "\n"}
     ' "$staged.clean" > "$staged"
     result=$?
     if [ "$result" = 9 ]; then
@@ -85,13 +93,21 @@ stage_static_firewall_file() (
     elif [ "$result" != 0 ]; then
         return 1
     fi
-    if [ "$TESTING" != 1 ]; then
+    strip_firewall_block "$staged" > "$staged.verify" &&
+        same_bytes "$staged.clean" "$staged.verify" || {
+            say "FAIL: firewall candidate changed unrelated configuration: $live"; return 1;
+        }
+    if grep -Fxq "$FIREWALL_BEGIN" "$staged"; then
+        # Only our literal filter rule changed. Parsing untouched inactive ALTQ
+        # sections can query absent interfaces even with pfctl -n (PPP on MU1316).
+        printf '%s\n' "$FIREWALL_STATIC_RULE" > "$staged.rule" || return 1
         pfctl_rel=$(locate_first "/armle/sbin/pfctl /mnt/app/armle/sbin/pfctl /sbin/pfctl") || {
             say "FAIL: pfctl unavailable; firewall syntax was not checked"; return 1;
         }
-        "$(p "$pfctl_rel")" -n -f "$staged" || {
-            say "FAIL: firewall syntax rejected: $live"; return 1;
+        "$(p "$pfctl_rel")" -n -f "$staged.rule" || {
+            say "FAIL: firewall rule syntax rejected: $live"; return 1;
         }
+        say "FIREWALL_VALIDATE=FILTER_FRAGMENT OEM_REMAINDER=UNCHANGED file=$live"
     fi
 )
 install_static_firewall_rules() (
@@ -101,7 +117,9 @@ install_static_firewall_rules() (
     names=$(pf_variant_names) || return 1
     pf_dir=$(dirname -- "$(p "$LIVE_PF_CONF")")
     cleanup(){
-        for name in pf.conf $names; do rm -f "$dir/$name" "$dir/$name.clean"; done
+        for name in pf.conf $names; do
+            rm -f "$dir/$name" "$dir/$name.clean" "$dir/$name.verify" "$dir/$name.rule"
+        done
         rmdir "$dir"
     }
     trap cleanup EXIT

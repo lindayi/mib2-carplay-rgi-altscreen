@@ -486,17 +486,14 @@ int alt_phone_card_mode(void) {
 
 /*
  * Safe-area geometry (x/w only; every view keeps y=72,h=378, bottom=450).
- * Card profiles use the Logo-tree layout: one wider FULL area shared by
- * Classic and Sport (300..1140), and one SMALL area (470..970) that Classic
- * shows in place while Sport pans it by -445 to center it in the sport slot.
- * Every other profile keeps the V3.5 OEM-measured rectangles.
+ * Card profiles widen FULL only (300..1140). Every SMALL view keeps the
+ * OEM-measured rectangle (490..950) and the stock Sport translation.
  */
-#define ALT_LOGO_SPORT_SMALL_DX (-445)
 struct alt_layout_rects { uint32_t full_x, full_w, small_x, small_w; int card; };
 static struct alt_layout_rects alt_layout_rects(void) {
     struct alt_layout_rects r;
     if (alt_phone_card_profile()) {
-        r.full_x = 300u; r.full_w = 840u; r.small_x = 470u; r.small_w = 500u; r.card = 1;
+        r.full_x = 300u; r.full_w = 840u; r.small_x = 490u; r.small_w = 460u; r.card = 1;
     } else {
         r.full_x = 370u; r.full_w = 700u; r.small_x = 490u; r.small_w = 460u; r.card = 0;
     }
@@ -565,10 +562,7 @@ static int alt_load_measured_k1004_safe_area(uint32_t display_w,
         r.h = 378u;
         r.physical_w = g.small_w;
         r.physical_h = 378u;
-        /* Card profile: B9 Sport centers the shared SMALL area (-445), the
-         * mirror display applies the same pan. */
-        r.renderer_dx = g.card && strstr(layout, "LayoutMIB2HighB9Sport") ?
-            ALT_LOGO_SPORT_SMALL_DX : small_dx;
+        r.renderer_dx = small_dx;
         r.renderer_dy = small_dy;
     } else if (!strcmp(view, "FULL")) {
         r.x = g.full_x;
@@ -709,7 +703,7 @@ static cf_obj make_view_areas(uint32_t w, uint32_t h) {
  * only the nested safeArea changes. The displayable3 sink remains 1440x455.
  *
  * index 0 = FULL  (370,72,700x378)   card profile: (300,72,840x378)
- * index 1 = SMALL (490,72,460x378)   card profile: (470,72,500x378)
+ * index 1 = SMALL (490,72,460x378)   every profile
  *
  * V3.5 preserves the V3.1/V3.2 horizontal OEM constraints while using the
  * vehicle-tuned vertical safe region top=72, bottom=450. Card profiles use the
@@ -932,7 +926,7 @@ void *alt_build_cluster_display(void) {
         struct alt_layout_rects g = alt_layout_rects();
         altscreen_log("ALTAREA_CARD_LAYOUT profile=%s full=%u,72,%ux378 small=%u,72,%ux378 sport_small_pan=%s",
                       g.card ? "CARD_LOGO" : "DEFAULT_V35", g.full_x, g.full_w,
-                      g.small_x, g.small_w, g.card ? "-445" : "OEM_STAGE_DX");
+                      g.small_x, g.small_w, "OEM_STAGE_DX");
     }
     altscreen_log("ALTINFO built type=%u %ux%u@%u uuid=%s features=0x%x input=%d fields=%u",
                   d->stream_type, d->width_pixels, d->height_pixels, d->max_fps,

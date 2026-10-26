@@ -16,7 +16,8 @@ the CNY 100 ceiling is not permission to charge for installing this build.
 ## Origin and license boundary
 
 Imported on 2026-10-18 from **V3.8**, commit
-`141e7ed33775af02a5af0b8616ee3c6250eea997`, using the local read-only checkout.
+`141e7ed33775af02a5af0b8616ee3c6250eea997`; updated on 2026-10-25 to
+**V3.8 Fix1**, `652448ddc1d5c9dd2f4a673b9950cf3c6a9195a4`.
 
 | Local source | Upstream source |
 | --- | --- |
@@ -79,7 +80,7 @@ mirror-only preload, not part of either source-built artifact.
   FULL default and both safe-area candidates are declared; accepted SMALL replay
   produces a real same-session updateViewArea, without waiting for a first frame.
   Map areas are FULL `(370,72,700,378)`, SMALL `(490,72,460,378)`; card areas are
-  FULL `(300,72,840,378)`, SMALL `(470,72,500,378)`. The exec-time profile is
+  FULL `(300,72,840,378)`, SMALL `(490,72,460,378)`. The exec-time profile is
   mandatory before `/info`; missing/invalid values refuse the added declaration.
   The outer legacy RGI initial-area override automatically withdraws when the
   source queue export is present, before resolving CF or opening its old config.
@@ -105,6 +106,16 @@ mirror-only preload, not part of either source-built artifact.
   and measured presentation FPS; current-stream teardown retains the exact
   `PHASE=DIRECT111_TAP_STOP stream=` marker, distinct from stale-stream teardown.
   The health reader's four H264 counters remain at offsets `0x18` through `0x24`.
+- **Fix1 map transition:** the existing mirror loop observes valid Java
+  geometry for the current decoded writer and applies the upstream black hold
+  (150 ms plus two fresh frames, bounded at 450 ms) and 150 ms fade on an offset
+  change. It adds no placement writer. Cached fade swaps count only as local
+  overlay frames, so animation cannot mask stalled phone video. PID, stream,
+  epoch and short RAM lease checks prevent old-session geometry from beginning
+  a new-session transition. Classic same-offset changes do not trigger it.
+  Same-session geometry gaps preserve the pending fade. Cancellation on a
+  changed identity schedules a full-opacity cached redraw and clears it only
+  after a successful swap, counted as overlay work rather than source progress.
 
 ## Required parent integration
 
@@ -207,8 +218,8 @@ mirror-only preload, not part of either source-built artifact.
    correctness no longer depends on cleanup defeating an old producer.
    No `/tmp` fallback. Workers sample
    at the existing 100 ms cadence; stock callbacks and `/info` do not open files.
-   Java remains the sole physical writer: upstream card Sport SMALL uses **-445**
-   instead of map-profile **-476**; preserve the selected profile until reconnect.
+   Java remains the sole physical writer: Fix1 uses stock Sport SMALL **-476**
+   for both map and card profiles; preserve the selected profile until reconnect.
    The native hook's calculated physical rectangles are diagnostics, not writes.
    The full selected URL must preserve cached sign/ETA/profile and live card
    position across route/View/manual reapply. Phone sign is phone pixels only.
@@ -217,7 +228,7 @@ mirror-only preload, not part of either source-built artifact.
 
 - Mirror CLI: `--verbose`, optional diagnostic `--sink-test-grid`; no
   `--stream-supervisor`, version-query or build-info CLI. Normal startup logs
-  `PHASE=BUILD id=carplay-private111-mu1316-source-v3.8-java-placement`.
+  `PHASE=BUILD id=carplay-private111-mu1316-source-v3.8-fix1-java-placement`.
 - Build output directory `build/altscreen` contains `libcarplay_altscreen.so`,
   `carplay-alt111-mirror-display`, `SHA256SUMS`, `ELF_CHECKS.txt`,
   `QNX_LOAD_LAYOUT.json`, `SOURCES.sha256`. The source manifest hashes every file
@@ -248,7 +259,11 @@ mirror-only preload, not part of either source-built artifact.
   before the first terminal inbound `carplay0` block. The hook deliberately
   reads the real target path; filesystem prefixes belong only to installer/test
   fixtures. Missing static authorization retains upstream's bounded fallback,
-  not an invented success signal. No firewall expectation was changed here.
+  not an invented success signal. The fallback loads its `-sr` snapshot with
+  `-R -f`, never unrestricted `-f`, preserving other firewall domains. A second
+  snapshot rejects detected concurrent rule changes. This is not an atomic
+  insertion against uncoordinated OEM reloads; all failures retain the existing
+  fail-closed port/readiness behavior.
 
 ## Build and verification
 

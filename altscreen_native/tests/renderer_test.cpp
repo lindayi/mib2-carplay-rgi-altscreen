@@ -5,11 +5,28 @@
 #include <EGL/egl.h>
 #include "../mirror/src/gl_renderer.h"
 #include "../mirror/src/cluster_video_display.h"
+#include "../mirror/src/placement_veil.h"
 #include "../hook/private111_direct_shm.h"
 #include <stddef.h>
+#define ALTSCREEN_HMI_STATE "renderer-hmi.fixture"
+#define main unused_mirror_main
+#include "../mirror/src/main.cpp"
+#undef main
 
 static unsigned swap_attempts;
 static bool fail_swap;
+Private111DirectSource::Private111DirectSource(bool) : generation_(7), writer_pid_(42) {}
+Private111DirectSource::~Private111DirectSource() {}
+bool Private111DirectSource::current_session_active() { return true; }
+
+static void hmi(const char *view, unsigned epoch) {
+    struct timeval tv; assert(gettimeofday(&tv,NULL)==0);
+    const unsigned long long expiry=(unsigned long long)tv.tv_sec*1000+tv.tv_usec/1000+1200;
+    FILE *f=fopen(ALTSCREEN_HMI_STATE,"w"); assert(f);
+    fprintf(f,"view=%s\nlayout_name=LayoutMIB2HighB9Sport\nsmall_stage_dx=-476\nsmall_stage_dy=0\n"
+        "receiver_pid=42\nreceiver_epoch=%u\nexpiry_ms=%llu\n",view,epoch,expiry);
+    assert(fclose(f)==0);
+}
 
 /* Replace QNX window management only; keep the real presenter, GLES and EGL. */
 Mhi2qBackend::Mhi2qBackend() : ready_(false) {}
@@ -76,6 +93,12 @@ int main() {
         renderer.draw();
         glReadPixels(720, 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, sample);
         assert(sample[0] > 250 && sample[1] > 250 && sample[2] > 250);
+        renderer.draw_faded(0.5f);
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]>=125 && sample[0]<=130 && sample[3]==255);
+        renderer.draw_faded(0.f);
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]==0 && sample[1]==0 && sample[2]==0 && sample[3]==255);
         assert(glGetError() == GL_NO_ERROR);
     }
     {
@@ -109,6 +132,50 @@ int main() {
         unsigned char sample[4];
         glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
         assert(sample[0]<3 && sample[1]<3 && sample[2]<3 && sample[3]==255);
+        PlacementVeil veil;
+        const unsigned long source_before=presenter.frame_count();
+        veil.begin(1000000);
+        assert(veil.present(presenter,NULL,1000000) && veil.active && !veil.fading);
+        assert(veil.present(presenter,&frame,1100000) && !veil.fading);
+        assert(veil.present(presenter,&frame,1150000) && veil.fading);
+        assert(veil.present(presenter,NULL,1225000) && veil.active);
+        fail_swap=true;
+        assert(!veil.present(presenter,NULL,1300000) && veil.active);
+        fail_swap=false;
+        assert(veil.present(presenter,NULL,1300000) && !veil.active);
+        assert(presenter.frame_count()==source_before+2);
+        veil.begin(2000000);
+        assert(veil.present(presenter,NULL,2450000) && veil.fading);
+        assert(veil.present(presenter,NULL,2600000) && !veil.active);
+        assert(presenter.frame_count()==source_before+2); /* cached fade cannot hide a decoder stall */
+        memset(nv12,235,8);
+        assert(presenter.present_frame(frame));
+        const unsigned long frames_before_gap=presenter.frame_count();
+        Private111DirectSource source(false);
+        hmi("FULL",3); reconcile_oem_map_placement(presenter,source,"fixture",false);
+        hmi("SMALL",3); reconcile_oem_map_placement(presenter,source,"fixture",true);
+        assert(g_veil.active);
+        unsigned long long started=g_veil.start_us;
+        assert(g_veil.present(presenter,NULL,started));
+        assert(remove(ALTSCREEN_HMI_STATE)==0);
+        reconcile_oem_map_placement(presenter,source,"gap",true);
+        hmi("SMALL",3); reconcile_oem_map_placement(presenter,source,"return",true);
+        assert(g_veil.present(presenter,NULL,started+450000));
+        assert(g_veil.present(presenter,NULL,started+600000));
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]>250 && !g_veil.needs_present());
+        assert(presenter.frame_count()==frames_before_gap);
+        hmi("FULL",3); reconcile_oem_map_placement(presenter,source,"next-view",true);
+        assert(g_veil.present(presenter,NULL,g_veil.start_us));
+        hmi("FULL",4); reconcile_oem_map_placement(presenter,source,"new-epoch",true);
+        assert(g_veil.needs_present() && g_veil.restore_pending);
+        fail_swap=true;
+        assert(!g_veil.present(presenter,NULL,monotonic_us()) && g_veil.restore_pending);
+        fail_swap=false;
+        assert(g_veil.present(presenter,NULL,monotonic_us()) && !g_veil.needs_present());
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]>250 && presenter.frame_count()==frames_before_gap);
+        assert(remove(ALTSCREEN_HMI_STATE)==0);
     }
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroyContext(display, context); eglDestroySurface(display, surface);

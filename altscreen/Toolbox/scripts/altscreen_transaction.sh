@@ -145,16 +145,43 @@ find_startup(){
     done
     return 1
 }
+# QNX fs-dos can report an unreadable parent entry while listing every real
+# child. Only that exact diagnostic is tolerated; manifests still verify data.
+snapshot_find(){
+    output=$1; shift
+    find "$@" > "$output" 2>"$output.err" && { rm -f "$output.err"; return 0; }
+    if [ -s "$output.err" ] &&
+        ! grep -Ev '/\.\.\.?\)?: Filename too long$' "$output.err" | grep -q .; then
+        log "SNAPSHOT_LIST=FSDOS_PARENT_ENTRY_TOLERATED"
+        rm -f "$output.err"
+        return 0
+    fi
+    cat "$output.err" >&2
+    rm -f "$output.err"
+    return 1
+}
+copy_snapshot_tree() (
+    src=$1; dst=$2
+    cd "$src" || exit 1
+    snapshot_find "$TXN/copy.nodes" . ! -type d ! -type f -print &&
+        [ ! -s "$TXN/copy.nodes" ] &&
+        snapshot_find "$TXN/copy.dirs" . -type d -print &&
+        grep -q '^\.$' "$TXN/copy.dirs" &&
+        snapshot_find "$TXN/copy.files" . -type f -print || exit 1
+    while IFS= read -r d; do ensure_dirs "$dst/$d" || exit 1; done < "$TXN/copy.dirs"
+    while IFS= read -r f; do cp "$f" "$dst/$f" || exit 1; done < "$TXN/copy.files"
+    rm -f "$TXN/copy.nodes" "$TXN/copy.dirs" "$TXN/copy.files"
+)
 dir_manifest() (
     cd "$1" || exit 1
     # Preserve empty directories; refuse links/special nodes rather than follow
     # them outside the transaction. Modes are separate: an SD FAT filesystem
     # cannot represent the original HU permissions on snapshot copies.
-    find . ! -type d ! -type f -print > "$2.nodes" || exit 1
+    snapshot_find "$2.nodes" . ! -type d ! -type f -print || exit 1
     [ ! -s "$2.nodes" ] || { rm -f "$2.nodes"; exit 1; }
     rm -f "$2.nodes" || exit 1
-    find . -type d -print > "$2.dirs" && sort "$2.dirs" > "$2" || exit 1
-    find . -type f -print > "$2.unsorted" && sort "$2.unsorted" > "$2.paths" || exit 1
+    snapshot_find "$2.dirs" . -type d -print && sort "$2.dirs" > "$2" || exit 1
+    snapshot_find "$2.unsorted" . -type f -print && sort "$2.unsorted" > "$2.paths" || exit 1
     while IFS= read -r name; do
         printf '%s|' "$name" >> "$2" && cksum < "$name" >> "$2" || exit 1
     done < "$2.paths"
@@ -162,7 +189,7 @@ dir_manifest() (
 )
 dir_modes() (
     cd "$1" || exit 1
-    find . -print > "$2.unsorted" && sort "$2.unsorted" > "$2.paths" || exit 1
+    snapshot_find "$2.unsorted" . -print && sort "$2.unsorted" > "$2.paths" || exit 1
     : > "$2" || exit 1
     while IFS= read -r name; do
         case "$name" in *'|'*) exit 1 ;; esac
@@ -182,7 +209,7 @@ snapshot_item(){
         if [ "$kind" = dir ]; then
             [ -d "$path" ] || return 1
             ensure_dirs "$TXN/data/$name" || return 1
-            cp -R "$path/." "$TXN/data/$name/" &&
+            copy_snapshot_tree "$path" "$TXN/data/$name" &&
                 same_dir "$path" "$TXN/data/$name" &&
                 dir_manifest "$TXN/data/$name" "$TXN/meta/$name.manifest" &&
                 dir_modes "$path" "$TXN/meta/$name.modes" &&
@@ -293,7 +320,7 @@ restore_item(){
     [ ! -L "$path" ] && [ ! -L "$publish" ] || return 1
     if [ "$kind" = dir ]; then
         rm -rf "$publish" && ensure_dirs "$publish" &&
-            cp -R "$TXN/data/$name/." "$publish/" &&
+            copy_snapshot_tree "$TXN/data/$name" "$publish" &&
             same_dir "$TXN/data/$name" "$publish" || return 1
         case "$path" in "$SD"/*) ;; *)
             while IFS='|' read -r mode rel; do

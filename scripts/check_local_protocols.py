@@ -112,6 +112,10 @@ with zipfile.ZipFile(jar) as archive:
     for name in ("CarPlayHook", "cluster/ClusterStateController", "cluster/DisplayStateSnapshot"):
         if "com/luka/carplay/" + name + ".class" not in classes:
             raise SystemExit("Missing upstream lifecycle/controller class: " + name)
+    for name in ("com/luka/carplay/telephony/StockPhoneKeyFilter.class",
+                 "de/audi/app/terminalmode/dsi/DSISmartphoneManagerProxy.class"):
+        if name not in classes:
+            raise SystemExit("Missing guarded phone-key integration class: " + name)
     for name in classes:
         magic, minor, major = struct.unpack(">IHH", archive.read(name)[:8])
         if magic != 0xCAFEBABE or (minor, major) != (0, 48):
