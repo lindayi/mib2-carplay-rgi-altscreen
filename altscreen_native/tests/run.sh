@@ -16,6 +16,9 @@ cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined -ffunction-sections -fdata-
 cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined "$ROOT/tests/hmi_contract_test.c" \
     -o hmi_contract_test
 ./hmi_contract_test
+cc -D_GNU_SOURCE -O1 -g -Wall -Wextra -Werror "$ROOT/tests/firewall_runtime_test.c" \
+    "$ROOT/hook/p1404_firewall.c" -ldl -pthread -o pfctl
+./pfctl
 cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined -ffunction-sections -fdata-sections "$ROOT/tests/recovery_test.c" \
     -Wl,--gc-sections -ldl -pthread -o recovery_test
 ./recovery_test
@@ -45,8 +48,8 @@ g++ -O2 -Wall -Wextra -ffunction-sections -fdata-sections -I"$ROOT/hook" \
     "$ROOT/tests/placement_state_test.cpp" "$ROOT/mirror/src/state_snapshot.cpp" \
     -Wl,--gc-sections -o placement_state_test
 ./placement_state_test
-g++ -O2 -Wall -Wextra "$ROOT/tests/renderer_test.cpp" \
+g++ -O2 -Wall -Wextra -ffunction-sections -fdata-sections -I"$ROOT/hook" "$ROOT/tests/renderer_test.cpp" \
     "$ROOT/mirror/src/gl_renderer.cpp" "$ROOT/mirror/src/cluster_video_display.cpp" \
-    -lEGL -lGLESv2 -o renderer_test
+    "$ROOT/mirror/src/state_snapshot.cpp" -Wl,--gc-sections -lEGL -lGLESv2 -o renderer_test
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 ./renderer_test
 echo ALTSCREEN_HOST_TESTS=PASS

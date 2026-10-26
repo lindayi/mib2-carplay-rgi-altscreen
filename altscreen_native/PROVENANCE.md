@@ -113,6 +113,9 @@ mirror-only preload, not part of either source-built artifact.
   overlay frames, so animation cannot mask stalled phone video. PID, stream,
   epoch and short RAM lease checks prevent old-session geometry from beginning
   a new-session transition. Classic same-offset changes do not trigger it.
+  Same-session geometry gaps preserve the pending fade. Cancellation on a
+  changed identity schedules a full-opacity cached redraw and clears it only
+  after a successful swap, counted as overlay work rather than source progress.
 
 ## Required parent integration
 
@@ -256,7 +259,11 @@ mirror-only preload, not part of either source-built artifact.
   before the first terminal inbound `carplay0` block. The hook deliberately
   reads the real target path; filesystem prefixes belong only to installer/test
   fixtures. Missing static authorization retains upstream's bounded fallback,
-  not an invented success signal. No firewall expectation was changed here.
+  not an invented success signal. The fallback loads its `-sr` snapshot with
+  `-R -f`, never unrestricted `-f`, preserving other firewall domains. A second
+  snapshot rejects detected concurrent rule changes. This is not an atomic
+  insertion against uncoordinated OEM reloads; all failures retain the existing
+  fail-closed port/readiness behavior.
 
 ## Build and verification
 

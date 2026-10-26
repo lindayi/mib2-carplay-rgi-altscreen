@@ -478,7 +478,6 @@ static bool reconcile_oem_map_placement(ClusterVideoDisplay &display,
         static OemMapPlacement previous;
         const OemMapPlacement p=load_session_map_placement(source);
         if (!p.recognized) {
-            have_previous=false;
             return false;
         }
         if (have_previous && previous.epoch==p.epoch && previous.writer==p.writer
@@ -488,7 +487,7 @@ static bool reconcile_oem_map_placement(ClusterVideoDisplay &display,
             fprintf(stderr,"direct111: PHASE=OEM_MAP_VEIL_BEGIN placement_owner=JAVA offset=%d,%d->%d,%d\n",
                 previous.dx,previous.dy,p.dx,p.dy);
         } else if (!have_previous || previous.epoch!=p.epoch || previous.writer!=p.writer
-                || previous.stream!=p.stream) g_veil.reset();
+                || previous.stream!=p.stream) g_veil.cancel();
         previous=p;
         have_previous=true;
         return false;
@@ -1247,7 +1246,7 @@ int main(int argc, char **argv) {
 
             unsigned interval = carplay_overlay_frame_interval_ms ?
                 carplay_overlay_frame_interval_ms() : 0;
-            if (g_veil.active) {
+            if (g_veil.needs_present()) {
                 if (!g_veil.present(display, NULL, idle_now)) break;
                 last_present_us = idle_now;
             } else if (interval && idle_now >= last_present_us &&

@@ -68,7 +68,6 @@ public final class TelephonyModule implements Module {
             CarplayBus.getInstance().addObserver(CarplayBus.EVT_TEL_COMM, observer);
             worker = new Thread(new Runnable() { public void run() { work(epoch); } }, "carplay-telephony");
             worker.setDaemon(true);
-            StockPhoneKeyFilter.install(fw.context());
             worker.start();
             return true;
         } catch (Throwable t) {
@@ -94,7 +93,6 @@ public final class TelephonyModule implements Module {
             lock.notifyAll();
         }
         GatedPhoneService.setCommands(null);
-        StockPhoneKeyFilter.uninstall();
         CarplayBus bus = CarplayBus.getInstance();
         if (o != null) {
             bus.removeObserver(CarplayBus.EVT_TEL_LISTS, o);
@@ -111,10 +109,6 @@ public final class TelephonyModule implements Module {
 
     private synchronized void stopIfEpoch(int epoch) {
         if (isEpoch(epoch)) stop();
-    }
-
-    private synchronized void refreshStockPhoneFilter(int epoch) {
-        if (isEpoch(epoch) && GatedPhoneService.dropStockPhoneKey(20)) StockPhoneKeyFilter.ensure();
     }
 
     static boolean isEnabled() {
@@ -201,7 +195,6 @@ public final class TelephonyModule implements Module {
                 }
                 if (a != null && isCurrent(a.connection))
                     a.service.perform(a.action, a.number, this, epoch, a.connection);
-                refreshStockPhoneFilter(epoch);
                 if (receiver != synced && isEpoch(epoch) && isCurrent(receiver)
                         && CarplayBus.getInstance().sendBinary(CarplayBus.CMD_SYNC_REQ, new byte[0], receiver))
                     synced = receiver;

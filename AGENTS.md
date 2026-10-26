@@ -79,8 +79,10 @@ Do not turn this into a raw conversation log or store credentials/private captur
   Keep the released net diff: upstream withdrew PR 62 startup/frame reuse.
   Preserve Solid/Reduced backing choices while porting arrow fades. Mirror
   black/fade transitions remain on its one loop; cached swaps never advance
-  source-progress counters. Phone-key duplicate suppression is owned by the
-  existing telephony worker and gated by live receiver/call/emergency state.
+  source-progress counters. Phone-key duplicate suppression is gated by live
+  receiver/call/emergency state; the exact-stock getter weave never overwrites
+  the volatile OEM controller. Reflection-based install/re-arm/restore races
+  stock's unsynchronized active-device assignment.
 - The owner approved Fix1's SMALL safe area for both map/card profiles:
   `(490,72,460,378)`, with Sport `-476`; only FULL retains the wider card area.
   This supersedes the historical card `-445`/500-pixel SMALL policy below.
@@ -219,6 +221,18 @@ Do not turn this into a raw conversation log or store credentials/private captur
   policy out of this local SI/session contract.
 - Fixed TCP 6031 rules must cover applicable per-uplink PF files, not just pf.conf.
   Keep exact original variant backups, candidate validation and rollback.
+- The returned58c7ea0 card failed INSTALL while complete pf.ppp0.conf validation
+  made pfctl query an ALTQ interface MTU. Both attempts logged pre-operation
+  rollback; this is not a successful Fix1 installation. Validate only the
+  inserted literal filter fragment and byte-check the unchanged OEM remainder,
+  including CRLF/final-newline state. Never bypass the validator in host fixtures.
+  Dynamic `-sr` snapshots may load only with `-R`; preserve scrub/queue rules and
+  refuse detected concurrent reloads. The process lock does not serialize OEM
+  loaders, and filter-only loading is not an atomic insertion guarantee.
+- After partial opacity writes, record success or invalidate cached state so
+  a later hide cannot be skipped. A cancelled map veil must finish a cached
+  full-opacity swap even without phone frames or active overlays; geometry
+  gaps must not strand black pixels. Test the real reconciliation path.
 - Corrected INSTALL includes boot-only START arming inside a unit-bound,
   checksummed transaction. Keep runtime boot-inert until commit/activation.
   Preserve pre-operation snapshots separately from original stock backups;

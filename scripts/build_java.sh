@@ -84,6 +84,8 @@ docker run --rm \
   java -cp "$GEN:$ASM" PatchNavigationSettings "/tools/out/$STOCK_JAR_NAME" "$OUT"
   javac -cp "$ASM" -d "$GEN" /src/tools/PatchNativeRouteState.java
   java -cp "$GEN:$ASM" PatchNativeRouteState "/tools/out/$STOCK_JAR_NAME" "$OUT"
+  javac -cp "$ASM" -d "$GEN" /src/tools/PatchPhoneKeyController.java
+  java -cp "$GEN:$ASM" PatchPhoneKeyController "/tools/out/$STOCK_JAR_NAME" "$OUT"
   (cd "$OUT" && jar cf "$OUTJAR" .)
   rm -rf /src/build/java
 '

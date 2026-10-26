@@ -439,7 +439,8 @@ static int apply_rule(uint16_t port, int enable, struct p1404_pf_lease *lease,
                       int *port_conflict) {
     char *before = NULL, *after = NULL;
     char path[96];
-    char *argv[] = { "pfctl", "-f", path, NULL };
+    /* -sr contains filter/normalization rules, not NAT, ALTQ or global options. */
+    char *argv[] = { "pfctl", "-R", "-f", path, NULL };
     FILE *fp = NULL;
     size_t cap;
     int changed = 0, ok = 0, n, saved, write_ok, new_owner = -1, reload_attempted = 0;
@@ -507,6 +508,16 @@ static int apply_rule(uint16_t port, int enable, struct p1404_pf_lease *lease,
         goto done;
     }
     if (!changed) { ok = 1; goto done; }
+    {
+        char *current = capture_rules(port, deadline);
+        if (!current || strcmp(current, before)) {
+            free(current);
+            g_pf_stage = "rules_changed_before_reload";
+            errno = EAGAIN;
+            goto done;
+        }
+        free(current);
+    }
     n = snprintf(path, sizeof(path), "/tmp/carplay_alt111_pf_%ld_%u.conf",
                  (long)getpid(), (unsigned)port);
     if (n <= 0 || (size_t)n >= sizeof(path)) goto done;

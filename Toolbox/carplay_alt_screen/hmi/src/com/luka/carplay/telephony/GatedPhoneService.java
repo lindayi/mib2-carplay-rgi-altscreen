@@ -21,7 +21,7 @@
  * Ported from LuKa's mib2q-carplay-rgi (GPL-3.0).  Differences: call state and dial
  * use MU1316's stock event bus instead of a patched CarplayDSILifecycleController;
  * StockPhoneKeyFilter drops the duplicate steering-wheel HID copy only during
- * a live, eligible CarPlay call. The module worker owns filter installation.
+ * a live, eligible CarPlay call. A guarded getter weave leaves OEM assignments untouched.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */

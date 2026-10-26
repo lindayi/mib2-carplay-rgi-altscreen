@@ -9,12 +9,17 @@
 #include <string.h>
 
 struct PlacementVeil {
-    bool active, fading;
+    bool active, fading, restore_pending;
     unsigned long long start_us, fade_start_us, last_present_us;
     unsigned frames;
 
     PlacementVeil() { reset(); }
     void reset() { memset(this, 0, sizeof(*this)); }
+    void cancel() {
+        if (active) restore_pending = true;
+        active = fading = false;
+    }
+    bool needs_present() const { return active || restore_pending; }
     void begin(unsigned long long now) {
         reset();
         active = true;
@@ -22,6 +27,11 @@ struct PlacementVeil {
     }
     bool present(ClusterVideoDisplay &display, const VideoFrame *frame,
                  unsigned long long now) {
+        if (restore_pending) {
+            if (!(frame ? display.present_frame(*frame) : display.present_overlay_frame())) return false;
+            restore_pending = false;
+            return true;
+        }
         if (!active) return frame ? display.present_frame(*frame) : true;
         const unsigned long long held = now >= start_us ? now - start_us : 450000ULL;
         if (frame) ++frames;

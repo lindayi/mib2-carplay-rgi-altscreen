@@ -101,7 +101,11 @@ public final class TelephonyTest {
         sun.misc.Unsafe unsafe=(sun.misc.Unsafe)field(sun.misc.Unsafe.class,"theUnsafe").get(null);
         final Object manager=unsafe.allocateInstance(Class.forName("de.audi.app.terminalmode.dsi.DSISmartphoneManagerProxy"));
         final Field controller=field(manager.getClass(),"phoneCallController");
+        final Method readController=manager.getClass().getDeclaredMethod("access$900",manager.getClass());
+        readController.setAccessible(true);
         final de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture stockKeys=
+            new de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture();
+        final de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture newerKeys=
             new de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture();
         controller.set(manager,stockKeys);
         final IContext context=proxy(IContext.class,new InvocationHandler() {
@@ -148,7 +152,9 @@ public final class TelephonyTest {
             events.refuse=false;
             check(module.start(new FrameworkRef(context)),"start");
             de.audi.app.terminalmode.smartphone.IPhoneCallController keys=
-                (de.audi.app.terminalmode.smartphone.IPhoneCallController)controller.get(manager);
+                (de.audi.app.terminalmode.smartphone.IPhoneCallController)readController.invoke(null,manager);
+            check(keys!=stockKeys && controller.get(manager)==stockKeys,
+                "woven getter must wrap the snapshot without writing the OEM field");
             keys.flash(true);check(stockKeys.flashes==1,"no-call phone key must remain stock");
             await(new Condition(){public boolean test(){return ((FsgSetup)phone.last.get("updateFsgSetup")[0]).getMobileConnectionType()==3;}},"HFP facade");
             check(address.integer("updatePbState")==0,"CarPlay has no phonebook");
@@ -175,9 +181,14 @@ public final class TelephonyTest {
             keys.hangup(true);
             check(stockKeys.hangups==1,"emergency-pending phone key must remain stock");
             service.updateCallStates(null,false);
-            controller.set(manager,stockKeys);
-            await(new Condition(){public boolean test()throws Exception{return controller.get(manager)!=stockKeys;}},
-                "stock controller replacement must re-arm the existing filter");
+            controller.set(manager,newerKeys);
+            de.audi.app.terminalmode.smartphone.IPhoneCallController newer=
+                (de.audi.app.terminalmode.smartphone.IPhoneCallController)readController.invoke(null,manager);
+            newer.flash(true);
+            check(newerKeys.flashes==0 && controller.get(manager)==newerKeys,
+                "new stock assignment must be filtered without an asynchronous re-arm");
+            keys.flash(false);
+            check(controller.get(manager)==newerKeys,"in-flight old getter must not overwrite newer controller");
             long start=System.nanoTime(); listener.acceptCall();
             check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)<100,"BAP action is asynchronous");
             byte[] cmd=command(receiver); check(Arrays.equals(cmd,new byte[]{3,0}),"accept iAP2 command");
@@ -226,8 +237,9 @@ public final class TelephonyTest {
             check(phone.count("hangupCallResult")==hangups+1&&phone.integer("hangupCallResult")==1,"bounded action queue reports failure");
             start=System.nanoTime();
             field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,false); module.stop();
-            check(controller.get(manager)==stockKeys,"disconnect must restore the stock phone controller");
+            check(controller.get(manager)==newerKeys,"disconnect must not restore an obsolete controller");
             keys.flash(false);check(stockKeys.flashes==2,"old filter must pass through after disconnect");
+            newer.flash(false);check(newerKeys.flashes==1,"latest stock controller must receive post-disconnect keys");
             check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)<100,"stop cannot await blocked dial");
             check(phone.integer("updateSignalQuality")==91,"latest Bluetooth signal restored");
             check(phone.integer("updateFSGOperationState")==9,"latest Bluetooth state restored");

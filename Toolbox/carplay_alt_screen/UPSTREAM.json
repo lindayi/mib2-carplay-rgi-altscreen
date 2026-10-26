@@ -727,7 +727,7 @@
       "upstream": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/StockPhoneKeyFilter.java",
       "sha256": "a27ca31df18e6123c730c64befb967e11e5c6bc969667ae447cbdd250764f149",
       "local": "Toolbox/carplay_alt_screen/hmi/src/com/luka/carplay/telephony/StockPhoneKeyFilter.java",
-      "reason": "Upstream runtime MFL phone-key filter; installed/rearmed by the existing generation-fenced TelephonyModule worker, not a second lifecycle actor. GatedPhoneService retains physical-session and emergency-call eligibility."
+      "reason": "Upstream duplicate MFL phone-key policy via the exact-MU1316 PatchPhoneKeyController getter weave. The filter wraps a value read by stock and never replaces/restores the volatile OEM controller, avoiding the upstream re-arm race. GatedPhoneService retains physical-session and emergency-call eligibility."
     }
   ]
 }

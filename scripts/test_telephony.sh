@@ -17,7 +17,11 @@ mkdir -p "$OUT/classes" "$OUT/tests" "$OUT/audit"
 find "$ROOT/Toolbox/carplay_alt_screen/hmi/src" -name '*.java' -print > "$OUT/sources.list"
 javac -encoding UTF-8 -source 1.4 -target 1.4 -Xlint:-options \
     -cp "$CP" -d "$OUT/classes" @"$OUT/sources.list"
+javac -cp "$ASM" -d "$OUT/audit" "$ROOT/tools/PatchPhoneKeyController.java" "$ROOT/tests/PatchPhoneKeyControllerTest.java"
+java -cp "$OUT/audit:$ASM" PatchPhoneKeyControllerTest "$STOCK"
+java -cp "$OUT/audit:$ASM" PatchPhoneKeyController "$STOCK" "$OUT/classes"
 (cd "$OUT/classes" && jar cf "$OUT/telephony.jar" com/luka/carplay/telephony \
+    de/audi/app/terminalmode/dsi/DSISmartphoneManagerProxy.class \
     de/audi/app/combi/bap/app/phone/ServiceManagerPhone.class \
     de/audi/tghu/phone/sm/Activator.class de/audi/tghu/system/sm/Activator.class)
 (cd "$OUT/classes" && jar cf "$OUT/dependencies.jar" .)

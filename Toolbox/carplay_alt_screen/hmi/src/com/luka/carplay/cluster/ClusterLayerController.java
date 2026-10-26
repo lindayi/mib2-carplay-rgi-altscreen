@@ -409,6 +409,8 @@ public final class ClusterLayerController {
             errorLogged = false;
         } catch (Throwable t) {
             /* Never throw into HMI/DM threads, but keep the first failure diagnosable. */
+            fading = false;
+            maneuverOpacity = -1;
             if (!errorLogged) {
                 errorLogged = true;
                 Log.w("ClusterLayers", "apply failed: " + t);
@@ -468,10 +470,11 @@ public final class ClusterLayerController {
         }
         try {
             fadeDm.setOpacity(MANEUVER, fadeTerminal, value);
-            fadeDm.setOpacity(fadeBacking, fadeTerminal, backingOpacity(value));
             maneuverOpacity = value;
+            fadeDm.setOpacity(fadeBacking, fadeTerminal, backingOpacity(value));
         } catch (Throwable t) {
             fading = false;
+            maneuverOpacity = -1;
             if (!errorLogged) {
                 errorLogged = true;
                 Log.w("ClusterLayers", "fade failed: " + t);
