@@ -8,6 +8,7 @@ extern int *__get_errno_ptr(void);
 #define EIO     5
 #define EBADF   9
 #define ECHILD  10
+#define EAGAIN  11
 #define ENOMEM  12
 #define EACCES  13
 #define ENOTDIR 20
