@@ -71,6 +71,7 @@ metainfo2.txt
 LICENSE.DEJAVU
 LICENSE.CARD-CJK
 Toolbox/scripts/export_mmi_cockpit_diagnostics.sh
+Toolbox/scripts/export_mcd_originals.sh
 Toolbox/carplay_alt_screen/mirror_display/release/mirror_health.sh
 Toolbox/scripts/carplay_mmi_action.sh
 Toolbox/carplay_alt_screen/rgi/carplay_settings.sh

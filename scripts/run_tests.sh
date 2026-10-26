@@ -6,6 +6,7 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 python3 tests/test_yuedizhibo_baseline.py
+python3 tests/test_mcd_export.py
 bash tests/transaction_snapshot_test.sh
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT

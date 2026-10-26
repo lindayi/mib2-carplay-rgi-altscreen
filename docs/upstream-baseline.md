@@ -152,6 +152,8 @@ used to obtain a feature missing from the released source.
 
 Luka was inspected at `a63d54741839c7d30d32dd4e149f693856bcb0db`.
 These three new features are **not enabled by this sync**:
+They are on hold at the owner's request; the read-only exporter below does not
+implement or enable any of them.
 
 | Feature | Evidence and remaining requirement |
 | --- | --- |
@@ -164,6 +166,35 @@ or the SD. These findings are not blanket approval for stock-library or daemon
 modifications. Other Luka changes target its different wireless, vehicle-data,
 decoder, audio and M.I.B. installation stack, not components active in this
 Q5 deployment.
+
+#### Exporting the unit's originals
+
+The versioned exporter is
+`altscreen/Toolbox/scripts/export_mcd_originals.sh`. New staged packages include
+it at `Toolbox/scripts/export_mcd_originals.sh`, covered by the SD manifest.
+It is not part of the normal log export and is never run by INSTALL.
+
+To use the existing Toolbox without reinstalling or updating it:
+
+1. Back up the SD, then copy the exporter to its root as `test.sh`. Preserve an
+   existing `test.sh` instead of silently replacing it.
+2. Park with MMI on and put the Toolbox card in SD slot 1.
+3. Select **Green menu -> MQBCoding -> Customization -> Various ->
+   DEV: copy testfiles**. This existing action runs `/net/mmx/fs/sda0/test.sh`.
+4. Wait for **MCD_EXPORT=PASS**, then return the card to the computer.
+   On FAIL, retain the partial output and the message; do not use a restore action.
+
+Each run creates a new `Dump/mcd-original-<date>-<pid>` directory. It contains
+the unit's `mcd`, active `/etc/mcd.conf`, stored `/mnt/system/etc/mcd.conf`,
+and source/export POSIX checksums. Source checksums before and after each copy
+must agree with the copy. A read, copy, comparison or flush failure cannot
+report PASS. The exporter writes only to the SD; if needed it remounts only
+that SD writable. It does not alter installed files, restart a process, run
+a patch, or request a reboot. Keep the export private.
+
+Old process logs name the daemon and configuration but do not contain their
+bytes. The SDK's `mcd` and `mcd.conf` are not unit backups and must not substitute
+for this export. Host fixture success is not QNX/vehicle execution evidence.
 
 ### Procedure
 

@@ -89,6 +89,12 @@ Do not turn this into a raw conversation log or store credentials/private captur
   compatibility is not install/rollback or vehicle validation. No unit mcd or
   mcd.conf is retained. Maps30 PPID needs Identify-dispatcher/growth integration,
   not a header-only copy. See docs/upstream-baseline.md for the evidence limits.
+- `altscreen/Toolbox/scripts/export_mcd_originals.sh` is a standalone, private
+  SD export, not an installer or optimization. Copy it as SD-root `test.sh`
+  for Toolbox's existing Various -> DEV entry. It must preserve source files,
+  old exports and explicit failure results; SDK daemon/config copies are not
+  vehicle originals. Stage it with the SD checksum manifest, never run it from
+  INSTALL or ordinary log export.
 
 - Prefer upstream implementation with local additions and narrow MU1316 adapters.
   Do not treat an existing local path as a reason to omit an upstream feature.
