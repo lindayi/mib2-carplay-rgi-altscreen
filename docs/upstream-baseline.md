@@ -2,7 +2,7 @@
 
 The primary RGI source reference is
 `yuedizhibo/MHI2Q-CarPlay-AltScreen` at
-`141e7ed33775af02a5af0b8616ee3c6250eea997` (V3.8).
+`652448ddc1d5c9dd2f4a673b9950cf3c6a9195a4` (V3.8 Fix1).
 This migration does not change the GitHub fork network, `main`, vehicle scope,
 preferences, on-vehicle paths or installation procedure.
 
@@ -24,11 +24,11 @@ source callers, reflection/weave names, tests and resources use it.
 The independent source-available AltScreen transport/mirror remains in
 `altscreen_native`, under its existing license boundary.
 
-The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 109 files
+The pin file `Toolbox/carplay_alt_screen/UPSTREAM.json` accounts for all 110 files
 in the five source trees, `hmi/resources`, and the runtime flag atlas from
 `rgi_renderer/release`. It includes the Unicode license. It also lists excluded
 vendor/stub/release trees and the separately tracked AltScreen native components.
-At this checkpoint, 51 files match, 49 have local deltas, and 9 have explicit
+At this checkpoint, 52 files match, 49 have local deltas, and 9 have explicit
 replacement mappings. Text comparisons normalize CRLF/LF; binary resource
 comparisons use exact bytes. These counts are not a feature-coverage percentage.
 
@@ -123,6 +123,49 @@ changes to the adopted controller paths and explicitly reports changes to
 the remaining replaced files for manual review.
 
 ## Updating the baseline
+
+### 2026-10-25 synchronization
+
+Allemon `main` is unchanged at `1289981`. Allemon PR 7 remains included; PR 14
+is unchanged at `3282773` and remains excluded because its night opcode collides
+with telephony and its delayed sends lack session fencing.
+
+| Yuedizhibo Fix1 change | Q5 integration |
+| --- | --- |
+| Duplicate steering-wheel phone action | Upstream `StockPhoneKeyFilter`; the existing TelephonyModule owns install, periodic re-arm and restore. Call suppression additionally requires current receiver eligibility and no OEM emergency takeover. |
+| UTC recent-call times | Use the HU's UTC-to-local conversion, then split in GMT. Missing conversion produces an explicit UTC warning. |
+| Arrow fade and hide-before-move | Upstream ramp/fader retained; preserve Solid/Reduced backing preferences and stock restoration rather than forcing both backings transparent. A replaced DisplayManager cannot receive old fade ticks. |
+| Sport map transition | Bounded black hold and fade in the mirror's existing loop. Observe the PID/epoch/lease-bound Java geometry; never move the plane from native code. Cached fade swaps use the overlay counter, not source-progress telemetry. |
+| Phone-card SMALL geometry | Owner approved the normal SMALL `(490,72,460,378)` area and stock Sport `-476` pan for both profiles. The card FULL area stays `(300,72,840,378)`. |
+| QNX FAT parent-entry errors | File-by-file transaction snapshots tolerate only the known parent-entry diagnostic. Hash/byte comparisons, empty directories, real I/O errors and special-node refusal remain enforced for install and restore. |
+| Generic upstream config-layout fallback | Not copied: our installed runtime and unit-bound snapshot/restore contract are different. Exact original-backup checks remain; no global whitespace/comment/ID stripping is added to weaken identity checks. |
+| Crash breadcrumbs | No new synchronous Java crash writer is present in this source release. Existing bounded Java/native logs and private export remain authoritative; no core dump payloads are collected. |
+
+The Q7 fallback is retained in the upstream controller source, but the project
+scope and platform gates are not broadened and there is no Q7 validation claim.
+Yuedizhibo explicitly withdrew PR 62's faster startup/frame-reuse changes from
+Fix1. The net source comparison, not the intermediate merge title or stale
+BUILD_INFO fields, determines this update. No opaque upstream JAR or binary is
+used to obtain a feature missing from the released source.
+
+#### Separate Luka performance investigation
+
+Luka was inspected at `a63d54741839c7d30d32dd4e149f693856bcb0db`.
+These three new features are **not enabled by this sync**:
+
+| Feature | Evidence and remaining requirement |
+| --- | --- |
+| Maps 30-FPS PPID selector | Upstream's real wire-format tests pass with sanitizers, including existing-identity preservation and moving-buffer growth. Our older Identify dispatcher has no `hook_identify_grow` contract. A proper port must reconcile the GPL dispatcher with the existing AltScreen Identify hook; copying only the header would not be a safe integration. A phone policy target is not guaranteed on-car FPS. |
+| Stock `libairplay.so` queue depth 4 to 2 | Both unique upstream signatures match the owner's retained P5145 library, at `0x8c694` and `0x8c6f4`. In-memory tests change exactly two bytes and reject a half-patched input. This is byte compatibility only. It affects the stock main-screen decoder, not our separate AltScreen decoder. Transactional install/restore integration and parked stability testing are still required before enabling it. |
+| Stock `mcd` patch and detector priority | The retained unit export does not include `mcd` or `mcd.conf`. Upstream's P5087/P5092/K1004 equivalence claim is not exact P5145 evidence. Obtain the unit's originals privately before checking signatures, priority settings and rollback; do not distribute upstream stock binaries. |
+
+The local compatibility checks do not alter the backed-up library, a vehicle,
+or the SD. These findings are not blanket approval for stock-library or daemon
+modifications. Other Luka changes target its different wireless, vehicle-data,
+decoder, audio and M.I.B. installation stack, not components active in this
+Q5 deployment.
+
+### Procedure
 
 Use a temporary branch from Q5. Fetch the public upstream before checking its
 recorded Git blobs. The remote name is `altscreen-upstream`; its URL is

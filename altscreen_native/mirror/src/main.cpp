@@ -4,6 +4,8 @@
 #include "state_snapshot.h"
 #include "bounded_output.h"
 #include "../../integration.h"
+#include "../../hook/local_ui_contract.h"
+#include "placement_veil.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -18,12 +20,13 @@ extern "C" unsigned carplay_overlay_frame_interval_ms(void) __attribute__((weak)
 
 static volatile sig_atomic_t g_stop = 0;
 static StateSnapshotPublisher g_state_publisher;
+static PlacementVeil g_veil;
 static const unsigned kNoFramePollUs = 5000u;
 /* Diagnostic thresholds only: presentation/polling behavior is unchanged. */
 static const unsigned kDecodedStallReportUs = 500000u;
 static const unsigned kDecodedStallHeartbeatPolls = 1000u;
 static const char kBuildId[] =
-    "carplay-private111-mu1316-source-v3.8-java-placement";
+    "carplay-private111-mu1316-source-v3.8-fix1-java-placement";
 
 static const char *volatile_path(const char *key, const char *fallback) {
     const char *v = getenv(key);
@@ -314,6 +317,7 @@ struct OemMapPlacement {
     char layout[128];
     bool state_complete;
     bool recognized;
+    uint32_t epoch, writer, stream;
 };
 
 static bool state_kv_text(const char *line, const char *key,
@@ -321,6 +325,7 @@ static bool state_kv_text(const char *line, const char *key,
     const size_t n = key ? strlen(key) : 0u;
     if (!line || !key || !n || !out || !cap) return false;
     if (strncmp(line, key, n) != 0 || line[n] != '=') return false;
+    if (strlen(line+n+1u)>=cap) return false;
     copy_line(out, cap, line + n + 1u);
     return true;
 }
@@ -332,7 +337,7 @@ static bool state_kv_int(const char *line, const char *key, int *out) {
     if (!line || !key || !n || !out) return false;
     if (strncmp(line, key, n) != 0 || line[n] != '=') return false;
     v = strtol(line + n + 1u, &end, 10);
-    if (end == line + n + 1u || v < -8192L || v > 8192L) return false;
+    if (end == line + n + 1u || *end || v < -8192L || v > 8192L) return false;
     *out = (int)v;
     return true;
 }
@@ -353,51 +358,53 @@ static bool state_kv_int(const char *line, const char *key, int *out) {
  * already represents that map plane, so Y=26 must not be applied again inside
  * this renderer and is not interpreted as a source crop.
  *
- * Card profiles (INSTALL WITH CARD / RGI CARD) use the Logo-tree layout: the
- * hook declares one SMALL safeArea (x=470,w=500) for Classic and Sport, and
- * Sport pans it by -445 so its center x=720 lands on the sport slot center
- * x=275. The profile only changes with INSTALL + reboot, so read it once.
+ * Card profiles widen FULL only; SMALL uses the stock safe area and pan.
+ * This observation never moves the plane or grants presentation readiness.
  */
-static bool card_layout_profile() {
-    static int cached = -1;
-    if (cached < 0) {
-        FILE *f = fopen("/mnt/app/root/carplay-altscreen/state/card.enabled", "r");
-        cached = f ? 1 : 0;
-        if (f) fclose(f);
-        fprintf(stderr, "direct111: PHASE=CARD_LAYOUT_PROFILE enabled=%d sport_small_dx=%s\n",
-                cached, cached ? "-445" : "OEM_STAGE_DX");
-    }
-    return cached == 1;
-}
-
-static OemMapPlacement load_session_map_placement() {
+static OemMapPlacement load_map_state(uint32_t writer, uint32_t stream) {
     OemMapPlacement p;
     memset(&p, 0, sizeof(p));
     copy_line(p.view, sizeof(p.view), "UNKNOWN");
     copy_line(p.layout, sizeof(p.layout), "UNKNOWN");
 
-    FILE *f = fopen("/tmp/mmi-mirror-hmi.state", "r");
+    if (!writer || !stream) return p;
+    FILE *f = fopen(ALTSCREEN_HMI_STATE, "r");
     if (!f) return p;
 
     char line[256];
     int small_dx = 0, small_dy = 0;
     bool have_view = false, have_layout = false;
     bool have_dx = false, have_dy = false;
+    uint64_t pid=0, epoch=0, expiry=0;
+    unsigned seen=0;
+    bool valid=true;
 
     while (fgets(line, sizeof(line), f)) {
+        unsigned bit=0;
+        if (strlen(line)>=sizeof(line)-1) { valid=false; break; }
         strip_eol(line);
         if (state_kv_text(line, "view", p.view, sizeof(p.view)))
-            have_view = true;
+            { have_view = true; bit=1; }
         else if (state_kv_text(line, "layout_name", p.layout, sizeof(p.layout)))
-            have_layout = true;
+            { have_layout = true; bit=2; }
         else if (state_kv_int(line, "small_stage_dx", &small_dx))
-            have_dx = true;
+            { have_dx = true; bit=4; }
         else if (state_kv_int(line, "small_stage_dy", &small_dy))
-            have_dy = true;
+            { have_dy = true; bit=8; }
+        else if (!strncmp(line,"receiver_epoch=",15) && alt_local_decimal(line+15,UINT32_MAX,&epoch)) bit=16;
+        else if (!strncmp(line,"receiver_pid=",13) && alt_local_decimal(line+13,UINT32_MAX,&pid)) bit=32;
+        else if (!strncmp(line,"expiry_ms=",10) && alt_local_decimal(line+10,UINT64_MAX,&expiry)) bit=64;
+        if (!bit || (seen & bit)) { valid=false; break; }
+        seen |= bit;
     }
+    if (ferror(f)) valid=false;
     fclose(f);
-
-    p.state_complete = have_view && have_layout;
+    struct timeval tv;
+    if (gettimeofday(&tv,NULL)!=0) return p;
+    const uint64_t now=(uint64_t)tv.tv_sec*1000u+tv.tv_usec/1000u;
+    p.state_complete = valid && seen==127 && have_view && have_layout && have_dx && have_dy
+        && epoch && pid==writer && expiry>now && expiry-now<=ALT_LOCAL_HMI_LEASE_MS;
+    p.writer=writer; p.stream=stream; p.epoch=(uint32_t)epoch;
     if (!p.state_complete)
         return p;
     if (!strstr(p.layout, "LayoutMIB2HighB9") &&
@@ -415,10 +422,7 @@ static OemMapPlacement load_session_map_placement() {
         return p;
 
     if (strstr(p.layout, "LayoutMIB2HighB9Sport")) {
-        if (card_layout_profile())
-            small_dx = -445;    /* Logo layout: center the shared SMALL area */
-        else if (!have_dx)
-            small_dx = -476;
+        if (!have_dx) small_dx = -476;
         if (!have_dy) small_dy = 0;
     }
 
@@ -441,6 +445,14 @@ static OemMapPlacement load_session_map_placement() {
     return p;
 }
 
+static OemMapPlacement load_session_map_placement(Private111DirectSource &source) {
+    const uint32_t writer=source.writer_pid(), stream=source.generation();
+    OemMapPlacement p=load_map_state(writer,stream);
+    if (!source.current_session_active() || source.writer_pid()!=writer || source.generation()!=stream)
+        p.recognized=false;
+    return p;
+}
+
 static bool same_map_placement(const OemMapPlacement &a,
                                const OemMapPlacement &b) {
     return a.dx == b.dx && a.dy == b.dy &&
@@ -450,6 +462,7 @@ static bool same_map_placement(const OemMapPlacement &a,
 }
 
 static bool reconcile_oem_map_placement(ClusterVideoDisplay &display,
+                                        Private111DirectSource &source,
                                         const char *reason,
                                         bool redraw_last_frame) {
     if (ALTSCREEN_JAVA_OWNS_PLACEMENT) {
@@ -461,13 +474,30 @@ static bool reconcile_oem_map_placement(ClusterVideoDisplay &display,
             initialized = true;
             fprintf(stderr, "direct111: PHASE=LOCAL_GEOMETRY source=1440x542 output=1440x455 scale=1 offset=0,0 placement_owner=JAVA\n");
         }
+        static bool have_previous=false;
+        static OemMapPlacement previous;
+        const OemMapPlacement p=load_session_map_placement(source);
+        if (!p.recognized) {
+            have_previous=false;
+            return false;
+        }
+        if (have_previous && previous.epoch==p.epoch && previous.writer==p.writer
+                && previous.stream==p.stream && (previous.dx!=p.dx || previous.dy!=p.dy)
+                && display.first_frame_presented()) {
+            g_veil.begin(monotonic_us());
+            fprintf(stderr,"direct111: PHASE=OEM_MAP_VEIL_BEGIN placement_owner=JAVA offset=%d,%d->%d,%d\n",
+                previous.dx,previous.dy,p.dx,p.dy);
+        } else if (!have_previous || previous.epoch!=p.epoch || previous.writer!=p.writer
+                || previous.stream!=p.stream) g_veil.reset();
+        previous=p;
+        have_previous=true;
         return false;
     }
     static bool have_previous = false;
     static bool transient_gap_reported = false;
     static OemMapPlacement previous;
 
-    const OemMapPlacement p = load_session_map_placement();
+    const OemMapPlacement p = load_session_map_placement(source);
 
     /*
      * Java replaces /tmp/mmi-mirror-hmi.state through a temp file.  There is a
@@ -988,7 +1018,7 @@ int main(int argc, char **argv) {
         source.shutdown();
         return 3;
     }
-    (void)reconcile_oem_map_placement(display, "startup", false);
+    (void)reconcile_oem_map_placement(display, source, "startup", false);
 
     bool context_active = false;
     bool carplay_presented = false;
@@ -1042,7 +1072,7 @@ int main(int argc, char **argv) {
         if (complete && !g_stop) {
             /* Hold the actual final video frame while the latest decoded
              * CarPlay frame is uploaded underneath it. */
-            (void)reconcile_oem_map_placement(display, "startup-logo-fade", false);
+            (void)reconcile_oem_map_placement(display, source, "startup-logo-fade", false);
             const unsigned long long fade_start = began +
                 (unsigned long long)logo.frame_count() * 1000000ULL / logo.fps();
             for (unsigned step = 0; step <= 17u && !g_stop; ++step) {
@@ -1140,7 +1170,7 @@ int main(int argc, char **argv) {
         if (!next_layout_probe_us ||
             (frame_start && frame_start >= next_layout_probe_us)) {
             (void)reconcile_oem_map_placement(
-                display, "hmi-state-change", true);
+                display, source, "hmi-state-change", true);
             next_layout_probe_us = frame_start + 50000ULL;
         }
         if (!next_ownership_probe_us ||
@@ -1168,7 +1198,7 @@ int main(int argc, char **argv) {
             in_stall = false;
             stall_start_us = 0;
             ++source_frames;
-            if (!display.present_frame(frame)) {
+            if (!g_veil.present(display, &frame, monotonic_us())) {
                 fprintf(stderr,
                         "direct111: ERROR PHASE=DISPLAY_PRESENT "
                         "stopping_safely=1\n");
@@ -1217,7 +1247,10 @@ int main(int argc, char **argv) {
 
             unsigned interval = carplay_overlay_frame_interval_ms ?
                 carplay_overlay_frame_interval_ms() : 0;
-            if (interval && idle_now >= last_present_us &&
+            if (g_veil.active) {
+                if (!g_veil.present(display, NULL, idle_now)) break;
+                last_present_us = idle_now;
+            } else if (interval && idle_now >= last_present_us &&
                     idle_now - last_present_us >= (unsigned long long)interval * 1000ULL) {
                 if (!display.present_overlay_frame()) break;
                 last_present_us = monotonic_us();

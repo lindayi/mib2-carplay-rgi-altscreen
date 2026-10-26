@@ -5,6 +5,7 @@
 #include <EGL/egl.h>
 #include "../mirror/src/gl_renderer.h"
 #include "../mirror/src/cluster_video_display.h"
+#include "../mirror/src/placement_veil.h"
 #include "../hook/private111_direct_shm.h"
 #include <stddef.h>
 
@@ -76,6 +77,12 @@ int main() {
         renderer.draw();
         glReadPixels(720, 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, sample);
         assert(sample[0] > 250 && sample[1] > 250 && sample[2] > 250);
+        renderer.draw_faded(0.5f);
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]>=125 && sample[0]<=130 && sample[3]==255);
+        renderer.draw_faded(0.f);
+        glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
+        assert(sample[0]==0 && sample[1]==0 && sample[2]==0 && sample[3]==255);
         assert(glGetError() == GL_NO_ERROR);
     }
     {
@@ -109,6 +116,22 @@ int main() {
         unsigned char sample[4];
         glReadPixels(720,200,1,1,GL_RGBA,GL_UNSIGNED_BYTE,sample);
         assert(sample[0]<3 && sample[1]<3 && sample[2]<3 && sample[3]==255);
+        PlacementVeil veil;
+        const unsigned long source_before=presenter.frame_count();
+        veil.begin(1000000);
+        assert(veil.present(presenter,NULL,1000000) && veil.active && !veil.fading);
+        assert(veil.present(presenter,&frame,1100000) && !veil.fading);
+        assert(veil.present(presenter,&frame,1150000) && veil.fading);
+        assert(veil.present(presenter,NULL,1225000) && veil.active);
+        fail_swap=true;
+        assert(!veil.present(presenter,NULL,1300000) && veil.active);
+        fail_swap=false;
+        assert(veil.present(presenter,NULL,1300000) && !veil.active);
+        assert(presenter.frame_count()==source_before+2);
+        veil.begin(2000000);
+        assert(veil.present(presenter,NULL,2450000) && veil.fading);
+        assert(veil.present(presenter,NULL,2600000) && !veil.active);
+        assert(presenter.frame_count()==source_before+2); /* cached fade cannot hide a decoder stall */
     }
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroyContext(display, context); eglDestroySurface(display, surface);

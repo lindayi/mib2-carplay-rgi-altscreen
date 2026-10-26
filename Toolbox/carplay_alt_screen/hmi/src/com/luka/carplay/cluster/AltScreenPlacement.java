@@ -8,7 +8,7 @@
  * map plane, so without this the video keeps its place and Sport shows the left half of it,
  * with the vehicle marker behind the dial. This is the sole physical-plane writer:
  * the source mirror does not also translate the video. The latched card profile
- * uses upstream's -445 Sport offset; the map profile retains stock's -476.
+ * and map profiles both use Fix1's stock -476 Sport offset in SMALL.
  * Legacy cluster_shift.cfg overrides are retained on disk but no longer applied.
  *
  * Displayable 3 is only touched once a non-zero offset is wanted; after that it is always
@@ -146,7 +146,7 @@ public final class AltScreenPlacement {
             + " stage=(" + stageDx + "," + stageDy + ") profile=" + (phoneProfile==1?"card":"map"));
     }
     private static int smallStageX() {
-        return phoneProfile==1 && stageDx==-476 && layoutName.endsWith("LayoutMIB2HighB9Sport")?-445:stageDx;
+        return stageDx;
     }
 
     /* Host tests only. */

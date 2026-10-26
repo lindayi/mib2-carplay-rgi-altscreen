@@ -41,6 +41,10 @@ g++ -O2 -Wall -Wextra "$ROOT/tests/frame_source_test.cpp" -I"$ROOT/hook" -o fram
 ./frame_source_test
 g++ -O2 -Wall -Wextra "$ROOT/tests/snapshot_test.cpp" -o snapshot_test
 ./snapshot_test
+g++ -O2 -Wall -Wextra -ffunction-sections -fdata-sections -I"$ROOT/hook" \
+    "$ROOT/tests/placement_state_test.cpp" "$ROOT/mirror/src/state_snapshot.cpp" \
+    -Wl,--gc-sections -o placement_state_test
+./placement_state_test
 g++ -O2 -Wall -Wextra "$ROOT/tests/renderer_test.cpp" \
     "$ROOT/mirror/src/gl_renderer.cpp" "$ROOT/mirror/src/cluster_video_display.cpp" \
     -lEGL -lGLESv2 -o renderer_test

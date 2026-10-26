@@ -7,7 +7,8 @@ import java.util.*;
 
 /** Exercise real layer writes/context decisions with the VC's recovered event sequence. */
 public final class ClusterKdkSyncTest implements InvocationHandler {
-    final Map opacity = new HashMap();
+    final Map opacity = Collections.synchronizedMap(new HashMap());
+    volatile boolean intermediate;
     int cropWidth;
     static void check(boolean b, String message) { if (!b) throw new AssertionError(message); }
     static void field(String name, Object value) throws Exception {
@@ -19,15 +20,22 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
         Field f=type.getDeclaredField(name); f.setAccessible(true);f.set(null,value);
     }
     public Object invoke(Object proxy, Method method, Object[] args) {
-        if (method.getName().equals("setOpacity")) opacity.put(args[0],args[2]);
+        if (method.getName().equals("setOpacity")) {
+            opacity.put(args[0],args[2]);
+            if(((Integer)args[0]).intValue()==98 && ((Integer)args[2]).intValue()>0
+                    && ((Integer)args[2]).intValue()<100) intermediate=true;
+        }
         if (method.getName().equals("setCropping")) cropWidth=((Integer)args[4]).intValue();
         Class type=method.getReturnType();
         if(type==Boolean.TYPE) return Boolean.FALSE;
         if(type==Integer.TYPE) return Integer.valueOf(0);
         return null;
     }
-    int opacity(int id) { return ((Integer)opacity.get(Integer.valueOf(id))).intValue(); }
-    void visible(int maneuver,int sport,int popup) {
+    int opacity(int id) { Integer v=(Integer)opacity.get(Integer.valueOf(id)); return v==null?-1:v.intValue(); }
+    void visible(int maneuver,int sport,int popup) throws Exception {
+        long deadline=System.currentTimeMillis()+1500;
+        while((opacity(98)!=maneuver || opacity(101)!=sport || opacity(102)!=popup)
+                && System.currentTimeMillis()<deadline)Thread.sleep(5);
         check(opacity(98)==maneuver && opacity(101)==sport && opacity(102)==popup,
             "unexpected opacity: "+opacity);
     }
@@ -41,6 +49,7 @@ public final class ClusterKdkSyncTest implements InvocationHandler {
         ClusterLayerController.bind(dm,1);
         ClusterLayerController.onVcPresentation(true);
         ClusterLayerController.onVcVisibility(true);capture.visible(100,0,100);
+        check(capture.intermediate,"upstream fade must render intermediate opacity, not jump");
         // View request is not the stage event; it must not expose the destination rectangle.
         field("smallScreenViewArea",Boolean.TRUE); // target: boolean view-area flag
         ClusterLayerController.reapply();capture.visible(100,0,100);

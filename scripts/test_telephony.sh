@@ -26,7 +26,8 @@ java -cp "$OUT/audit:$ASM" JavaStockLinkageAudit "$OUT/telephony.jar" "$STOCK" \
     "$OUT/dependencies.jar" "$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar" \
     "$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"
 javac -encoding UTF-8 -cp "$OUT/classes:$CP" -d "$OUT/tests" \
-    "$ROOT/tests/telephony/TelephonyTest.java" "$ROOT/tests/telephony/Log.java"
+    "$ROOT/tests/telephony/TelephonyTest.java" "$ROOT/tests/telephony/Log.java" \
+    "$ROOT/tests/telephony/PhoneControllerFixture.java"
 java -Xverify:all -cp "$OUT/tests:$OUT/classes:$CP" com.luka.carplay.telephony.TelephonyTest
 fi
 if [ "$MODE" != java ]; then

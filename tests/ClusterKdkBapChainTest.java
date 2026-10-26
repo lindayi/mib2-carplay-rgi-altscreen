@@ -40,7 +40,8 @@ public final class ClusterKdkBapChainTest {
                 public Object invoke(Object p,Method m,Object[] a) {
                     if(m.getName().equals("updateMapVisibility")) {
                         boolean visible=((Boolean)a[1]).booleanValue();
-                        ClusterKdkSyncTest.check(capture.opacity(98)==(visible?100:0),"Status sent before layer visibility applied");
+                        ClusterKdkSyncTest.check(ClusterLayerController.isKdkVisible()==visible,
+                            "Status sent before layer visibility demand applied");
                         acknowledgements[0]++;
                     }
                     if(m.getName().equals("updateMapPresentation")) {

@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class TelephonyTest {
-    static final class Recorder implements InvocationHandler {
+    static class Recorder implements InvocationHandler {
         final Map<String,Object[]> last = new ConcurrentHashMap<String,Object[]>();
         final Map<String,Integer> counts = new ConcurrentHashMap<String,Integer>();
         volatile IEventListener listener;
@@ -92,11 +92,23 @@ public final class TelephonyTest {
     public static void main(String[] args) throws Exception {
         final Recorder phone=new Recorder(), bluetooth=new Recorder(), events=new Recorder(), address=new Recorder();
         final IEventBus eb=proxy(IEventBus.class,events);
-        final IFrameworkAccess framework=proxy(IFrameworkAccess.class,new Recorder());
+        final IFrameworkAccess framework=proxy(IFrameworkAccess.class,new Recorder() {
+            public Object invoke(Object p,Method m,Object[] a) throws Throwable {
+                if(m.getName().equals("convertUTCTimeToLocalTime"))return (Long)a[0]-5*3600000L;
+                return super.invoke(p,m,a);
+            }
+        });
+        sun.misc.Unsafe unsafe=(sun.misc.Unsafe)field(sun.misc.Unsafe.class,"theUnsafe").get(null);
+        final Object manager=unsafe.allocateInstance(Class.forName("de.audi.app.terminalmode.dsi.DSISmartphoneManagerProxy"));
+        final Field controller=field(manager.getClass(),"phoneCallController");
+        final de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture stockKeys=
+            new de.audi.app.terminalmode.smartphone.carplay.PhoneControllerFixture();
+        controller.set(manager,stockKeys);
         final IContext context=proxy(IContext.class,new InvocationHandler() {
             public Object invoke(Object p,Method m,Object[] a) {
                 if (m.getName().equals("getEventBus")) return eb;
                 if (m.getName().equals("getFramework")) return framework;
+                if (m.getName().equals("getSmartphoneDSIManager")) return manager;
                 return defaultValue(m.getReturnType());
             }
         });
@@ -118,6 +130,16 @@ public final class TelephonyTest {
         Socket receiver=new Socket("127.0.0.1",server.getLocalPort()); receiver.setSoTimeout(4000);
         await(new Condition(){public boolean test(){return bus.connectionGeneration()>=0;}},"receiver connect");
         field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,true);
+        field(com.luka.carplay.CarPlayHook.class,"fwRef").set(null,new FrameworkRef(context));
+        Method recent=GatedPhoneService.class.getDeclaredMethod("recent",int.class,String.class,String.class,int.class,long.class);
+        recent.setAccessible(true);
+        for(long timestamp:new long[]{3600L,360000000000L}) {
+            CombiBAPCallStackEntry entry=(CombiBAPCallStackEntry)recent.invoke(null,0,"","",0,timestamp);
+            Calendar expected=Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+            expected.setTimeInMillis((timestamp>100000000000L?timestamp:timestamp*1000)-5*3600000L);
+            check(entry.getHour()==expected.get(Calendar.HOUR_OF_DAY) && entry.getDay()==expected.get(Calendar.DAY_OF_MONTH),
+                "recent-call seconds/milliseconds must use HU local time, including date rollover");
+        }
         final TelephonyModule module=new TelephonyModule();
         try {
             events.refuse=true;
@@ -125,6 +147,9 @@ public final class TelephonyTest {
             check(!TelephonyModule.isEnabled(),"failed start leaves stock");
             events.refuse=false;
             check(module.start(new FrameworkRef(context)),"start");
+            de.audi.app.terminalmode.smartphone.IPhoneCallController keys=
+                (de.audi.app.terminalmode.smartphone.IPhoneCallController)controller.get(manager);
+            keys.flash(true);check(stockKeys.flashes==1,"no-call phone key must remain stock");
             await(new Condition(){public boolean test(){return ((FsgSetup)phone.last.get("updateFsgSetup")[0]).getMobileConnectionType()==3;}},"HFP facade");
             check(address.integer("updatePbState")==0,"CarPlay has no phonebook");
             service.updateCallStates(null,true);
@@ -143,6 +168,16 @@ public final class TelephonyTest {
                 CombiBAPCallState[] c=(CombiBAPCallState[])phone.last.get("updateCallStates")[0];
                 return c!=null&&c[0]!=null&&c[0].getCallState()==1;
             }},"real stock incoming event mapped");
+            keys.hook(true);keys.flash(true);keys.hangup(true);
+            check(stockKeys.hooks==0 && stockKeys.hangups==0 && stockKeys.flashes==1,
+                "live CarPlay call must drop duplicate stock HID actions");
+            service.updateCallStates(null,true);
+            keys.hangup(true);
+            check(stockKeys.hangups==1,"emergency-pending phone key must remain stock");
+            service.updateCallStates(null,false);
+            controller.set(manager,stockKeys);
+            await(new Condition(){public boolean test()throws Exception{return controller.get(manager)!=stockKeys;}},
+                "stock controller replacement must re-arm the existing filter");
             long start=System.nanoTime(); listener.acceptCall();
             check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)<100,"BAP action is asynchronous");
             byte[] cmd=command(receiver); check(Arrays.equals(cmd,new byte[]{3,0}),"accept iAP2 command");
@@ -191,6 +226,8 @@ public final class TelephonyTest {
             check(phone.count("hangupCallResult")==hangups+1&&phone.integer("hangupCallResult")==1,"bounded action queue reports failure");
             start=System.nanoTime();
             field(com.luka.carplay.CarPlayHook.class,"active").setBoolean(null,false); module.stop();
+            check(controller.get(manager)==stockKeys,"disconnect must restore the stock phone controller");
+            keys.flash(false);check(stockKeys.flashes==2,"old filter must pass through after disconnect");
             check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)<100,"stop cannot await blocked dial");
             check(phone.integer("updateSignalQuality")==91,"latest Bluetooth signal restored");
             check(phone.integer("updateFSGOperationState")==9,"latest Bluetooth state restored");

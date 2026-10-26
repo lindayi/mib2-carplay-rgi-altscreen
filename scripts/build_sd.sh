@@ -87,7 +87,7 @@ cat > "$OUT/$ALTS_MIRROR_DIR/BUILD_INFO.txt" <<'EOF'
 release_binary_status=SOURCE_BUILT_PRIVATE111_V38
 vehicle_validation=REQUIRED
 upstream_commit=141e7ed33775af02a5af0b8616ee3c6250eea997
-source_build_id=carplay-private111-mu1316-source-v3.8-java-placement
+source_build_id=carplay-private111-mu1316-source-v3.8-fix1-java-placement
 source_manifest=SOURCES.sha256
 rgd_owner=LOCAL_SINGLE_IMPLEMENTATION
 cluster_context_owner=JAVA_SCREENMODULE
