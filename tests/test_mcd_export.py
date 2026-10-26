@@ -89,6 +89,20 @@ class McdExportTest(unittest.TestCase):
         self.assertNotIn("MCD_EXPORT=PASS", result.stdout)
         self.unchanged()
 
+    def test_failed_directory_change_cannot_write_in_callers_directory(self):
+        (self.root / "mcd.conf").write_bytes(b"unrelated active config\n")
+        (self.root / "mcd.system.conf").write_bytes(b"unrelated stored config\n")
+        result = subprocess.run(
+            ["sh", "-c", 'cd() { return 1; }; exporter=$1; shift; . "$exporter"',
+             "fixture", str(self.script)],
+            cwd=self.root, env=self.env, text=True, capture_output=True,
+        )
+        self.assertFalse((self.root / "CKSUMS.txt").exists())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot checksum exported files", result.stderr)
+        self.assertNotIn("MCD_EXPORT=PASS", result.stdout)
+        self.unchanged()
+
     def test_dump_link_cannot_redirect_export_outside_card(self):
         outside = self.root / "outside"
         outside.mkdir()

@@ -510,7 +510,8 @@ static int apply_rule(uint16_t port, int enable, struct p1404_pf_lease *lease,
     if (!changed) { ok = 1; goto done; }
     {
         char *current = capture_rules(port, deadline);
-        if (!current || strcmp(current, before)) {
+        if (!current) goto done;
+        if (strcmp(current, before)) {
             free(current);
             g_pf_stage = "rules_changed_before_reload";
             errno = EAGAIN;

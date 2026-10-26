@@ -5,8 +5,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <errno.h>
+#include <stdarg.h>
 
-void altscreen_log(const char *fmt, ...) { (void)fmt; }
+static char last_log[1024];
+void altscreen_log(const char *fmt, ...) {
+    va_list args;
+    va_start(args,fmt);
+    vsnprintf(last_log,sizeof(last_log),fmt,args);
+    va_end(args);
+}
 
 static char *read_file(const char *path) {
     FILE *f=fopen(path,"rb"); assert(f);
@@ -34,7 +42,16 @@ int main(int argc,char **argv) {
             if(getenv("PF_TEST_RACE")) {
                 const char *count=getenv("PF_TEST_COUNT");
                 char *value=read_file(count);
-                if(!strcmp(value,"1")) write_file(rules,oem_reload);
+                if(!strcmp(value,"1")) {
+                    const char *failure=getenv("PF_TEST_CAPTURE_FAILURE");
+                    if(failure) {
+                        free(value);
+                        if(!strcmp(failure,"empty")) return 0;
+                        fprintf(stderr,"injected capture helper failure\n");
+                        return 7;
+                    }
+                    write_file(rules,oem_reload);
+                }
                 write_file(count,"1"); free(value);
             }
             char *data=read_file(rules);
@@ -76,6 +93,18 @@ int main(int argc,char **argv) {
     assert(!p1404_alt111_firewall_open_owned(61235,&lease) && !lease.generation);
     data=read_file(rules); assert(!strcmp(data,oem_reload)); free(data);
     data=read_file(domains); assert(!strcmp(data,unchanged)); free(data);
+    for(unsigned i=0;i<2;i++) {
+        write_file(rules,original);
+        write_file(count,"0");
+        assert(setenv("PF_TEST_CAPTURE_FAILURE",i?"empty":"exit",1)==0);
+        lease.generation=0;
+        assert(!p1404_alt111_firewall_open_owned(61236+i,&lease) && !lease.generation);
+        assert(errno==EIO);
+        assert(strstr(last_log,i?"stage=read_capture":"stage=helper_exit"));
+        assert(!strstr(last_log,"rules_changed_before_reload"));
+        data=read_file(rules); assert(!strcmp(data,original)); free(data);
+        data=read_file(domains); assert(!strcmp(data,unchanged)); free(data);
+    }
     assert(unlink(rules)==0 && unlink(domains)==0 && unlink(count)==0);
     puts("PF_FILTER_DOMAIN_AND_RELOAD_FENCE=PASS");
     return 0;

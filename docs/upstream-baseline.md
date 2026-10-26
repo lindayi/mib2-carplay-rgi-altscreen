@@ -185,7 +185,9 @@ Review also found an independent earlier native fallback bug: `pfctl -sr`
 was reloaded with unrestricted `-f`, although the snapshot contains no NAT,
 ALTQ or global options. The fallback now uses documented filter-only `-R -f`,
 preserves scrub and queue references, and refuses a detected intervening reload
-instead of submitting that stale snapshot. `-R` is still a replacement of the
+instead of submitting that stale snapshot. A failed second capture retains its
+original error and diagnostic stage; only a successful but different snapshot
+is reported as a concurrent reload. `-R` is still a replacement of the
 filter domain, not a kernel-level atomic rule insertion; the project's lock
 does not serialize an unrelated OEM loader. Do not claim that the extra read
 eliminates every external-loader race or that host tests prove vehicle behavior.
@@ -238,7 +240,10 @@ Each run creates a new `Dump/mcd-original-<date>-<pid>` directory. It contains
 the unit's `mcd`, active `/etc/mcd.conf`, stored `/mnt/system/etc/mcd.conf`,
 and source/export POSIX checksums. Source checksums before and after each copy
 must agree with the copy. A read, copy, comparison or flush failure cannot
-report PASS. The exporter writes only to the SD; if needed it remounts only
+report PASS. The checksum command is explicitly chained to its directory change:
+`set -e` alone does not protect a subshell used in an OR list. A failed `cd`
+must not create a checksum file in the caller's directory.
+The exporter writes only to the SD; if needed it remounts only
 that SD writable. It does not alter installed files, restart a process, run
 a patch, or request a reboot. Keep the export private.
 

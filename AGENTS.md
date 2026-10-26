@@ -97,6 +97,8 @@ Do not turn this into a raw conversation log or store credentials/private captur
   old exports and explicit failure results; SDK daemon/config copies are not
   vehicle originals. Stage it with the SD checksum manifest, never run it from
   INSTALL or ordinary log export.
+  Explicitly chain its checksum command after successful `cd`; an OR-list
+  subshell suppresses `set -e` and can otherwise write outside the export.
 
 - Prefer upstream implementation with local additions and narrow MU1316 adapters.
   Do not treat an existing local path as a reason to omit an upstream feature.
@@ -229,6 +231,8 @@ Do not turn this into a raw conversation log or store credentials/private captur
   Dynamic `-sr` snapshots may load only with `-R`; preserve scrub/queue rules and
   refuse detected concurrent reloads. The process lock does not serialize OEM
   loaders, and filter-only loading is not an atomic insertion guarantee.
+  Preserve a failed capture's errno/stage; reserve concurrent-reload diagnostics
+  for a successfully captured ruleset that actually differs.
 - After partial opacity writes, record success or invalidate cached state so
   a later hide cannot be skipped. A cancelled map veil must finish a cached
   full-opacity swap even without phone frames or active overlays; geometry

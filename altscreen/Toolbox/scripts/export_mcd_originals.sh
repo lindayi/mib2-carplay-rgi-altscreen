@@ -41,8 +41,7 @@ copy_checked "$BIN" mcd
 copy_checked "$CONF" mcd.conf
 copy_checked "$SYSTEM_CONF" mcd.system.conf
 (
-    cd "$OUT"
-    cksum mcd mcd.conf mcd.system.conf > CKSUMS.txt
+    cd "$OUT" && cksum mcd mcd.conf mcd.system.conf > CKSUMS.txt
 ) || fail "Cannot checksum exported files"
 sync || fail "Cannot flush SD writes"
 echo "MCD_EXPORT=PASS"
