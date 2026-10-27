@@ -85,6 +85,23 @@ Do not turn this into a raw conversation log or store credentials/private captur
   transaction rollback returns pre-operation state, RESTORE returns stock, and
   rescue undo returns its exact pre-rescue state. Never restart MCD during apply.
   The helper writes only a new file; the shell owns verified atomic publication.
+- Performance helpers are copied and byte-checked into `/ramdisk`, made executable
+  and self-tested before PREPARED; never execute directly from a FAT SD. Path-only
+  cleanup and legacy restores without performance originals require no helper.
+  Write the decoder through `/mnt/app/eso/lib/libairplay.so` only after proving it
+  aliases `/eso/lib/libairplay.so` (same device/inode, one link). Rescue must retain
+  its recorded original mode, not replace it with the generic native-file 0755.
+- INSTALL persists a checksummed, unit-bound performance-only recovery kit at
+  `/mnt/app/root/carplay-performance-rescue` before patching stock files. Its
+  explicit GEM action works without SD, retains originals/evidence for retries,
+  never restarts MCD and requires a full reboot after PASS. It is not full stock
+  rescue and still needs working OS/HMI/Green Menu access. Full stock restore
+  removes the kit; transaction rollback/rescue undo restore its pre-operation state.
+  SD transactions and internal recovery share an inherited, non-listening loopback
+  token on TCP 19804, including surviving installer children. Never replace it with
+  a stale PID-only lock; verify the descriptor survived shell re-exec before APPLY.
+  Stored priority bytes and active `/etc/mcd.conf` are reported
+  separately; neither file hash proves the running MCD/decoder was restarted.
 - Maps30 shares `framework/identify_buffer.h` with RGD. Preserve the ARM32
   NmeArray layout, current length/capacity checks, existing PPIDs and module
   ordering. Gate the selector by exec-time ALTSCREEN_PHONE_PROFILE; Master Off
@@ -94,6 +111,9 @@ Do not turn this into a raw conversation log or store credentials/private captur
   `PERFORMANCE_FIXTURE` in addition to the prior `FIXTURE` stock backup. The
   host helper is compiled from production source; only ARM execution is replaced.
   Run final package fixtures in staged mode, without weakening hash or rollback checks.
+  Build `tests/installer/Dockerfile` as `mib2-installer-test:local` after the native
+  test image; the installer runner requires mksh rather than a silent Bash fallback.
+  Host ksh/ELF checks do not establish QNX shell, ARM execution or iOS acceptance.
 
 - The 2026-10-25 source sync advances yuedizhibo to V3.8 Fix1 `652448d`.
   Keep the released net diff: upstream withdrew PR 62 startup/frame reuse.

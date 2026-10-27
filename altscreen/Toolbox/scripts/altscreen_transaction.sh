@@ -35,6 +35,7 @@ JAR="$ROOT/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar"
 CONTROLLER="$SCRIPTS/altscreen_chain_test.sh"
 UNIVERSAL="$SCRIPTS/altscreen_chain_test_universal.sh"
 . "$SCRIPTS/carplay_performance.sh"
+PERF_INTERNAL_RECOVERY=0
 LOCK="$SD/.operation.lock"
 BOOT_FILE="$ROOT/ramdisk/MMI-Cockpit-Carplay.transaction.boot"
 TXN=""; READY=0; APP_RW=0; SYS_RW=0; LOCK_HELD=0
@@ -232,6 +233,8 @@ allowed_item(){
     case "$1:$2" in
         file:"$SI"|file:"$DIO"|file:"$PF"|file:"$JAR"|file:"$ROOT/mnt/system/etc/boot/startup.sh"|file:"$ROOT/etc/boot/startup.sh") return 0 ;;
         file:"$ROOT/mnt/app/armle/usr/sbin/mcd"|file:"$ROOT/mnt/system/etc/mcd.conf") return 0 ;;
+        file:"$ROOT/mnt/app/eso/lib/libairplay.so") return 0 ;;
+        dir:"$ROOT/mnt/app/root/carplay-performance-rescue"|dir:"$ROOT/mnt/app/root/carplay-performance-rescue.staging"|dir:"$ROOT/mnt/app/root/carplay-performance-rescue.previous") return 0 ;;
         file:"$ROOT/mnt/system/etc/"pf.*.conf) case "${2##*/}" in *[!A-Za-z0-9._-]*) return 1 ;; *) return 0 ;; esac ;;
         file:"$ROOT/eso/bin/apps/dio_manager"|file:"$ROOT/mnt/app/eso/bin/apps/dio_manager"|file:"$ROOT/eso/lib/libairplay.so"|file:"$ROOT/armle/usr/lib/libNmeBaseClasses.so"|file:"$ROOT/mnt/app/armle/usr/lib/libNmeBaseClasses.so"|file:"$ROOT/eso/lib/libNmeBaseClasses.so") return 0 ;;
         dir:"$RUNTIME"|dir:"$ROOT/mnt/app/root/.carplay-altscreen.previous"|dir:"$HOOKS"|dir:"$ROOT/mnt/app/root/lib-target"|dir:"$SD/state"|dir:"$SD/backup"|dir:"$SD/staging") return 0 ;;
@@ -270,7 +273,7 @@ validate_snapshot(){
         if [ ! -f "$TXN/RESCUE" ]; then
             case "$name" in native_*)
                 same "$TXN/data/$name" "$path" ||
-                    { [ "$path" = "$ROOT/eso/lib/libairplay.so" ] &&
+                    { { [ "$path" = "$ROOT/eso/lib/libairplay.so" ] || [ "$path" = "$ROOT/mnt/app/eso/lib/libairplay.so" ]; } &&
                       perf_known_native_pair "$TXN/data/$name" "$path"; } || {
                     log "SNAPSHOT=REFUSED stock_binary_changed=YES rescue_required=YES"; return 1;
                 } ;;
@@ -293,12 +296,20 @@ snapshot(){
     done
     /bin/sh "$UNIVERSAL" native-paths > "$TXN/native.paths" || return 1
     while IFS= read -r rel; do
-        snapshot_item file "$ROOT$rel" "native_$(echo "$rel" | tr '/' '_')" || return 1
+        path="$ROOT$rel"
+        # Snapshot/publish the writable canonical object, not a read-only alias.
+        if [ "$rel" = /eso/lib/libairplay.so ] && [ -f "$ROOT/mnt/app/eso/lib/libairplay.so" ]; then
+            path="$ROOT/mnt/app/eso/lib/libairplay.so"
+        fi
+        snapshot_item file "$path" "native_$(echo "$rel" | tr '/' '_')" || return 1
     done < "$TXN/native.paths"
     if [ "$ACTION" = install ] || [ -d "$SD/backup/performance-original" ]; then
         snapshot_item file "$ROOT/mnt/app/armle/usr/sbin/mcd" perf_mcd &&
             snapshot_item file "$ROOT/mnt/system/etc/mcd.conf" perf_priority || return 1
     fi
+    for suffix in '' .staging .previous; do
+        snapshot_item dir "$ROOT/mnt/app/root/carplay-performance-rescue$suffix" "performance_kit$suffix" || return 1
+    done
     snapshot_item dir "$RUNTIME" runtime &&
         snapshot_item dir "$ROOT/mnt/app/root/.carplay-altscreen.previous" previous &&
         snapshot_item dir "$HOOKS" hooks &&
@@ -456,6 +467,7 @@ verify_installed(){
         sh -n "$startup" || return 1
     /bin/sh "$UNIVERSAL" verify-install || return 1
     perf_verify optimized || return 1
+    perf_verify_kit || return 1
     verify_startup_unrelated || return 1
     log "INSTALL_VERIFY=PASS autostart=ARMED live_launch=NOT_REQUIRED"
 }
@@ -536,6 +548,10 @@ local_baseline() (
 
 /bin/sh "$UNIVERSAL" firmware-train >/dev/null || exit 1
 /bin/sh "$CONTROLLER" sd-preflight || exit 1
+perf_setup || exit 1
+if [ "$ACTION" = install ] || [ -e "$PERF_ORIGINAL" ] || [ -e "$PERF_KIT" ]; then
+    perf_lock_exec "$0" "$@" || { log "FAIL: performance helper unavailable or operation busy"; exit 1; }
+fi
 acquire || exit 1
 if [ "$ACTION" = undo-rescue ]; then
     TXN="$SD/restore-transaction/rescue"
@@ -561,6 +577,9 @@ if [ "$ACTION" = install ]; then
     perf_preflight || fail "performance exact-file preflight"
 else
     /bin/sh "$UNIVERSAL" restore-preflight || fail "restore preflight"
+    if [ -e "$PERF_ORIGINAL" ]; then
+        perf_prepare_helper && perf_originals_valid && perf_decoder_alias || fail "performance restore preflight"
+    fi
 fi
 if [ "$ACTION" = rescue ]; then
     /bin/sh "$UNIVERSAL" rescue-preflight || fail "rescue identity"
@@ -577,6 +596,9 @@ touch "$TXN/APPLYING" && sync || fail "APPLYING journal"
 if [ "$ACTION" = install ]; then
     local_baseline save || fail "local original backup"
     perf_save_originals || fail "performance original backup"
+    mount_app_rw && APP_RW=1 || fail "internal recovery kit mount"
+    perf_install_kit || fail "internal performance recovery kit"
+    finish_mounts || fail "internal recovery kit sync"
     ALTSCREEN_TRANSACTION_ACTIVE=1 run_detail /bin/sh "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh" --apply ||
         fail "install APPLY"
     mount_app_rw && APP_RW=1 && mount_system_rw && SYS_RW=1 || fail "performance mounts"
@@ -593,6 +615,8 @@ else
     finish_mounts || fail "local original restore sync"
     verify_restored || fail "restored final verification"
     verify_startup_unrelated || fail "unrelated startup content changed"
+    mount_app_rw && APP_RW=1 || fail "internal kit cleanup mount"
+    perf_remove_kit || fail "internal kit cleanup"
 fi
 finish_mounts || fail "final sync/remount"
 touch "$TXN/COMMITTED" && sync || fail "durable commit"

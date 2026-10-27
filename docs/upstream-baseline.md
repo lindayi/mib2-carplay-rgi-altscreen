@@ -170,6 +170,36 @@ rollback. The candidate must be restored with its matching/newer SD; an older
 card has no knowledge of the approved binary transformations and may correctly
 refuse them. Do not bypass an older card's original-file check.
 
+The helper is read from SD, byte-checked into an executable `/ramdisk` cache and
+self-tested before PREPARED. The installer does not depend on FAT execute bits.
+Legacy restore and path-only rollback without performance originals do not need
+the helper. Decoder publication uses `/mnt/app/eso/lib/libairplay.so` on the
+remounted application filesystem; preflight requires it and `/eso/lib/libairplay.so`
+to identify the same single-link inode. Unknown alias layouts fail before mutation.
+Stock rescue preserves the recorded decoder mode, including non-0755 originals.
+
+Because MCD participates in SD discovery, INSTALL also stages a persistent
+unit-bound recovery kit under `/mnt/app/root/carplay-performance-rescue` before
+any performance write. The explicit Green Menu **MMI-Cockpit-Carplay ->
+RESCUE: restore performance originals (no SD)** action restores only these three
+stock files and modes. It checks kit payloads, original hashes, firmware and unit
+identity without an SD, preserves interrupted staging as evidence, and retains
+the kit for retries. It does not restart MCD, remove CarPlay or complete a failed
+installation. After PASS, perform one full MMI reboot. It still requires a working
+OS/HMI/Green Menu; it is not protection against arbitrary boot failure. Retain the
+matching SD for full restore and transaction recovery.
+
+The kit and its swap directories participate in the ordinary transaction snapshot.
+Full stock restore removes the kit; rollback and rescue undo restore its exact
+pre-operation state. SD transactions and the internal action share a bounded-wait,
+non-listening loopback token on TCP 19804. The descriptor survives exec and remains
+held by surviving installer children after parent termination. No network service
+is started. Re-entry checks the actual bound descriptor, not just its PID marker,
+so unsupported shell inheritance fails before APPLY. STATUS distinguishes stored
+priority configuration from `/etc/mcd.conf`;
+neither a matching file nor a helper self-test proves the running daemon or
+decoder has reloaded it.
+
 These are installation-level, HU-wide changes. Turning Master Off still
 withdraws CarPlay modules/extra video, but does not restore stock binaries.
 There is no new reboot-dependent switch in the normal-MMI settings. Settings,
@@ -190,6 +220,12 @@ after the first decoder write, failure after all performance changes, rollback
 to an already optimized upgrade baseline, exact stock restoration, corruption
 refusal, rescue and reversible undo. They use the actual helper source and
 private exact-unit files; host execution is not on-vehicle ARM validation.
+They require mksh (build `tests/installer/Dockerfile` as
+`mib2-installer-test:local`), not a silent Bash fallback. Additional cases cover
+non-0755 decoder modes, readable/non-executable helper payloads, alias refusal,
+invalid helpers before PREPARED, legacy helper-free restoration, SD-unavailable
+recovery, corrupt kit/wrong-unit refusal, repeated recovery and inherited lock
+lifetime. This is ksh-family host coverage, not execution of the QNX shell.
 
 Maps30 selects a phone policy, not a guaranteed panel rate. Reduced queues can
 trade latency for less burst tolerance. MCD polling/priority can change media

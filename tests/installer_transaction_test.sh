@@ -60,6 +60,7 @@ scripts = [
     "export_mmi_cockpit_diagnostics.sh", "altscreen_transaction.sh",
     "altscreen_rescue.sh", "altscreen_firewall_diag.sh",
     "carplay_performance.sh",
+    "carplay_performance_recover.sh",
 ]
 payload = "Toolbox/carplay_alt_screen/"
 arm = [
@@ -95,12 +96,15 @@ fixture(){
     RUNTIME="$ROOT/mnt/app/root/carplay-altscreen"; HOOKS="$ROOT/mnt/app/root/hooks"
     P="$ROOT/mnt/system/etc/eso/production"
     F=/fixture/ORIGINAL/files
-    mkdir -p "$VOL" "$ROOT/eso/bin/apps" "$ROOT/eso/lib" "$ROOT/armle/usr/lib" "$P" \
+    mkdir -p "$VOL" "$ROOT/eso/bin/apps" "$ROOT/mnt/app/eso/lib" "$ROOT/armle/usr/lib" "$P" \
         "$ROOT/mnt/system/etc/boot" "$ROOT/mnt/app/root" "$ROOT/mnt/app/eso/hmi/lsd/jars" \
-        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk" "$ROOT/armle/sbin" "$ROOT/mnt/app/armle/usr/sbin"
+        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk" "$ROOT/armle/sbin" "$ROOT/mnt/app/armle/usr/sbin" "$ROOT/etc"
+    ln -s "$ROOT/mnt/app/eso/lib" "$ROOT/eso/lib"
     cp "$RUN/performance-test-helper" "$ROOT/performance-test-helper"
+    chmod 644 "$ROOT/performance-test-helper" # Model a readable, non-executable FAT payload.
     cp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
     cp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
+    cp /performance/mcd.conf "$ROOT/etc/mcd.conf"
     chmod 755 "$ROOT/mnt/app/armle/usr/sbin/mcd"
     cp /work/tests/fixtures/pfctl-filter-validator.sh "$ROOT/armle/sbin/pfctl"
     chmod 755 "$ROOT/armle/sbin/pfctl"
@@ -118,6 +122,7 @@ fixture(){
     fi
     cp "$F/_eso_bin_apps_dio_manager" "$ROOT/eso/bin/apps/dio_manager"
     cp "$F/_eso_lib_libairplay.so" "$ROOT/eso/lib/libairplay.so"
+    chmod 775 "$ROOT/mnt/app/eso/lib/libairplay.so"
     cp "$F/_armle_usr_lib_libNmeBaseClasses.so" "$ROOT/armle/usr/lib/libNmeBaseClasses.so"
     cp "$F/_mnt_system_etc_eso_production_smartphone_integrator.json" "$P/smartphone_integrator.json"
     cp "$F/_mnt_system_etc_eso_production_dio_manager.json" "$P/dio_manager.json"
@@ -154,6 +159,7 @@ state(){
 unchanged(){ state after; cmp "$CASE_DIR/$1" "$CASE_DIR/after"; }
 stock(){
     cmp "$F/_eso_lib_libairplay.so" "$ROOT/eso/lib/libairplay.so"
+    test "$(stat -c %a "$ROOT/mnt/app/eso/lib/libairplay.so")" = 775
     cmp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
     cmp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
     cmp "$F/_mnt_system_etc_eso_production_smartphone_integrator.json" "$P/smartphone_integrator.json"
@@ -191,7 +197,7 @@ p.write_text(text.replace(sys.argv[2],sys.argv[3]))
 PY
 }
 
-case "${INSTALLER_CASES:-all}" in all|rescue) ;; *) exit 2 ;; esac
+case "${INSTALLER_CASES:-all}" in all|rescue|performance) ;; *) exit 2 ;; esac
 if [ "${INSTALLER_CASES:-all}" = all ]; then
 fixture success
 state pristine
@@ -201,6 +207,9 @@ need install 'STALE_LOCK=RECOVERED'
 run status "$SCRIPTS/status_mmi_cockpit_carplay_test.sh"
 need status 'HMI_CONTROL_PLANE=PASS'
 need status 'RGI_DIO_IDS=5/5'
+need status 'PERFORMANCE_priority=optimized stored_file=YES'
+need status 'PERFORMANCE_priority_active=stock'
+need status 'PERFORMANCE_running_decoder_mcd=NOT_PROVEN_BY_FILE_HASH'
 fails premature-rgi-remove "$SCRIPTS/rgi_companion.sh" remove
 need premature-rgi-remove 'SI still references the RGI runtime'
 cp "$SD/backup/original/files/_mnt_system_etc_eso_production_smartphone_integrator.json" "$CASE_DIR/original-si"
@@ -252,6 +261,107 @@ test -f "$HOOKS/owner-unrelated"
 run restore-again "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
 need restore-again 'already_restored=YES'
 echo "ok: one-step, upgrade, compatible START, exact restore and immutable exports"
+fi
+
+if [ "${INSTALLER_CASES:-all}" != rescue ]; then
+fixture invalid-helper
+printf invalid > "$ROOT/performance-test-helper"
+state before
+fails invalid-helper "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+test ! -e "$SD/install-transaction/active/PREPARED"
+unchanged before
+
+fixture invalid-restore-helper
+install
+printf invalid > "$ROOT/performance-test-helper"
+state before
+fails invalid-restore-helper "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
+test ! -e "$SD/restore-transaction/active/PREPARED"
+unchanged before
+
+fixture wrong-decoder-alias
+rm "$ROOT/eso/lib"
+mkdir "$ROOT/eso/lib"
+cp "$ROOT/mnt/app/eso/lib/libairplay.so" "$ROOT/eso/lib/libairplay.so"
+state before
+fails wrong-alias "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+test ! -e "$SD/install-transaction/active/PREPARED"
+unchanged before
+
+fixture legacy-no-helper
+install
+# Model the older no-performance installation: original bytes, no added kit or backup.
+cp "$F/_eso_lib_libairplay.so" "$ROOT/mnt/app/eso/lib/libairplay.so"
+cp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
+cp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
+chmod 775 "$ROOT/mnt/app/eso/lib/libairplay.so"
+rm -rf "$SD/backup/performance-original" "$ROOT/mnt/app/root/carplay-performance-rescue"
+printf invalid > "$ROOT/performance-test-helper"
+stop_stub
+run legacy-restore "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
+need legacy-restore 'RESTORE=PASS'
+stock
+
+fixture internal-recovery
+install
+KIT="$ROOT/mnt/app/root/carplay-performance-rescue"
+mv "$VOL" "$CASE_DIR/sd-unavailable"
+printf bad-daemon > "$ROOT/mnt/app/armle/usr/sbin/mcd"
+printf partial > "$ROOT/mnt/system/etc/mcd.conf.performance-new"
+cp "$KIT/carplay_performance.sh" "$CASE_DIR/saved-performance-script"
+inject "$KIT/carplay_performance.sh" \
+    '    chmod "$(cat "$PERF_ORIGINAL/$role.mode")" "$temp" &&' \
+    '    [ "$role" != mcd ] || exit 1; chmod "$(cat "$PERF_ORIGINAL/$role.mode")" "$temp" &&'
+(cd "$KIT" && cksum carplay_binpatch carplay_performance.sh carplay_performance_recover.sh \
+    train unit.key unit.key.cksum) > "$KIT/payload.cksum"
+fails no-sd-partial "$KIT/carplay_performance_recover.sh"
+need no-sd-partial 'PERFORMANCE_RECOVERY=FAIL originals_retained=YES retry_required=YES'
+test -f "$ROOT/mnt/app/armle/usr/sbin/mcd.performance-new"
+cp "$CASE_DIR/saved-performance-script" "$KIT/carplay_performance.sh"
+(cd "$KIT" && cksum carplay_binpatch carplay_performance.sh carplay_performance_recover.sh \
+    train unit.key unit.key.cksum) > "$KIT/payload.cksum"
+run no-sd-recovery "$KIT/carplay_performance_recover.sh"
+need no-sd-recovery 'PERFORMANCE_RECOVERY=PASS'
+cmp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
+cmp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
+cmp "$F/_eso_lib_libairplay.so" "$ROOT/mnt/app/eso/lib/libairplay.so"
+test "$(stat -c %a "$ROOT/mnt/app/eso/lib/libairplay.so")" = 775
+test -f "$RUNTIME/state/ACTIVE"
+run no-sd-repeat "$KIT/carplay_performance_recover.sh"
+need no-sd-repeat 'PERFORMANCE_RECOVERY=PASS'
+cp "$KIT/carplay_performance.sh" "$CASE_DIR/saved-performance-script"
+echo '# corrupt kit payload' >> "$KIT/carplay_performance.sh"
+state before
+fails no-sd-corrupt-kit "$KIT/carplay_performance_recover.sh"
+need no-sd-corrupt-kit 'internal recovery kit checksum'
+unchanged before
+cp "$CASE_DIR/saved-performance-script" "$KIT/carplay_performance.sh"
+echo wrong-unit > "$ROOT/dev/shmem/test-unit-id"
+state before
+fails no-sd-wrong-unit "$KIT/carplay_performance_recover.sh"
+unchanged before
+mv "$CASE_DIR/sd-unavailable" "$VOL"
+
+for fault in fail interrupt; do
+    fixture "kit-swap-$fault"
+    install
+    state before
+    cp "$SCRIPTS/carplay_performance.sh" "$CASE_DIR/performance.clean"
+    replacement='    exit 1'
+    [ "$fault" != interrupt ] || replacement='    kill -KILL $$; exit 1'
+    inject "$SCRIPTS/carplay_performance.sh" \
+        '    mv "$next" "$PERF_KIT" && sync || exit 1' "$replacement"
+    fails kit-swap "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+    if [ "$fault" = interrupt ]; then
+        test -f "$SD/install-transaction/active/PREPARED"
+        cp "$CASE_DIR/performance.clean" "$SCRIPTS/carplay_performance.sh"
+        run kit-recover "$SCRIPTS/altscreen_rescue.sh" recover
+        need kit-recover 'STALE_TRANSACTION=RECOVERED'
+    else
+        need kit-swap 'ROLLBACK=PASS'
+    fi
+    unchanged before
+done
 
 fixture unknown-performance
 printf unknown >> "$ROOT/mnt/app/armle/usr/sbin/mcd"
@@ -291,6 +401,8 @@ fails performance-upgrade "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
 need performance-upgrade 'ROLLBACK=PASS'
 unchanged before
 
+fi
+if [ "${INSTALLER_CASES:-all}" = all ]; then
 fixture wrong-firmware
 state before
 echo MHI2Q_ER_AUG22_P5092 > "$ROOT/dev/shmem/version.txt"
@@ -426,10 +538,12 @@ run rescue "$SCRIPTS/altscreen_rescue.sh" restore-original --confirm-stock-rescu
 need rescue 'RESCUE=PASS reversible=YES'
 cmp "$F/_eso_bin_apps_dio_manager" "$ROOT/eso/bin/apps/dio_manager"
 stock
+test ! -e "$ROOT/mnt/app/root/carplay-performance-rescue"
 test -f "$SD/restore-transaction/rescue/PREPARED"
 run undo "$SCRIPTS/altscreen_rescue.sh" undo --confirm-pre-rescue
 need undo 'RESCUE_UNDO=PASS'
 unchanged damaged
+test -s "$ROOT/mnt/app/root/carplay-performance-rescue/carplay_binpatch"
 test ! -e "$SD/restore-transaction/rescue"
 echo "ok: guarded native rescue and exact reversible pre-rescue state"
 if [ "$PACKAGE_MODE" = staged ]; then

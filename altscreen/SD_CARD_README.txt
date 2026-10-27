@@ -60,6 +60,17 @@ validate the later native-menu or recovery additions.
    Successful stock rescue removes that installed directory. Its reversal uses
    the matching SD's Toolbox/scripts/altscreen_rescue.sh with
    "undo --confirm-pre-rescue". Undo restores the pre-rescue state, even if damaged.
+   If a performance regression prevents SD discovery but Green Menu still works:
+   MMI-Cockpit-Carplay -> RESCUE: restore performance originals (no SD).
+   Park with stable power and disconnect iPhone first. Wait for
+   PERFORMANCE_RECOVERY=PASS, then perform one full MMI reboot.
+   This restores only decoder/MCD files and modes from the installed, unit-bound
+   kit. It does not remove CarPlay, restart MCD live or finish a failed INSTALL.
+   On FAIL retain the evidence; the kit remains available for another attempt.
+   This path needs functioning OS/HMI/Green Menu access, not an SD card.
+   Full RESTORE ORIGINAL removes the kit; keep the matching SD for full recovery.
+   STATUS distinguishes stored and active priority configuration, but file hashes
+   cannot establish that the running decoder/MCD has reloaded those files.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.
    Cold boots do not require the SD card to remain inserted once installed.
    The SD card holds stock backups and diagnostic logs; always retain your backup card.

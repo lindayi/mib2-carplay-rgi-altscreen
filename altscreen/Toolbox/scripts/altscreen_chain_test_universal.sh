@@ -581,6 +581,15 @@ restore_originals() (
     verify_backup_identity || return 1
     while IFS= read -r rel; do
         [ -n "$rel" ] || continue
+        if [ "$rel" = "$LIVE_LIBAIRPLAY" ]; then
+            perf_setup || return 1
+            if [ -e "$PERF_ORIGINAL" ]; then
+                # The outer performance restore already restored exact bytes
+                # and the recorded mode; do not overwrite that mode with 0755.
+                perf_decoder_restored || return 1
+                continue
+            fi
+        fi
         # Normal restore never rewrites OEM binaries. Rescue may repair them,
         # only with a unit-bound backup and complete reversible transaction.
         case "$rel" in *.json) ;; *) [ "${ALTSCREEN_RESCUE:-0}" = 1 ] || continue ;; esac
@@ -788,12 +797,7 @@ cmd_disarm(){
 
 cmd_status(){
     echo "=== AltScreen AUG22 universal status ==="
-    if perf_setup && [ -d "$PERF_ORIGINAL" ]; then
-        for role in decoder mcd priority; do
-            state=$(perf_check "$role" "$(perf_path "$role")") || state=INVALID
-            echo "PERFORMANCE_$role=$state activation=NEXT_BOOT_AFTER_INSTALL"
-        done
-    fi
+    perf_status || echo "PERFORMANCE_STATUS=UNAVAILABLE"
     if [ -d "$LOCK_FILE" ]; then
         echo "OPERATION_LOCK=PRESENT pid=$(cat "$LOCK_FILE/pid" 2>/dev/null || echo unknown)"
     else

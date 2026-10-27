@@ -6,6 +6,7 @@ import runpy
 import subprocess
 import sys
 import tempfile
+import os
 
 root = Path(__file__).resolve().parents[1]
 helper = str(Path(sys.argv[1]).resolve())
@@ -22,6 +23,35 @@ def run(*args, ok=True):
 
 with tempfile.TemporaryDirectory() as temp:
     temp = Path(temp)
+    assert run("--self-test") == "PERFORMANCE_HELPER=READY"
+    original = inputs["decoder"]
+    alias = temp / "alias"
+    alias.symlink_to(original)
+    run("same-file", original, alias)
+    separate = temp / "separate"
+    separate.write_bytes(original.read_bytes())
+    run("same-file", original, separate, ok=False)
+    hardlink = temp / "hardlink"
+    os.link(separate, hardlink)
+    run("same-file", separate, hardlink, ok=False)
+    run("lock-held", ok=False)
+    run("lock-exec", "/bin/sh", "-c", 'exec "$1" lock-held', "_", helper)
+    run("lock-exec", sys.executable, "-c",
+        'import os, subprocess, sys; os.close(int(os.environ["CARPLAY_PERFORMANCE_LOCK_FD"])); '
+        'sys.exit(subprocess.call([sys.argv[1], "lock-held"], close_fds=False))', helper, ok=False)
+    holder = subprocess.Popen([helper, "lock-exec", "/bin/sh", "-c",
+                               'echo ready; sleep 6'], stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "ready"
+    run("lock-exec", "/bin/sh", "-c", "exit 0", ok=False)
+    assert holder.wait(timeout=10) == 0
+    run("lock-exec", "/bin/sh", "-c", "exit 0")
+    holder = subprocess.Popen([helper, "lock-exec", "/bin/sh", "-c",
+                               'sleep 5 & echo ready; wait'], stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "ready"
+    holder.kill()
+    holder.wait(timeout=5)
+    run("lock-exec", "/bin/sh", "-c", "exit 0", ok=False)
+    run("lock-exec", "/bin/sh", "-c", "exit 0")
     for role, original in inputs.items():
         before = original.read_bytes()
         assert run("check", role, original) == "stock"

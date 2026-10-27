@@ -8,6 +8,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <limits.h>
 
 #define LIMIT (1024u * 1024u)
 static uint32_t rotr(uint32_t x, unsigned n) { return (x >> n) | (x << (32-n)); }
@@ -62,6 +66,61 @@ static const struct profile profiles[]={
 };
 int main(int argc,char **argv) {
     int result=1; FILE *input=NULL; unsigned char *bytes=NULL; size_t length;
+    if(argc==2 && !strcmp(argv[1],"--self-test")) {
+        char hash[65]; sha256((const unsigned char *)"abc",3,hash);
+        if(strcmp(hash,"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")) goto done;
+        puts("PERFORMANCE_HELPER=READY"); return 0;
+    }
+    if(argc==4 && !strcmp(argv[1],"same-file")) {
+        struct stat a,b;
+        return stat(argv[2],&a) || stat(argv[3],&b) ||
+            !S_ISREG(a.st_mode) || !S_ISREG(b.st_mode) ||
+            a.st_nlink!=1 || b.st_nlink!=1 || a.st_dev!=b.st_dev || a.st_ino!=b.st_ino;
+    }
+    if(argc==2 && !strcmp(argv[1],"lock-held")) {
+        const char *value=getenv("CARPLAY_PERFORMANCE_LOCK_FD");
+        char *end=NULL;
+        if(!value || !*value) goto done;
+        errno=0;
+        long fd=strtol(value,&end,10);
+        if(errno || *end || fd<10 || fd>INT_MAX) goto done;
+        struct sockaddr_in address;
+        socklen_t size=sizeof(address);
+        if(getsockname((int)fd,(struct sockaddr *)&address,&size)!=0 ||
+                size!=sizeof(address) || address.sin_family!=AF_INET ||
+                address.sin_port!=htons(19804) || address.sin_addr.s_addr!=htonl(0x7f000001u)) goto done;
+        return 0;
+    }
+    if(argc>=3 && !strcmp(argv[1],"lock-exec")) {
+        /* Bound, non-listening loopback token; inherited across exec/children.
+         * If a parent dies, a still-running installer child keeps the token. */
+        int fd=socket(AF_INET,SOCK_STREAM,0);
+        struct sockaddr_in address;
+        memset(&address,0,sizeof(address));
+        address.sin_family=AF_INET;address.sin_port=htons(19804);
+#ifdef __QNXNTO__
+        address.sin_len=sizeof(address);
+#endif
+        address.sin_addr.s_addr=htonl(0x7f000001u);
+        if(fd<0) goto done;
+        int acquired=0;
+        for(unsigned attempt=0;attempt<30;attempt++) {
+            if(bind(fd,(struct sockaddr *)&address,sizeof(address))==0){acquired=1;break;}
+            if(errno!=EADDRINUSE)break;
+            usleep(100000);
+        }
+        if(!acquired){close(fd);goto done;}
+        int token=fcntl(fd,F_DUPFD,10);
+        close(fd);fd=token;
+        if(fd<0)goto done;
+        if(fcntl(fd,F_SETFD,0)!=0){close(fd);goto done;}
+        char owner[32],descriptor[32];snprintf(owner,sizeof(owner),"%ld",(long)getpid());
+        snprintf(descriptor,sizeof(descriptor),"%d",fd);
+        if(setenv("CARPLAY_PERFORMANCE_LOCK_PID",owner,1)!=0 ||
+                setenv("CARPLAY_PERFORMANCE_LOCK_FD",descriptor,1)!=0){close(fd);goto done;}
+        execv(argv[2],argv+2);
+        close(fd);goto done;
+    }
     if(argc!=4 && argc!=5) goto done;
     const struct profile *p=NULL;
     for(unsigned i=0;i<sizeof(profiles)/sizeof(profiles[0]);i++)
