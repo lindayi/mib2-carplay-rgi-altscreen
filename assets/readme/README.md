@@ -1,4 +1,24 @@
-# README preview images
+# README visuals
+
+## Owner-supplied vehicle photo
+
+`in-car-earlier-build.jpg` is included with the owner's explicit approval, from
+the privately supplied `in_Car.JPEG` used during September 2026 layout work.
+It shows an earlier in-car build, not the latest card styling or validation of
+the current performance candidate.
+
+Only this edited derivative is published: cropped to the cockpit, resized,
+GPS/EXIF and other source metadata removed, and opaque masks placed over
+identifying location labels, album artwork and the private mascot. A caption is
+included in the image itself. The map geometry and instrument readings remain;
+this is not a claim of complete anonymization.
+
+No replacement map, invented UI or simulated feature result was painted into the
+photograph. The original remains private and unchanged. Do not replace the
+derivative with the raw input, remove the evidence caption, or infer a general
+license for the original photograph or third-party artwork.
+
+## Host-rendered previews
 
 These figures show **this fork's host fixtures**, not an owner's vehicle or an
 upstream demonstration car. All route/media/speed values are synthetic.
@@ -14,7 +34,7 @@ They contain no private firmware capture, real album cover or mascot-pack artwor
 labels. It reads only the named `build/` fixture outputs; it does not read the
 owner's pack, phone metadata, private directories or vehicle logs.
 
-## Regenerate
+## Regenerate the host figures
 
 The commands below assume an existing host GLES test image with C/C++ compilers,
 EGL/GLES, Python/Pillow and DejaVu fonts. The project's local

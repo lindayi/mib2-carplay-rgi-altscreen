@@ -24,8 +24,10 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - English documentation only. Ukrainian READMEs were intentionally removed.
 - README figures use public synthetic host fixtures, composed by
   `tools/render_readme_previews.py`; keep their host-preview labels and provenance
-  in `assets/readme/README.md`. Never substitute private captures or mascot packs,
-  or present an upstream reference photo as validation of this Q5 build.
+  in `assets/readme/README.md`. Separately approved owner photos need metadata
+  removal, privacy/licensing review and an accurate build/evidence caption.
+  Never publish raw private captures or mascot packs, or present an upstream
+  reference photo as validation of this Q5 build.
 
 ## Resume here: workspace and source history
 
