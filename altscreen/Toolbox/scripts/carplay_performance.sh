@@ -90,7 +90,10 @@ perf_restore() (
     for role in decoder mcd priority; do
         file=$(perf_path "$role")
         if [ "${ALTSCREEN_RESCUE:-0}" != 1 ]; then perf_check "$role" "$file" >/dev/null || exit 1; fi
-        cmp -s "$PERF_ORIGINAL/$role" "$file" || perf_publish "$role" restore || exit 1
+        if ! cmp -s "$PERF_ORIGINAL/$role" "$file" ||
+            [ "$(file_mode "$file")" != "$(cat "$PERF_ORIGINAL/$role.mode")" ]; then
+            perf_publish "$role" restore || exit 1
+        fi
     done
     perf_verify stock
 )

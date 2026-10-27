@@ -416,7 +416,8 @@ need bind-legacy-upgrade 'BACKUP_IDENTITY=BOUND legacy_original_bytes=UNCHANGED'
 cmp "$CASE_DIR/legacy-backup-before" "$CASE_DIR/legacy-backup-after"
 stop_stub
 echo damaged-native > "$ROOT/eso/bin/apps/dio_manager"
-echo damaged-mcd > "$ROOT/mnt/app/armle/usr/sbin/mcd"
+cp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
+chmod 644 "$ROOT/mnt/app/armle/usr/sbin/mcd"
 echo damaged-priority > "$ROOT/mnt/system/etc/mcd.conf"
 state damaged
 fails ordinary-refuses-damage "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
