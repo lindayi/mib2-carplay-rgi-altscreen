@@ -69,6 +69,9 @@ validate the later native-menu or recovery additions.
    On FAIL retain the evidence; the kit remains available for another attempt.
    This path needs functioning OS/HMI/Green Menu access, not an SD card.
    Full RESTORE ORIGINAL removes the kit; keep the matching SD for full recovery.
+   If this SD lacks performance-original but an internal kit exists, full restore
+   and stock rescue refuse without changing it. Use the matching backups or the
+   no-SD action above; an older pre-performance backup is not sufficient.
    STATUS distinguishes stored and active priority configuration, but file hashes
    cannot establish that the running decoder/MCD has reloaded those files.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.

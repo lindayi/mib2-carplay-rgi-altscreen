@@ -526,6 +526,18 @@ run bind-legacy-upgrade "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
 need bind-legacy-upgrade 'BACKUP_IDENTITY=BOUND legacy_original_bytes=UNCHANGED'
 (cd "$SD/backup/original"; find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$CASE_DIR/legacy-backup-after"
 cmp "$CASE_DIR/legacy-backup-before" "$CASE_DIR/legacy-backup-after"
+mv "$SD/backup/performance-original" "$CASE_DIR/saved-performance-original"
+state missing-performance-backup
+fails missing-performance-restore "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
+need missing-performance-restore 'performance originals missing'
+fails missing-performance-rescue "$SCRIPTS/altscreen_rescue.sh" restore-original --confirm-stock-rescue
+need missing-performance-rescue 'performance originals missing'
+test ! -e "$SD/restore-transaction/active/PREPARED"
+fails missing-performance-verify -c '. "$1"; perf_verify stock' _ "$SCRIPTS/carplay_performance.sh"
+fails missing-performance-direct-restore -c '. "$1"; perf_restore' _ "$SCRIPTS/carplay_performance.sh"
+unchanged missing-performance-backup
+test -s "$ROOT/mnt/app/root/carplay-performance-rescue/carplay_binpatch"
+mv "$CASE_DIR/saved-performance-original" "$SD/backup/performance-original"
 stop_stub
 echo damaged-native > "$ROOT/eso/bin/apps/dio_manager"
 cp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"

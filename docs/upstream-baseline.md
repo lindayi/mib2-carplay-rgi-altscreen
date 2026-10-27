@@ -188,6 +188,10 @@ the kit for retries. It does not restart MCD, remove CarPlay or complete a faile
 installation. After PASS, perform one full MMI reboot. It still requires a working
 OS/HMI/Green Menu; it is not protection against arbitrary boot failure. Retain the
 matching SD for full restore and transaction recovery.
+If the internal kit exists but the SD lacks `backup/performance-original`, full
+restore and stock rescue refuse before PREPARED and retain the kit. Use the actual
+matching backup or the explicit no-SD action; a pre-performance backup cannot
+silently be treated as a legacy installation and discard the only stock originals.
 
 The kit and its swap directories participate in the ordinary transaction snapshot.
 Full stock restore removes the kit; rollback and rescue undo restore its exact

@@ -576,6 +576,7 @@ if [ "$ACTION" = install ]; then
     /bin/sh "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh" --preflight || fail "install preflight"
     perf_preflight || fail "performance exact-file preflight"
 else
+    perf_require_restore_backup || fail "performance restore originals unavailable"
     /bin/sh "$UNIVERSAL" restore-preflight || fail "restore preflight"
     if [ -e "$PERF_ORIGINAL" ]; then
         perf_prepare_helper && perf_originals_valid && perf_decoder_alias || fail "performance restore preflight"

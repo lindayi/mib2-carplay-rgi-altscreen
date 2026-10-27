@@ -100,6 +100,9 @@ Do not turn this into a raw conversation log or store credentials/private captur
   SD transactions and internal recovery share an inherited, non-listening loopback
   token on TCP 19804, including surviving installer children. Never replace it with
   a stale PID-only lock; verify the descriptor survived shell re-exec before APPLY.
+  An internal kit with no matching SD performance originals is not a legacy
+  installation: refuse full restore/rescue before PREPARED and retain the kit.
+  Leaf restoration/stock verification must also reject that missing-backup state.
   Stored priority bytes and active `/etc/mcd.conf` are reported
   separately; neither file hash proves the running MCD/decoder was restarted.
 - Maps30 shares `framework/identify_buffer.h` with RGD. Preserve the ARM32

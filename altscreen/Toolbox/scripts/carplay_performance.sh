@@ -140,8 +140,18 @@ perf_apply() (
     done
     perf_verify optimized
 )
+perf_require_restore_backup(){
+    perf_setup || return 1
+    [ ! -e "$PERF_ORIGINAL" ] || return 0
+    for kit_state in "$PERF_KIT" "$PERF_KIT.staging" "$PERF_KIT.previous"; do
+        if [ -e "$kit_state" ] || [ -L "$kit_state" ]; then
+            echo "FAIL: performance originals missing; retain the kit and use the matching SD or no-SD performance recovery"
+            return 1
+        fi
+    done
+}
 perf_restore() (
-    perf_setup || exit 1
+    perf_require_restore_backup || exit 1
     # Older packages never touched these files and have no performance backup.
     [ -e "$PERF_ORIGINAL" ] || exit 0
     perf_originals_valid || exit 1
@@ -158,6 +168,7 @@ perf_restore() (
 perf_verify() (
     expected=$1
     perf_setup || exit 1
+    [ "$expected" != stock ] || perf_require_restore_backup || exit 1
     if [ "$expected" = stock ] && [ ! -e "$PERF_ORIGINAL" ]; then exit 0; fi
     perf_originals_valid || exit 1
     for role in decoder mcd priority; do
