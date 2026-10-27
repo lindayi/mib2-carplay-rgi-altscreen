@@ -1,0 +1,30 @@
+Performance integration
+=======================
+
+Reference: luka-dev/mib2q-carplay-rgi
+Commit: a63d54741839c7d30d32dd4e149f693856bcb0db
+Copyright (c) 2026 LuKa (@LuKa_dev), GPL-3.0.
+
+binpatch.py is the unchanged upstream signature patcher and host test oracle.
+firmware_patch.c is the narrow MU1316 native adapter for the same transforms.
+It accepts only the exact SHA-256-pinned stock or expected transformed file.
+No vehicle/SDK firmware bytes are embedded or redistributed in source.
+The local adapter also supplies a preflight self-test, canonical-file identity
+check and inherited loopback operation token. QNX links libc and libsocket.
+The installer stages it in RAM rather than executing an SD FAT payload directly.
+The Toolbox has no MicroPython dependency. The native helper changes no live
+file itself: it creates a new output file, which the installer validates before
+atomic publication within the existing unit-bound transaction.
+
+Maps profile and status sources:
+hook/altscreen/maps_profile.h -> rgi_native/src/altcluster/maps_profile.h
+hook/framework/ap_status.h -> rgi_native/src/framework/ap_status.h
+The common Identify growth policy is shared with the existing RGD patcher.
+The local wrapper gates Maps30 to video-enabled receiver sessions.
+The source growth helper adds a current-length check, keeps allocated capacity
+inside 8192 bytes and uses one libc realloc rather than a second allocate/copy/free
+fallback. ARM32 layout is checked at compile time. Allocation refusal leaves the
+original message unchanged.
+
+The original SDK and exported unit files remain private build/test inputs.
+Exact byte matching and host tests do not establish vehicle performance.

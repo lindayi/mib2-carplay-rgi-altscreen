@@ -1,6 +1,12 @@
 MMI Cockpit CarPlay AltScreen + RGI SD Package
 
 This source-built candidate requires MHI2Q_US_AUG22_P5145 / MU1316.
+This candidate enables Maps30 profile selection and exact-unit decoder/MCD
+performance changes. The stock-file changes apply after the installation reboot,
+affect both video paths/media handling, and remain until RESTORE ORIGINAL.
+Master Off controls CarPlay overlays, not these installation-level changes.
+Unknown firmware file bytes fail before installation. Keep the matching SD,
+original backups and transaction history for restore/rescue.
 It has passed host checks, but has not been verified in the vehicle.
 The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
 No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.
@@ -54,6 +60,20 @@ validate the later native-menu or recovery additions.
    Successful stock rescue removes that installed directory. Its reversal uses
    the matching SD's Toolbox/scripts/altscreen_rescue.sh with
    "undo --confirm-pre-rescue". Undo restores the pre-rescue state, even if damaged.
+   If a performance regression prevents SD discovery but Green Menu still works:
+   MMI-Cockpit-Carplay -> RESCUE: restore performance originals (no SD).
+   Park with stable power and disconnect iPhone first. Wait for
+   PERFORMANCE_RECOVERY=PASS, then perform one full MMI reboot.
+   This restores only decoder/MCD files and modes from the installed, unit-bound
+   kit. It does not remove CarPlay, restart MCD live or finish a failed INSTALL.
+   On FAIL retain the evidence; the kit remains available for another attempt.
+   This path needs functioning OS/HMI/Green Menu access, not an SD card.
+   Full RESTORE ORIGINAL removes the kit; keep the matching SD for full recovery.
+   If this SD lacks performance-original but an internal kit exists, full restore
+   and stock rescue refuse without changing it. Use the matching backups or the
+   no-SD action above; an older pre-performance backup is not sufficient.
+   STATUS distinguishes stored and active priority configuration, but file hashes
+   cannot establish that the running decoder/MCD has reloaded those files.
 7. Runtime state flags are stored on the unit at /mnt/app/root/carplay-altscreen/state.
    Cold boots do not require the SD card to remain inserted once installed.
    The SD card holds stock backups and diagnostic logs; always retain your backup card.

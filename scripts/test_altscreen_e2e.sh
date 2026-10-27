@@ -11,7 +11,7 @@
 #
 # INSTALLER_PACKAGE_MODE=staged requires explicit SD_DIR and tests the packaged
 # scripts/pins unchanged. The default source-overlay mode is for development.
-# The runner reports mksh or its explicit Bash host fallback; neither runs ARM.
+# The runner requires mksh; host shell coverage does not run ARM/QNX.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

@@ -5,6 +5,7 @@
 #include "framework/bus.h"
 #include "framework/bus_protocol.h"
 #include "altcluster/alt_cluster.h"
+#include "framework/identify_buffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,6 +60,25 @@ int main(void) {
     int session_a, session_b;
 
     alt_cluster_module_def.on_init();
+    hook_identify_array_t identify={malloc(14),14,14};
+    hook_context_t identity_ctx={0};identity_ctx._priv=&identify;
+    const uint8_t original_identity[]={0x40,0x40,0,14,0x1d,1,0,8,0,0x1e,0,4,0,0};
+    memcpy(identify.base,original_identity,sizeof(original_identity));
+    unsetenv("ALTSCREEN_PHONE_PROFILE");
+    CHECK(alt_cluster_module_def.on_identify(&identity_ctx,identify.base,14,14)==14,
+        "Audi map/master bypass must not add Maps30");
+    setenv("ALTSCREEN_PHONE_PROFILE","map",1);
+    size_t grew=alt_cluster_module_def.on_identify(&identity_ctx,identify.base,14,14);
+    CHECK(grew==35 && identify.capacity>=35,"real Maps30 callback grows actual NmeArray");
+    CHECK(!memcmp(identify.base+6,original_identity+6,8),"Maps30 preserves existing RGI component");
+    CHECK(!memcmp(identify.base+18,"bf889dfdaea54096",16),"exact upstream profile selector");
+    identify.length=(unsigned int)grew;
+    CHECK(alt_cluster_module_def.on_identify(&identity_ctx,identify.base,grew,identify.capacity)==grew,
+        "existing PPID must not be duplicated or replaced");
+    setenv("ALTSCREEN_PHONE_PROFILE","card",1);
+    CHECK(alt_cluster_module_def.on_identify(&identity_ctx,identify.base,grew,identify.capacity)==grew,
+        "card session preserves its existing PPID");
+    free(identify.base);unsetenv("ALTSCREEN_PHONE_PROFILE");
     uint8_t ready = 1;
     CHECK(handlers[CMD_OEM_MAP_READY] != NULL, "OEM readiness registered on existing command module");
     handlers[CMD_OEM_MAP_READY](CMD_OEM_MAP_READY, BUS_FLAG_BINARY, &ready, 1, NULL);

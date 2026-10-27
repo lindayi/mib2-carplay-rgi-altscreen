@@ -136,17 +136,33 @@ add_ids(){   # $1 = line holding one list, rest = IDs; prints the new line
     done
     printf '%s\n' "$l"
 }
+del_ids(){   # LuKa's direction repair: remove IDs belonging to the other list.
+    l=$1; shift
+    for id in "$@"; do
+        q="\"$id\""
+        case $l in
+            *", $q"*) l=${l%%", $q"*}${l#*", $q"} ;;
+            *"$q, "*) l=${l%%"$q, "*}${l#*"$q, "} ;;
+            *"$q,"*) l=${l%%"$q,"*}${l#*"$q,"} ;;
+            *",$q"*) l=${l%%",$q"*}${l#*",$q"} ;;
+            *"$q"*) l=${l%%"$q"*}${l#*"$q"} ;;
+        esac
+    done
+    printf '%s\n' "$l"
+}
 patch_dio(){
     [ -f "$DIO" ] || { echo "no $DIO"; return 1; }
     tmp=$DIO.rgi-new.$$; : > "$tmp" || return 1
     sent=0; recv=0; changed=0
+    sent_ids="0x5000 0x5002 0xAE00 0xAE02 0xFFFB 0x4154 0x4157 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0x5200 0x5203"
+    recv_ids="0x5001 0xAE01 0xFFFA 0xFFFC 0x4155 0x4158 0x4171 0x5201 0x5202 0x5204"
     while IFS= read -r line || [ -n "$line" ]; do
         case $line in
             *'##'*) new=$line ;;
             *'"MessagesSentByAccessory":['*']'*)
-                sent=$((sent+1)); new=$(add_ids "$line" 0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170) ;;
+                sent=$((sent+1)); new=$(add_ids "$(del_ids "$line" $recv_ids)" $sent_ids) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
-                recv=$((recv+1)); new=$(add_ids "$line" 0x5201 0x5202 0x5204 0x4171) ;;
+                recv=$((recv+1)); new=$(add_ids "$(del_ids "$line" $sent_ids)" $recv_ids) ;;
             *) new=$line ;;
         esac
         [ "$new" = "$line" ] || { line=$new; changed=1; }
@@ -155,8 +171,14 @@ patch_dio(){
     if [ "$sent" != 1 ] || [ "$recv" != 1 ]; then
         rm -f "$tmp"; echo "dio_manager.json lists sent=$sent recv=$recv (expected 1/1)"; return 1
     fi
-    n=0; for id in 0x5200 0x5201 0x5202 0x5203 0x5204 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0x4171; do grep -q "\"$id\"" "$tmp" && n=$((n+1)); done
-    [ "$n" = 12 ] || { rm -f "$tmp"; echo "dio_manager.json has $n/12 RGI/telephony IDs after edit"; return 1; }
+    awk -v sent="$sent_ids" -v recv="$recv_ids" '
+      BEGIN{ns=split(sent,s," "); nr=split(recv,r," ")}
+      /##/{next}
+      /"MessagesSentByAccessory":\[/ {for(i=1;i<=ns;i++){x=tolower($0);if(gsub("\""tolower(s[i])"\"","",x)!=1)exit 1}
+        for(i=1;i<=nr;i++)if(index(tolower($0),"\""tolower(r[i])"\""))exit 1}
+      /"MessagesReceivedFromDevice":\[/ {for(i=1;i<=nr;i++){x=tolower($0);if(gsub("\""tolower(r[i])"\"","",x)!=1)exit 1}
+        for(i=1;i<=ns;i++)if(index(tolower($0),"\""tolower(s[i])"\""))exit 1}
+    ' "$tmp" || { rm -f "$tmp"; echo "FAIL: iAP2 message direction/count"; return 1; }
     if [ "$changed" = 0 ]; then rm -f "$tmp"; echo "RGI_DIO_IDS=ALREADY_REGISTERED"; return 0; fi
     chmod 644 "$tmp" && mv -f "$tmp" "$DIO" || { rm -f "$tmp"; return 1; }
     echo "RGI_DIO_IDS=REGISTERED 0x5200..0x5204 telephony=415B,415C,415D,415F,4160,4170,4171"

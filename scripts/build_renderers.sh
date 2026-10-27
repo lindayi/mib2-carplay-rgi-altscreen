@@ -94,7 +94,9 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   [ "$exports" = "carplay_overlay_frame_interval_ms eglDestroyContext eglSwapBuffers " ] || { echo "Unexpected mascot exports: $exports"; exit 1; }
 
   echo "--- verify (ARM ELF, no emutls) ---"
-  for b in maneuver_render libcarplay_mascot.so; do
+  $CC -O2 -std=gnu99 -Wall -Wextra -Werror /src/deploy/performance/firmware_patch.c -lsocket -o /src/build/carplay_binpatch
+  (cd /src && sha256sum deploy/performance/firmware_patch.c > build/performance-source.sha256)
+  for b in maneuver_render libcarplay_mascot.so carplay_binpatch; do
     B=/src/build/$b
     m=$(arm-unknown-nto-qnx6.5.0eabi-readelf -h "$B" | awk -F: "/Machine/{print \$2}" | tr -d " ")
     e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls || true)

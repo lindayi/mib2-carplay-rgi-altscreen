@@ -70,7 +70,7 @@ docker run --rm \
     printf "%s\n" "$GEN/com/luka/carplay/settings/MascotCatalog.java" >> "$SRCLIST"
   fi
 
-  javac -source 1.4 -target 1.4 -cp "$CP" -sourcepath "$GEN:$SRC" -d "$OUT" -Xlint:-options @"$SRCLIST"
+  javac -encoding UTF-8 -source 1.4 -target 1.4 -cp "$CP" -sourcepath "$GEN:$SRC" -d "$OUT" -Xlint:-options @"$SRCLIST"
   # Compact generated metrics/Unicode tables (VC route text) live inside the jar.
   cp -R /src/Toolbox/carplay_alt_screen/hmi/resources/. "$OUT/"
   if [ -n "$CUSTOM_MASCOT_PACK" ]; then
@@ -80,11 +80,11 @@ docker run --rm \
     cp "$SRC/com/luka/carplay/settings/MascotCatalog.java" "$OUT/com/luka/carplay/settings/mascot-catalog.java"
   fi
   ASM="/tools/tools/uninline/lib/asm-9.7.jar:/tools/tools/uninline/lib/asm-tree-9.7.jar"
-  javac -cp "$ASM" -d "$GEN" /src/tools/PatchNavigationSettings.java
+  javac -encoding UTF-8 -cp "$ASM" -d "$GEN" /src/tools/PatchNavigationSettings.java
   java -cp "$GEN:$ASM" PatchNavigationSettings "/tools/out/$STOCK_JAR_NAME" "$OUT"
-  javac -cp "$ASM" -d "$GEN" /src/tools/PatchNativeRouteState.java
+  javac -encoding UTF-8 -cp "$ASM" -d "$GEN" /src/tools/PatchNativeRouteState.java
   java -cp "$GEN:$ASM" PatchNativeRouteState "/tools/out/$STOCK_JAR_NAME" "$OUT"
-  javac -cp "$ASM" -d "$GEN" /src/tools/PatchPhoneKeyController.java
+  javac -encoding UTF-8 -cp "$ASM" -d "$GEN" /src/tools/PatchPhoneKeyController.java
   java -cp "$GEN:$ASM" PatchPhoneKeyController "/tools/out/$STOCK_JAR_NAME" "$OUT"
   (cd "$OUT" && jar cf "$OUTJAR" .)
   rm -rf /src/build/java

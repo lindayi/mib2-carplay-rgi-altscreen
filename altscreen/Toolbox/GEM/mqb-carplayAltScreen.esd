@@ -33,5 +33,9 @@ script
    label   "RESTORE ORIGINAL"
 
 script
+   value   sys 1 0x0100 "/mnt/app/root/carplay-performance-rescue/carplay_performance_recover.sh"
+   label   "RESCUE: restore performance originals (no SD)"
+
+script
    value   sys 1 0x0100 "/eso/hmi/engdefs/scripts/mqb/dump_cluster_h264.sh"
    label   "Dump cluster video to SD (diagnostic)"

@@ -75,6 +75,49 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ### Source integration candidate: 2026-10-18
 
+- The October 27 candidate includes the owner's approved Maps30, decoder2 and
+  MCD200/priority3 updates. Keep one installer; stock-file performance changes
+  are installation-level, not live normal-MMI preferences or Master Off.
+  `deploy/performance/binpatch.py` pins Luka's upstream transforms; the native
+  SHA256-guarded helper accepts only exact P5145 stock/optimized files because
+  this Toolbox has no MicroPython runtime. Unknown/partial bytes must fail.
+  Preserve immutable `backup/performance-original`, modes and unit binding;
+  transaction rollback returns pre-operation state, RESTORE returns stock, and
+  rescue undo returns its exact pre-rescue state. Never restart MCD during apply.
+  The helper writes only a new file; the shell owns verified atomic publication.
+- Performance helpers are copied and byte-checked into `/ramdisk`, made executable
+  and self-tested before PREPARED; never execute directly from a FAT SD. Path-only
+  cleanup and legacy restores without performance originals require no helper.
+  Write the decoder through `/mnt/app/eso/lib/libairplay.so` only after proving it
+  aliases `/eso/lib/libairplay.so` (same device/inode, one link). Rescue must retain
+  its recorded original mode, not replace it with the generic native-file 0755.
+- INSTALL persists a checksummed, unit-bound performance-only recovery kit at
+  `/mnt/app/root/carplay-performance-rescue` before patching stock files. Its
+  explicit GEM action works without SD, retains originals/evidence for retries,
+  never restarts MCD and requires a full reboot after PASS. It is not full stock
+  rescue and still needs working OS/HMI/Green Menu access. Full stock restore
+  removes the kit; transaction rollback/rescue undo restore its pre-operation state.
+  SD transactions and internal recovery share an inherited, non-listening loopback
+  token on TCP 19804, including surviving installer children. Never replace it with
+  a stale PID-only lock; verify the descriptor survived shell re-exec before APPLY.
+  An internal kit with no matching SD performance originals is not a legacy
+  installation: refuse full restore/rescue before PREPARED and retain the kit.
+  Leaf restoration/stock verification must also reject that missing-backup state.
+  Stored priority bytes and active `/etc/mcd.conf` are reported
+  separately; neither file hash proves the running MCD/decoder was restarted.
+- Maps30 shares `framework/identify_buffer.h` with RGD. Preserve the ARM32
+  NmeArray layout, current length/capacity checks, existing PPIDs and module
+  ordering. Gate the selector by exec-time ALTSCREEN_PHONE_PROFILE; Master Off
+  and Audi-map-only sessions do not add it. Native ThemeAssets remains observe
+  by default; the separate wire-handoff fixture is not permission to enable it.
+- Performance installer fixtures require the exact MCD export via
+  `PERFORMANCE_FIXTURE` in addition to the prior `FIXTURE` stock backup. The
+  host helper is compiled from production source; only ARM execution is replaced.
+  Run final package fixtures in staged mode, without weakening hash or rollback checks.
+  Build `tests/installer/Dockerfile` as `mib2-installer-test:local` after the native
+  test image; the installer runner requires mksh rather than a silent Bash fallback.
+  Host ksh/ELF checks do not establish QNX shell, ARM execution or iOS acceptance.
+
 - The 2026-10-25 source sync advances yuedizhibo to V3.8 Fix1 `652448d`.
   Keep the released net diff: upstream withdrew PR 62 startup/frame reuse.
   Preserve Solid/Reduced backing choices while porting arrow fades. Mirror
@@ -88,9 +131,22 @@ Do not turn this into a raw conversation log or store credentials/private captur
   This supersedes the historical card `-445`/500-pixel SMALL policy below.
 - Luka's new performance features were investigated, not enabled. The exact
   retained P5145 libairplay matches both queue-depth patch sites, but byte
-  compatibility is not install/rollback or vehicle validation. No unit mcd or
-  mcd.conf is retained. Maps30 PPID needs Identify-dispatcher/growth integration,
-  not a header-only copy. See docs/upstream-baseline.md for the evidence limits.
+  compatibility is not install/rollback or vehicle validation. The October 26
+  private MCD export now matches upstream's stock daemon/config exactly; its
+  five-byte patch and 13 priority edits reproduce upstream candidate hashes in
+  memory. No optimization is enabled. Maps30 can share the existing RGD resize
+  helper (same body as upstream hook_identify_grow), but needs full Identify-chain
+  tests, including the native ThemeAssets size boundary.
+- Correct the earlier main-screen-only decoder assumption: this integration's
+  private111 path also calls stock ScreenStreamCreate and uses OmxVideoImpl.
+  The queue-depth library patch is not stream-specific; evaluate both displays.
+  Do not weaken original-binary equality checks to install it: add explicit
+  known-transform identity, rollback, restore and rescue support first.
+- On October 26 the owner reports the latest build is running fine. The last
+  prepared package is 4f24de2e (merged into Q5 at 7fc31c21); this is an owner
+  report, not independent installed-ID readback or approval of new optimizations.
+  Fresh upstream fetches still show Allemon `1289981`, yuedizhibo `652448d` and
+  Luka `a63d5474`. See docs/upstream-baseline.md for the detailed feasibility map.
 - `altscreen/Toolbox/scripts/export_mcd_originals.sh` is a standalone, private
   SD export, not an installer or optimization. Copy it as SD-root `test.sh`
   for Toolbox's existing Various -> DEV entry. It must preserve source files,

@@ -16,6 +16,12 @@ cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined -ffunction-sections -fdata-
 cc -D_GNU_SOURCE -O1 -g -fsanitize=address,undefined "$ROOT/tests/hmi_contract_test.c" \
     -o hmi_contract_test
 ./hmi_contract_test
+cc -std=gnu99 -Wall -Wextra -Werror "$ROOT/../tests/maps_profile_test.c" -o maps_profile_test
+./maps_profile_test identify.fixture
+cc -D_GNU_SOURCE -std=gnu99 -O1 -ffunction-sections -fdata-sections \
+    "$ROOT/tests/identify_coexist_test.c" "$ROOT/hook/p1404_iap2.c" "$ROOT/hook/altscreen_profile.c" \
+    -Wl,--gc-sections -o identify_coexist_test
+./identify_coexist_test identify.fixture
 cc -D_GNU_SOURCE -O1 -g -Wall -Wextra -Werror "$ROOT/tests/firewall_runtime_test.c" \
     "$ROOT/hook/p1404_firewall.c" -ldl -pthread -o pfctl
 ./pfctl

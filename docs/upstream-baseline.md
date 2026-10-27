@@ -124,6 +124,125 @@ the remaining replaced files for manual review.
 
 ## Updating the baseline
 
+### 2026-10-27 compatible Luka ports
+
+The owner approved including and enabling all three performance features in the
+next candidate, with exact-file checks and full rollback/restore support. This
+supersedes the earlier hold for the new candidate only. The reported working
+`4f24de2e` vehicle build is unchanged until a separate SD preparation/installation.
+
+The source reference is Luka
+`a63d54741839c7d30d32dd4e149f693856bcb0db`; yuedizhibo's canonical RGI baseline
+remains Fix1 `652448d`. These are additive ports, not a second RGI/AltScreen stack.
+
+| Port | Integration |
+| --- | --- |
+| Maps30 PPID | Upstream selector in the existing GPL `altcluster` module. RGD and Maps30 share the bounded NmeArray growth helper. The wrapper's video-enabled map/card profile gates the addition; existing PPIDs pass through. The native UI/context/placement owners do not change. |
+| Decoder queue depth | Exact P5145 full-file SHA-256 guards before and after the two-byte upstream transformation. Both video paths use the shared stock decoder; no runtime mprotect fallback is introduced. |
+| MCD pacing and priority | Exact exported daemon/config hashes; five-byte and 13-line upstream transformations. Keep the device list, original modes and stock copies. No live daemon restart; activation is after the documented installation reboot. |
+| Error names | Upstream CoreUtils table and suffix decoder supplement actual AirPlay zoom error numbers. Unknown codes remain numeric; no error value is reinterpreted as success. |
+| iAP2 declarations | The active RGI companion repairs sent/received direction and declares complete groups used by our current modules. It preserves unrelated IDs, rejects duplicate lists/IDs and does not advertise an absent vehicle-status module. |
+| UTF-8 builds | Explicit source encoding for the Java runtime and host weave tools. The generated classes/resources remain byte-identical after normalizing the inlined build-ID constants. |
+
+`deploy/performance/UPSTREAM-NOTICE.txt` maps the imported sources.
+The unchanged upstream `binpatch.py` remains the host transform oracle. The
+Toolbox has no MicroPython runtime, so `firmware_patch.c` is a small native
+adapter with exact stock/optimized SHA-256 guards and the same output bytes.
+It does not embed or ship vehicle firmware. It creates a new file exclusively,
+verifies its transformed bytes before writing and flushes before success.
+The outer installer publishes that file by rename within its existing transaction.
+
+#### Stock-file ownership and recovery
+
+The sole INSTALL now checks all performance inputs before mutation. Original
+performance files and modes live in `backup/performance-original` and are never
+replaced by optimized files. The existing firmware/unit checks still apply.
+The old blanket native-equality check has one narrow exception: the exact known
+decoder stock/optimized pair, with valid original backups. Unrecognized or
+partially changed binaries are still refused.
+
+The transaction includes MCD/config in its pre-operation snapshot. A failed
+install or upgrade restores that snapshot, not an arbitrary stock reset.
+RESTORE ORIGINAL restores all three original files; stock rescue can repair a
+damaged managed file and its undo restores the exact pre-rescue contents.
+Unpublished performance files are retained in the transaction's residue on
+rollback. The candidate must be restored with its matching/newer SD; an older
+card has no knowledge of the approved binary transformations and may correctly
+refuse them. Do not bypass an older card's original-file check.
+
+The helper is read from SD, byte-checked into an executable `/ramdisk` cache and
+self-tested before PREPARED. The installer does not depend on FAT execute bits.
+Legacy restore and path-only rollback without performance originals do not need
+the helper. Decoder publication uses `/mnt/app/eso/lib/libairplay.so` on the
+remounted application filesystem; preflight requires it and `/eso/lib/libairplay.so`
+to identify the same single-link inode. Unknown alias layouts fail before mutation.
+Stock rescue preserves the recorded decoder mode, including non-0755 originals.
+
+Because MCD participates in SD discovery, INSTALL also stages a persistent
+unit-bound recovery kit under `/mnt/app/root/carplay-performance-rescue` before
+any performance write. The explicit Green Menu **MMI-Cockpit-Carplay ->
+RESCUE: restore performance originals (no SD)** action restores only these three
+stock files and modes. It checks kit payloads, original hashes, firmware and unit
+identity without an SD, preserves interrupted staging as evidence, and retains
+the kit for retries. It does not restart MCD, remove CarPlay or complete a failed
+installation. After PASS, perform one full MMI reboot. It still requires a working
+OS/HMI/Green Menu; it is not protection against arbitrary boot failure. Retain the
+matching SD for full restore and transaction recovery.
+If the internal kit exists but the SD lacks `backup/performance-original`, full
+restore and stock rescue refuse before PREPARED and retain the kit. Use the actual
+matching backup or the explicit no-SD action; a pre-performance backup cannot
+silently be treated as a legacy installation and discard the only stock originals.
+
+The kit and its swap directories participate in the ordinary transaction snapshot.
+Full stock restore removes the kit; rollback and rescue undo restore its exact
+pre-operation state. SD transactions and the internal action share a bounded-wait,
+non-listening loopback token on TCP 19804. The descriptor survives exec and remains
+held by surviving installer children after parent termination. No network service
+is started. Re-entry checks the actual bound descriptor, not just its PID marker,
+so unsupported shell inheritance fails before APPLY. STATUS distinguishes stored
+priority configuration from `/etc/mcd.conf`;
+neither a matching file nor a helper self-test proves the running daemon or
+decoder has reloaded it.
+
+These are installation-level, HU-wide changes. Turning Master Off still
+withdraws CarPlay modules/extra video, but does not restore stock binaries.
+There is no new reboot-dependent switch in the normal-MMI settings. Settings,
+the VC long-press entry, high-resolution mascots and the one-installer UX remain.
+
+#### Validation and remaining limits
+
+The native adapter is compared byte-for-byte against upstream's transforms on
+the owner's private inputs, including idempotence, corrupt/truncated/partial
+inputs and refusing an existing output. Native selector tests cover its wire
+bytes and failed/moving growth; the actual `altcluster` callback verifies the
+session gate and preserved RGI data. A separate native wire-handoff fixture
+checks PPID coexistence with observe/ThemeAssets framing without linking the
+two production license domains together. It does not enable ThemeAssets.
+
+Installer fixtures exercise success, repeat upgrade, unknown inputs, failure
+after the first decoder write, failure after all performance changes, rollback
+to an already optimized upgrade baseline, exact stock restoration, corruption
+refusal, rescue and reversible undo. They use the actual helper source and
+private exact-unit files; host execution is not on-vehicle ARM validation.
+They require mksh (build `tests/installer/Dockerfile` as
+`mib2-installer-test:local`), not a silent Bash fallback. Additional cases cover
+non-0755 decoder modes, readable/non-executable helper payloads, alias refusal,
+invalid helpers before PREPARED, legacy helper-free restoration, SD-unavailable
+recovery, corrupt kit/wrong-unit refusal, repeated recovery and inherited lock
+lifetime. This is ksh-family host coverage, not execution of the QNX shell.
+
+Maps30 selects a phone policy, not a guaranteed panel rate. Reduced queues can
+trade latency for less burst tolerance. MCD polling/priority can change media
+discovery timing. Keep the known-working package and compare both displays,
+reconnects, media insertion/removal and CPU behavior in a separate parked trial.
+
+The open alternative layout/mode/context PRs are not merged wholesale: their
+separate settings stores, long-roller gesture and context writers would replace
+our supported UX/ownership. Their relevant existing capabilities are already
+provided by our settings/accepted Fct54 path. This is not a claim of parity with
+every proposed reroute/approach policy in unmerged PR32; those behavior changes
+need a separate selective port, not silent replacement of our controller.
+
 ### 2026-10-25 synchronization
 
 Allemon `main` is unchanged at `1289981`. Allemon PR 7 remains included; PR 14
@@ -210,14 +329,101 @@ implement or enable any of them.
 | Feature | Evidence and remaining requirement |
 | --- | --- |
 | Maps 30-FPS PPID selector | Upstream's real wire-format tests pass with sanitizers, including existing-identity preservation and moving-buffer growth. Our older Identify dispatcher has no `hook_identify_grow` contract. A proper port must reconcile the GPL dispatcher with the existing AltScreen Identify hook; copying only the header would not be a safe integration. A phone policy target is not guaranteed on-car FPS. |
-| Stock `libairplay.so` queue depth 4 to 2 | Both unique upstream signatures match the owner's retained P5145 library, at `0x8c694` and `0x8c6f4`. In-memory tests change exactly two bytes and reject a half-patched input. This is byte compatibility only. It affects the stock main-screen decoder, not our separate AltScreen decoder. Transactional install/restore integration and parked stability testing are still required before enabling it. |
-| Stock `mcd` patch and detector priority | The retained unit export does not include `mcd` or `mcd.conf`. Upstream's P5087/P5092/K1004 equivalence claim is not exact P5145 evidence. Obtain the unit's originals privately before checking signatures, priority settings and rollback; do not distribute upstream stock binaries. |
+| Stock `libairplay.so` queue depth 4 to 2 | Both unique upstream signatures match the owner's retained P5145 library, at `0x8c694` and `0x8c6f4`. In-memory tests change exactly two bytes and reject a half-patched input. This is byte compatibility only. The October 26 trace below corrects the earlier main-screen-only assessment: our stock-OMX cluster path uses this initializer too. Transactional install/restore integration and parked stability testing are still required. |
+| Stock `mcd` patch and detector priority | The original investigation lacked the unit files. The October 26 export now supplies exact originals, with verified source/copy checksums and byte identity to upstream's stock references. See the updated compatibility findings below. Do not distribute those private binaries. |
 
 The local compatibility checks do not alter the backed-up library, a vehicle,
 or the SD. These findings are not blanket approval for stock-library or daemon
 modifications. Other Luka changes target its different wireless, vehicle-data,
 decoder, audio and M.I.B. installation stack, not components active in this
 Q5 deployment.
+
+#### 2026-10-26 feasibility update
+
+The owner reports: **"The car is currently running our latest build fine."**
+The last prepared card contains `4f24de2e`, merged into Q5 at `7fc31c21`.
+This is owner confirmation of the reported use, not independent installed-build
+readback, an exhaustive hardware trial, or validation of the proposed changes.
+The failed October 18 installation and this later report are separate events.
+
+Fresh fetches show no further main-branch commits since the October 25 review:
+Allemon `1289981`, yuedizhibo `652448d`, and Luka `a63d5474`. The remaining work is
+mainly the Luka features already investigated, not another unmerged Fix1 release.
+No runtime source, installed files, SD contents or feature defaults were changed
+in this feasibility pass.
+
+| Candidate | Exact evidence | Integration assessment |
+| --- | --- | --- |
+| Maps 30-FPS profile selector | Upstream wire tests pass, including existing PPIDs, malformed input, size limits and a moved allocation. Our `rgd_resize_identify_buffer` body already matches upstream `hook_identify_grow` after the limit-constant rename. Exact retained NME Encode at `0x11ffe8` uses libc `realloc` and the same base/length/capacity layout. | Feasible without adding another AltScreen controller. Extract the shared helper and attach the upstream selector to the existing GPL Identify dispatch. Preserve RGI and the native ThemeAssets mutation, existing PPIDs and session gating. Combined-chain tests are still required. |
+| Decoder queues 4 to 2 | Both exact P5145 signatures match. In-memory transformation changes two bytes; corrupted, ambiguous and partial inputs are rejected, and already-patched input is detected. | Feasible, but not a drop-in module toggle. The persistent library patch must be a declared, reversible installation change. It can affect both screen streams in this implementation. |
+| MCD scan pacing | Exported daemon is 47,039 bytes, SHA-256 `f11d13ffec1322aefcfb431966180cff46c314320eeef7ed12470bfc441dd593`. Applying upstream's unique site at file offset `0x7730` changes five bytes and exactly reproduces its `mcd.custom` hash. | The missing-file blocker is resolved. Preserve the upstream transform, but integrate it into our unit-bound transaction and stock-rescue paths. This changes HU-wide media detection, not just CarPlay. |
+| MCD detector priority | Active and stored configurations are identical, 2,750 bytes, SHA-256 `c653517d19107e6594c175d4a6553f1c57d81c1c6982e22b0f4964bf74272092`. All 13 `11,10` to `11,3` edits exactly reproduce the upstream reference, with other lines unchanged. | Technically compatible, but assess separately from scan pacing. Lower priority trades media-response scheduling for less competition with other work. Keep every device/watch section, including CD. |
+| Named CoreUtils status diagnostics | Upstream's 76-entry status-decoder test passes, including unknown values and integer limits. | A small additive diagnostic port is reasonable. Keep numeric statuses and unknown fallback; it changes neither decoder scheduling nor phone policy. |
+| iAP2 message-list repair | The exact retained P5145 config plus our current installer additions contains all relevant sent/received IDs in the proper lists. No missing or misdirected ID was found for currently enabled features. | Useful hardening for damaged/modified configs, not a demonstrated defect on this working unit. Port only groups used by our modules, with direction checks and original-config restoration; do not enable Luka's vehicle-status publisher merely by adding its IDs. |
+
+The MCD candidate SHA-256 is
+`e18f3055f633c99b3f10022c1f0a9c61a9e597d8b9a95831e5578a2e5c5387ee`;
+the priority-config candidate is
+`d0a33ae25acd0af1fd2f0fe84637c41d230d2b1a2933209e8bd800f0868a8033`.
+These candidates were computed in memory, not installed or saved as deployable
+stock binaries. Exact reverse edits restore the original bytes in memory; this
+is **not** a test of the on-unit installer, reboot, rollback or media behavior.
+
+**Decoder-scope correction.** Luka's performance report describes its own
+separate AltScreen decoder. Our yuedizhibo-derived private111 backend instead
+starts a stock screen stream and taps its decoded NV12. The local
+`p1404_private111_backend.c` and `ScreenStreamStart` wrapper forward to stock.
+In the exact retained library, `ScreenStreamCreate` at `0x85ce4` calls
+`IVideoAbstraction::createVideoImpl` at `0x85f44`, which constructs
+`dio::OmxVideoImpl`; its virtual initializer is `0x8c638`, containing both patch
+sites. Thus "main screen only" is not a valid limitation for our integration.
+Test both displays, reconnect and stream restart before claiming a benefit.
+
+**Implementation prerequisites.** Our current `verify_backup_identity` requires
+live native binaries to equal their original backups. `validate_snapshot` also
+rejects changed native binaries, and the transaction's allowed paths do not
+include `mcd` or its config. A direct patch would conflict with these protections.
+Add explicit stock/known-patched identities, immutable originals, exact
+pre-operation snapshots and matching install/restore/rescue/undo handling.
+Unknown or partly changed firmware must still fail closed. Do not copy Luka's
+installer's permissive warning-and-continue behavior over these checks.
+Do not kill/restart MCD on the live unit just to apply a preference. It starts
+at boot; any approved installation must use the documented reboot procedure.
+
+**Limits and rollout.** Maps30 adds a 21-byte PPID selector, not a direct FPS
+command. Its current upstream phone-asset row contains only `mapsRefreshRate=30`,
+but future iOS assets and existing identities can change the result. Test the
+complete RGI/PPID/ThemeAssets chain, including the native 1,024-byte mutable-frame
+limit and allocation failures, rather than only the isolated selector.
+MCD scan pacing replaces an event wait with a 200 ms periodic wait. It bounds
+bursty scan frequency, but is not guaranteed to reduce idle work; scan time and
+thread scheduling add to detection latency. The priority edit is another
+independent variable. Upstream's short near-30-FPS result enabled all three
+features under a different workload, so it is not controlled attribution.
+Preserve this known-working baseline and compare changes one at a time.
+
+Other released Luka changes concern its own wireless/audio/vehicle-data stack,
+firmware coverage outside P5145 or withdrawn experiments. We already leave
+stock NAVSD initialization untouched, consistent with its final removal of
+the workaround. Do not reintroduce the intermediate suppression patch.
+
+Open proposals were assessed separately from released fixes:
+
+| Proposal | Assessment for this Q5 |
+| --- | --- |
+| `Allemon/mib2-carplay-rgi-altscreen#7` / `Allemon/mib2-carplay-rgi-altscreen#14` | Heads unchanged: checksum repair already incorporated; night command still conflicts with telephony and lacks our session contract. |
+| `yuedizhibo/MHI2Q-CarPlay-AltScreen#77` | Optional SSH/internal-volume deployment, not a runtime fix. It adds a second deployment route and flash/staging policy; do not silently replace the working SD transaction. |
+| `yuedizhibo/MHI2Q-CarPlay-AltScreen#76` | Another owner's P4246/MU1320 vehicle report, not evidence for this unit or a source fix. |
+| `luka-dev/mib2q-carplay-rgi#57` | Map modes overlap ours. Its long-roller mode cycle conflicts with our VC settings entry, and its context table/persistence differ. Keep our normal-MMI/VC controls. |
+| `luka-dev/mib2q-carplay-rgi#58` | Layout-file/Q7/view-source proposal overlaps our settings and Fct54-based handling. Do not add a competing geometry/settings writer or broaden vehicle scope. |
+| `luka-dev/mib2q-carplay-rgi#51` | Build/test portability: explicit `javac -encoding UTF-8` is relevant hardening because the main build currently relies on its container default, unlike several focused tests. Host suites already run in Linux containers. Select relevant tooling changes rather than importing unrelated audio tests or suppressing warnings globally. |
+| `luka-dev/mib2q-carplay-rgi#32` | A large alternate route/context design, not a small released fix. Its ScreenModule worker and 72-to-80 switching cannot replace our adopted controller wholesale. Specific reroute/approach tests may inform later ports, but full behavior parity was not established here. |
+| `luka-dev/mib2q-carplay-rgi#33` | Android Auto/MU0918 is outside the agreed vehicle/phone scope. |
+
+Private originals and disassembly remain under `carplay-build-inputs`.
+`build-logs/upstream-feasibility-20261026-*` records the in-memory transforms,
+upstream host probes, exact NME/decoder ABI trace and message-list comparison.
+No new optimization or package has been built for deployment.
 
 #### Exporting the unit's originals
 
