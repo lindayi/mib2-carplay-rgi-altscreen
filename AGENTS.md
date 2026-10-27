@@ -75,6 +75,26 @@ Do not turn this into a raw conversation log or store credentials/private captur
 
 ### Source integration candidate: 2026-10-18
 
+- The October 27 candidate includes the owner's approved Maps30, decoder2 and
+  MCD200/priority3 updates. Keep one installer; stock-file performance changes
+  are installation-level, not live normal-MMI preferences or Master Off.
+  `deploy/performance/binpatch.py` pins Luka's upstream transforms; the native
+  SHA256-guarded helper accepts only exact P5145 stock/optimized files because
+  this Toolbox has no MicroPython runtime. Unknown/partial bytes must fail.
+  Preserve immutable `backup/performance-original`, modes and unit binding;
+  transaction rollback returns pre-operation state, RESTORE returns stock, and
+  rescue undo returns its exact pre-rescue state. Never restart MCD during apply.
+  The helper writes only a new file; the shell owns verified atomic publication.
+- Maps30 shares `framework/identify_buffer.h` with RGD. Preserve the ARM32
+  NmeArray layout, current length/capacity checks, existing PPIDs and module
+  ordering. Gate the selector by exec-time ALTSCREEN_PHONE_PROFILE; Master Off
+  and Audi-map-only sessions do not add it. Native ThemeAssets remains observe
+  by default; the separate wire-handoff fixture is not permission to enable it.
+- Performance installer fixtures require the exact MCD export via
+  `PERFORMANCE_FIXTURE` in addition to the prior `FIXTURE` stock backup. The
+  host helper is compiled from production source; only ARM execution is replaced.
+  Run final package fixtures in staged mode, without weakening hash or rollback checks.
+
 - The 2026-10-25 source sync advances yuedizhibo to V3.8 Fix1 `652448d`.
   Keep the released net diff: upstream withdrew PR 62 startup/frame reuse.
   Preserve Solid/Reduced backing choices while porting arrow fades. Mirror

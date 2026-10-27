@@ -18,6 +18,7 @@
 #define CARPLAY_LOGGING_H
 
 #include "common.h"
+#include "ap_status.h"
 
 /* Global logging switch - define ENABLE_LOGGING=0 to disable all logging */
 #ifndef ENABLE_LOGGING

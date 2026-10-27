@@ -19,6 +19,7 @@
 #include "../framework/bus.h"
 #include "../framework/bus_protocol.h"
 #include "alt_cluster.h"
+#include "maps_profile.h"
 
 #include <dlfcn.h>
 #include <pthread.h>
@@ -178,7 +179,7 @@ static void alt_on_zoom(uint16_t type, uint8_t flags, const uint8_t* payload, ui
     for (int i = 0; i < count; i++) {
         int32_t err = alt_send("changeMapZoomLevel", "zoomDirection", NULL, 1, dir);
         if (err != 0) {
-            LOG_WARN(LOG_MODULE, "changeMapZoomLevel dir=%d failed err=%d", dir, (int)err);
+            LOG_WARN(LOG_MODULE, "changeMapZoomLevel dir=%d failed err=%d%s", dir, (int)err, ap_status(err));
             return;
         }
     }
@@ -258,10 +259,19 @@ static void alt_cluster_shutdown(void) {
     bus_off(CMD_OEM_MAP_READY);
 }
 
+static size_t alt_cluster_identify(hook_context_t *ctx, uint8_t *data, size_t len, size_t cap) {
+    const char *profile = getenv("ALTSCREEN_PHONE_PROFILE");
+    /* The wrapper sets this only for an enabled, video-negotiating receiver.
+     * Leave Master Off and Audi-map-only identities unchanged. */
+    if (!profile || (strcmp(profile, "map") && strcmp(profile, "card"))) return len;
+    return alt_maps_profile_identify(ctx, data, len, cap);
+}
+
 const hook_module_def_t alt_cluster_module_def = {
     .name = "altcluster",
     .priority = HOOK_PRIORITY_LOW,
     .on_init = alt_cluster_init,
     .on_shutdown = alt_cluster_shutdown,
     .on_tick = alt_session_tick,
+    .on_identify = alt_cluster_identify,
 };

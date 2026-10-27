@@ -39,13 +39,16 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     bash "$PROJECT_DIR/scripts/build_altscreen.sh"
 fi
 for f in "$JAR" "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
-    "$PROJECT_DIR/build/libcarplay_mascot.so"; do
+    "$PROJECT_DIR/build/libcarplay_mascot.so" "$PROJECT_DIR/build/carplay_binpatch"; do
     [ -s "$f" ] || { echo "ERROR: missing build artifact $f"; exit 1; }
 done
 NATIVE="$PROJECT_DIR/build/altscreen"
 if command -v sha256sum >/dev/null 2>&1; then MSHA="sha256sum"; else MSHA="shasum -a 256"; fi
 [ -s "$NATIVE/SOURCES.sha256" ] && [ -s "$NATIVE/ELF_CHECKS.txt" ] || {
     echo "ERROR: source-built AltScreen provenance is missing; run scripts/build_altscreen.sh"; exit 1;
+}
+(cd "$PROJECT_DIR" && $MSHA -c build/performance-source.sha256 >/dev/null) || {
+    echo "ERROR: performance helper source changed after compilation"; exit 1;
 }
 (cd "$PROJECT_DIR" && $MSHA -c "$NATIVE/SOURCES.sha256" >/dev/null) || {
     echo "ERROR: AltScreen sources changed after compilation; rebuild before staging"; exit 1;
@@ -93,6 +96,9 @@ source_build_id=carplay-private111-mu1316-source-v3.8-fix1-java-placement
 source_manifest=SOURCES.sha256
 rgd_owner=LOCAL_SINGLE_IMPLEMENTATION
 cluster_context_owner=JAVA_CLUSTERSTATECONTROLLER
+performance_profile=MAPS30_DECODER2_MCD200_PRIORITY3
+performance_activation=INSTALL_AND_FULL_REBOOT
+performance_stock_restore=UNIT_BOUND_TRANSACTION
 EOF
 chmod 755 "$OUT/$ALTS_LIB" "$OUT/$ALTS_MIRROR_DIR/carplay-alt111-mirror-display"
 ALTS_FPS="source V3.8 NV12/GLES (vehicle validation required)"
@@ -107,6 +113,9 @@ chmod 755 "$OUT/$ALTS_MIRROR_DIR/libcarplay_mascot.so"
 
 # RGI native half, installed by Toolbox/scripts/rgi_companion.sh from AltScreen INSTALL.
 mkdir -p "$OUT/$RGI_DIR"
+cp "$PROJECT_DIR/build/carplay_binpatch" "$OUT/$RGI_DIR/"
+chmod 755 "$OUT/$RGI_DIR/carplay_binpatch"
+cp "$PROJECT_DIR/deploy/performance/UPSTREAM-NOTICE.txt" "$OUT/$RGI_DIR/PERFORMANCE-NOTICE.txt"
 cp "$PROJECT_DIR/build/libcarplay_hook.so" "$PROJECT_DIR/build/maneuver_render" \
    "$PROJECT_DIR/Toolbox/carplay_alt_screen/rgi_renderer/src/resources/flag_atlas.rgba" \
    "$PROJECT_DIR/deploy/smartphone_integrator/carplay_startup.sh" \

@@ -7,6 +7,8 @@ WORK=/work/build/installer-transaction-tests
 mkdir -p "$WORK"
 RUN="$WORK/run-$(date +%Y%m%d-%H%M%S)-$$"
 mkdir "$RUN"
+PATH=/usr/bin:/bin:$PATH
+cc -std=gnu99 -Wall -Wextra -Werror -O2 /work/deploy/performance/firmware_patch.c -o "$RUN/performance-test-helper"
 CASE_DIR=""
 finish(){
     rc=$?
@@ -57,12 +59,14 @@ scripts = [
     "altscreen_chain_test_universal.sh", "rgi_companion.sh",
     "export_mmi_cockpit_diagnostics.sh", "altscreen_transaction.sh",
     "altscreen_rescue.sh", "altscreen_firewall_diag.sh",
+    "carplay_performance.sh",
 ]
 payload = "Toolbox/carplay_alt_screen/"
 arm = [
     "universal/libcarplay_altscreen.so", "rgi/libcarplay_hook.so",
     "rgi/maneuver_render", "mirror_display/release/carplay-alt111-mirror-display",
     "mirror_display/release/libcarplay_mascot.so",
+    "rgi/carplay_binpatch",
 ]
 required = ["Toolbox/scripts/" + name for name in scripts]
 required += [payload + name for name in arm]
@@ -93,7 +97,11 @@ fixture(){
     F=/fixture/ORIGINAL/files
     mkdir -p "$VOL" "$ROOT/eso/bin/apps" "$ROOT/eso/lib" "$ROOT/armle/usr/lib" "$P" \
         "$ROOT/mnt/system/etc/boot" "$ROOT/mnt/app/root" "$ROOT/mnt/app/eso/hmi/lsd/jars" \
-        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk" "$ROOT/armle/sbin"
+        "$ROOT/dev/shmem" "$ROOT/tmp" "$ROOT/ramdisk" "$ROOT/armle/sbin" "$ROOT/mnt/app/armle/usr/sbin"
+    cp "$RUN/performance-test-helper" "$ROOT/performance-test-helper"
+    cp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
+    cp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
+    chmod 755 "$ROOT/mnt/app/armle/usr/sbin/mcd"
     cp /work/tests/fixtures/pfctl-filter-validator.sh "$ROOT/armle/sbin/pfctl"
     chmod 755 "$ROOT/armle/sbin/pfctl"
     cp -a /sd/. "$VOL/"
@@ -145,6 +153,9 @@ state(){
 }
 unchanged(){ state after; cmp "$CASE_DIR/$1" "$CASE_DIR/after"; }
 stock(){
+    cmp "$F/_eso_lib_libairplay.so" "$ROOT/eso/lib/libairplay.so"
+    cmp /performance/mcd "$ROOT/mnt/app/armle/usr/sbin/mcd"
+    cmp /performance/mcd.conf "$ROOT/mnt/system/etc/mcd.conf"
     cmp "$F/_mnt_system_etc_eso_production_smartphone_integrator.json" "$P/smartphone_integrator.json"
     cmp "$F/_mnt_system_etc_eso_production_dio_manager.json" "$P/dio_manager.json"
     cmp /fixture/firewall-original/pf.conf "$ROOT/mnt/system/etc/pf.conf"
@@ -156,6 +167,7 @@ install(){
     need install 'INSTALL=PASS integrated='
     need install 'BOOT_ARM=PASS live_launch=NO'
     need install 'INSTALL_VERIFY=PASS'
+    need install 'PERFORMANCE_VERIFY=PASS state=optimized'
     test -f "$RUNTIME/state/basevideo3.enabled"
     test -f "$RUNTIME/state/ACTIVE"
     test ! -e "$ROOT/tmp/mmi-mirror-active"
@@ -240,6 +252,44 @@ test -f "$HOOKS/owner-unrelated"
 run restore-again "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
 need restore-again 'already_restored=YES'
 echo "ok: one-step, upgrade, compatible START, exact restore and immutable exports"
+
+fixture unknown-performance
+printf unknown >> "$ROOT/mnt/app/armle/usr/sbin/mcd"
+state before
+fails unknown-performance "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need unknown-performance 'performance exact-file preflight'
+unchanged before
+
+fixture performance-partial
+state before
+# Insert failure in perf_apply only, after decoder has already been published.
+inject "$SCRIPTS/altscreen_transaction.sh" \
+    'perf_apply || fail "performance APPLY"' \
+    'perf_setup && perf_publish decoder apply && fail "injected after decoder publish"'
+fails performance-partial "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need performance-partial 'ROLLBACK=PASS'
+unchanged before
+stock
+
+fixture performance-full-rollback
+state before
+inject "$SCRIPTS/altscreen_transaction.sh" \
+    'perf_apply || fail "performance APPLY"' \
+    'perf_apply && fail "injected after all performance changes"'
+fails performance-full "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need performance-full 'ROLLBACK=PASS'
+unchanged before
+stock
+
+fixture performance-upgrade-rollback
+install
+state before
+inject "$SCRIPTS/altscreen_transaction.sh" \
+    'verify_installed || fail "installed final verification"' \
+    'fail "injected optimized upgrade failure"'
+fails performance-upgrade "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh"
+need performance-upgrade 'ROLLBACK=PASS'
+unchanged before
 
 fixture wrong-firmware
 state before
@@ -366,12 +416,15 @@ need bind-legacy-upgrade 'BACKUP_IDENTITY=BOUND legacy_original_bytes=UNCHANGED'
 cmp "$CASE_DIR/legacy-backup-before" "$CASE_DIR/legacy-backup-after"
 stop_stub
 echo damaged-native > "$ROOT/eso/bin/apps/dio_manager"
+echo damaged-mcd > "$ROOT/mnt/app/armle/usr/sbin/mcd"
+echo damaged-priority > "$ROOT/mnt/system/etc/mcd.conf"
 state damaged
 fails ordinary-refuses-damage "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh"
 unchanged damaged
 run rescue "$SCRIPTS/altscreen_rescue.sh" restore-original --confirm-stock-rescue
 need rescue 'RESCUE=PASS reversible=YES'
 cmp "$F/_eso_bin_apps_dio_manager" "$ROOT/eso/bin/apps/dio_manager"
+stock
 test -f "$SD/restore-transaction/rescue/PREPARED"
 run undo "$SCRIPTS/altscreen_rescue.sh" undo --confirm-pre-rescue
 need undo 'RESCUE_UNDO=PASS'

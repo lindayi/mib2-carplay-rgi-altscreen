@@ -8,6 +8,7 @@
  * framework through hook_module_def_t; the framework reaches them only through
  * hook_module_table (Toolbox/carplay_alt_screen/rgi_native/src/main.c). */
 #include "hook_framework.h"
+#include "identify_buffer.h"
 #include "state_trace.h"
 
 #include <fcntl.h>
@@ -533,8 +534,8 @@ static void handle_state_messages(uint16_t msgid) {
 
 static bool parse_array_bytes(void* arr, uint8_t** out_data, unsigned int* out_len) {
     if (!arr || !out_data || !out_len) return false;
-    *out_data = *(uint8_t**)((char*)arr + 0);
-    *out_len = *(unsigned int*)((char*)arr + 4);
+    *out_data = ((hook_identify_array_t *)arr)->base;
+    *out_len = ((hook_identify_array_t *)arr)->length;
     return (*out_data != NULL && *out_len > 0);
 }
 
@@ -973,11 +974,11 @@ HOOK_EXPORT int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void
             if (!mod->active || !mod->def.on_identify) continue;
 
             g_fw.ctx.current_module = mod;
-            unsigned int cap = *(unsigned int*)((char*)out_array + 8);
+            unsigned int cap = ((hook_identify_array_t *)out_array)->capacity;
             size_t new_len = mod->def.on_identify(&g_fw.ctx, data, len, cap);
 
             if (new_len != len) {
-                *(unsigned int*)((char*)out_array + 4) = (unsigned int)new_len;
+                ((hook_identify_array_t *)out_array)->length = (unsigned int)new_len;
                 len = (unsigned int)new_len;
                 parse_array_bytes(out_array, &data, &len);
                 patched = true;

@@ -1,6 +1,12 @@
 MMI Cockpit CarPlay AltScreen + RGI SD Package
 
 This source-built candidate requires MHI2Q_US_AUG22_P5145 / MU1316.
+This candidate enables Maps30 profile selection and exact-unit decoder/MCD
+performance changes. The stock-file changes apply after the installation reboot,
+affect both video paths/media handling, and remain until RESTORE ORIGINAL.
+Master Off controls CarPlay overlays, not these installation-level changes.
+Unknown firmware file bytes fail before installation. Keep the matching SD,
+original backups and transaction history for restore/rescue.
 It has passed host checks, but has not been verified in the vehicle.
 The menu appears in NAV -> right drawer -> Navigation settings -> Carplay Altscreen.
 No menu option reboots MMI. Connection changes explicitly require CarPlay reconnect.

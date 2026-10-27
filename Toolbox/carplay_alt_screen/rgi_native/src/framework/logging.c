@@ -6,6 +6,16 @@
 
 #include "logging.h"
 
+#define AP_STATUS_SUFFIX(v, n) " (" #n ")",
+static const char *const k_ap_status_suffix[] = { AP_STATUS_LIST(AP_STATUS_SUFFIX) };
+#undef AP_STATUS_SUFFIX
+#define AP_STATUS_COUNT ((int)(sizeof(k_ap_status_suffix) / sizeof(k_ap_status_suffix[0])))
+
+const char *ap_status(int status) {
+    if (status > kGenericErrorBase || status < kGenericErrorBase - AP_STATUS_COUNT + 1) return "";
+    return k_ap_status_suffix[kGenericErrorBase - status];
+}
+
 #if ENABLE_LOGGING || ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE
 
 /* Maximum tracked dump files for once-only dumps */

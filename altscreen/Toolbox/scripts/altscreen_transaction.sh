@@ -34,6 +34,7 @@ PF="$ROOT/mnt/system/etc/pf.conf"
 JAR="$ROOT/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar"
 CONTROLLER="$SCRIPTS/altscreen_chain_test.sh"
 UNIVERSAL="$SCRIPTS/altscreen_chain_test_universal.sh"
+. "$SCRIPTS/carplay_performance.sh"
 LOCK="$SD/.operation.lock"
 BOOT_FILE="$ROOT/ramdisk/MMI-Cockpit-Carplay.transaction.boot"
 TXN=""; READY=0; APP_RW=0; SYS_RW=0; LOCK_HELD=0
@@ -230,6 +231,7 @@ snapshot_item(){
 allowed_item(){
     case "$1:$2" in
         file:"$SI"|file:"$DIO"|file:"$PF"|file:"$JAR"|file:"$ROOT/mnt/system/etc/boot/startup.sh"|file:"$ROOT/etc/boot/startup.sh") return 0 ;;
+        file:"$ROOT/mnt/app/armle/usr/sbin/mcd"|file:"$ROOT/mnt/system/etc/mcd.conf") return 0 ;;
         file:"$ROOT/mnt/system/etc/"pf.*.conf) case "${2##*/}" in *[!A-Za-z0-9._-]*) return 1 ;; *) return 0 ;; esac ;;
         file:"$ROOT/eso/bin/apps/dio_manager"|file:"$ROOT/mnt/app/eso/bin/apps/dio_manager"|file:"$ROOT/eso/lib/libairplay.so"|file:"$ROOT/armle/usr/lib/libNmeBaseClasses.so"|file:"$ROOT/mnt/app/armle/usr/lib/libNmeBaseClasses.so"|file:"$ROOT/eso/lib/libNmeBaseClasses.so") return 0 ;;
         dir:"$RUNTIME"|dir:"$ROOT/mnt/app/root/.carplay-altscreen.previous"|dir:"$HOOKS"|dir:"$ROOT/mnt/app/root/lib-target"|dir:"$SD/state"|dir:"$SD/backup"|dir:"$SD/staging") return 0 ;;
@@ -267,7 +269,9 @@ validate_snapshot(){
         validate_item "$kind" "$path" "$name" || return 1
         if [ ! -f "$TXN/RESCUE" ]; then
             case "$name" in native_*)
-                same "$TXN/data/$name" "$path" || {
+                same "$TXN/data/$name" "$path" ||
+                    { [ "$path" = "$ROOT/eso/lib/libairplay.so" ] &&
+                      perf_known_native_pair "$TXN/data/$name" "$path"; } || {
                     log "SNAPSHOT=REFUSED stock_binary_changed=YES rescue_required=YES"; return 1;
                 } ;;
             esac
@@ -291,6 +295,10 @@ snapshot(){
     while IFS= read -r rel; do
         snapshot_item file "$ROOT$rel" "native_$(echo "$rel" | tr '/' '_')" || return 1
     done < "$TXN/native.paths"
+    if [ "$ACTION" = install ] || [ -d "$SD/backup/performance-original" ]; then
+        snapshot_item file "$ROOT/mnt/app/armle/usr/sbin/mcd" perf_mcd &&
+            snapshot_item file "$ROOT/mnt/system/etc/mcd.conf" perf_priority || return 1
+    fi
     snapshot_item dir "$RUNTIME" runtime &&
         snapshot_item dir "$ROOT/mnt/app/root/.carplay-altscreen.previous" previous &&
         snapshot_item dir "$HOOKS" hooks &&
@@ -355,6 +363,7 @@ rollback(){
     touch "$TXN/ROLLBACK_INCOMPLETE" && rm -f "$TXN/COMMITTED" "$TXN/ROLLED_BACK" && sync || return 1
     mount_system_rw && SYS_RW=1 || return 1
     mount_app_rw && APP_RW=1 || return 1
+    perf_collect_staging || return 1
     # References first, verified before any referenced runtime can be removed.
     while IFS='|' read -r kind path name; do
         case "$name" in startup|si|dio|pf|pf.*.conf)
@@ -446,6 +455,7 @@ verify_installed(){
         [ "$(grep -c '^# BEGIN ALTSCREEN DIAGNOSTICS$' "$startup")" = 1 ] &&
         sh -n "$startup" || return 1
     /bin/sh "$UNIVERSAL" verify-install || return 1
+    perf_verify optimized || return 1
     verify_startup_unrelated || return 1
     log "INSTALL_VERIFY=PASS autostart=ARMED live_launch=NOT_REQUIRED"
 }
@@ -453,6 +463,7 @@ verify_restored(){
     [ ! -e "$RUNTIME" ] || return 1
     local_baseline verify || return 1
     /bin/sh "$UNIVERSAL" verify-restored || return 1
+    perf_verify stock || return 1
     startup=$(find_startup) || return 1
     if grep -Eq '^# (BEGIN|END) (ALT111|ALTSCREEN)' "$startup"; then return 1; fi
     sh -n "$startup"
@@ -547,6 +558,7 @@ if [ "$ACTION" = rescue ]; then
 fi
 if [ "$ACTION" = install ]; then
     /bin/sh "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh" --preflight || fail "install preflight"
+    perf_preflight || fail "performance exact-file preflight"
 else
     /bin/sh "$UNIVERSAL" restore-preflight || fail "restore preflight"
 fi
@@ -564,10 +576,16 @@ snapshot || fail "snapshot failed before APPLY"
 touch "$TXN/APPLYING" && sync || fail "APPLYING journal"
 if [ "$ACTION" = install ]; then
     local_baseline save || fail "local original backup"
+    perf_save_originals || fail "performance original backup"
     ALTSCREEN_TRANSACTION_ACTIVE=1 run_detail /bin/sh "$SCRIPTS/install_mmi_cockpit_carplay_rx.sh" --apply ||
         fail "install APPLY"
+    mount_app_rw && APP_RW=1 && mount_system_rw && SYS_RW=1 || fail "performance mounts"
+    perf_apply || fail "performance APPLY"
     verify_installed || fail "installed final verification"
 else
+    mount_app_rw && APP_RW=1 && mount_system_rw && SYS_RW=1 || fail "performance restore mounts"
+    perf_restore || fail "performance original restore"
+    finish_mounts || fail "performance restore sync"
     ALTSCREEN_TRANSACTION_ACTIVE=1 ALTSCREEN_RESCUE="${ALTSCREEN_RESCUE:-0}" \
         run_detail /bin/sh "$SCRIPTS/stop_mmi_cockpit_carplay_test.sh" --apply || fail "restore APPLY"
     mount_app_rw && APP_RW=1 || fail "local original restore mount"

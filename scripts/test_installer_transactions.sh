@@ -12,9 +12,11 @@ FIXTURE="${FIXTURE:?set FIXTURE to the private exact-stock backup directory}"
 TEST_IMAGE="${TEST_IMAGE:-mib2-altscreen-native:local}"
 test -f "$SD_DIR/Toolbox/carplay_alt_screen/hmi/carplay_hook-basevideo3.jar"
 test -d "$FIXTURE/ORIGINAL/files"
+PERFORMANCE_FIXTURE="${PERFORMANCE_FIXTURE:?set PERFORMANCE_FIXTURE to the private exported mcd/config directory}"
+test -f "$PERFORMANCE_FIXTURE/mcd" && test -f "$PERFORMANCE_FIXTURE/mcd.conf"
 docker run --rm -e INSTALLER_CASES="${INSTALLER_CASES:-all}" \
     -e INSTALLER_PACKAGE_MODE="$INSTALLER_PACKAGE_MODE" \
-    -v "$PROJECT":/work -v "$SD_DIR":/sd:ro -v "$FIXTURE":/fixture:ro \
+    -v "$PROJECT":/work -v "$SD_DIR":/sd:ro -v "$FIXTURE":/fixture:ro -v "$PERFORMANCE_FIXTURE":/performance:ro \
     --entrypoint bash "$TEST_IMAGE" -c '
 set -e
 # Use an installed pdksh-compatible shell when available. Bash is an explicit

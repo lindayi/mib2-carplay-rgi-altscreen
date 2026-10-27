@@ -2,9 +2,9 @@
 # MIB2Q AUG22 universal AltScreen controller.
 #
 # Since 2026-09-17 this is the only active installation/runtime path for supported
-# AUG22 vehicles, including K1004 and P1404.  It does not replace dio_manager,
-# stock libairplay or Nme.  It installs the standalone dynamic resolver as
-# LD_PRELOAD and reuses the vehicle's stock implementation at runtime.
+# AUG22 vehicles, including K1004 and P1404. It does not replace dio_manager or
+# Nme. The outer MU1316 transaction may apply the exact known decoder change;
+# all other native differences still require guarded rescue.
 #
 # Historical K1004/P1404 profile overlays remain in the repository for reference
 # and legacy RESTORE only; this controller never selects or deploys them.
@@ -59,6 +59,7 @@ else
 fi
 
 ARTIFACT_DIR="$VOLUME/Toolbox/carplay_alt_screen"
+. "$VOLUME/Toolbox/scripts/carplay_performance.sh"
 UNIVERSAL_SRC="$ARTIFACT_DIR/universal/libcarplay_altscreen.so"
 UNIVERSAL_REL="/mnt/app/root/carplay-altscreen/lib/libcarplay_altscreen.so"
 LEGACY_UNIVERSAL_REL="/mnt/app/root/hooks/libcarplay_altscreen.so"
@@ -388,7 +389,9 @@ verify_backup_identity() (
     fi
     while IFS= read -r rel; do
         case "$rel" in *.json) continue ;; esac
-        same_bytes "$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')" "$(p "$rel")" || {
+        same_bytes "$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')" "$(p "$rel")" ||
+            { [ "$rel" = "$LIVE_LIBAIRPLAY" ] &&
+              perf_known_native_pair "$BACKUP_DIR/files/$(echo "$rel" | tr '/' '_')" "$(p "$rel")"; } || {
             say "FAIL: stock binary differs; use guarded manual rescue"; return 1;
         }
     done < "$BACKUP_MANIFEST"
@@ -785,6 +788,12 @@ cmd_disarm(){
 
 cmd_status(){
     echo "=== AltScreen AUG22 universal status ==="
+    if perf_setup && [ -d "$PERF_ORIGINAL" ]; then
+        for role in decoder mcd priority; do
+            state=$(perf_check "$role" "$(perf_path "$role")") || state=INVALID
+            echo "PERFORMANCE_$role=$state activation=NEXT_BOOT_AFTER_INSTALL"
+        done
+    fi
     if [ -d "$LOCK_FILE" ]; then
         echo "OPERATION_LOCK=PRESENT pid=$(cat "$LOCK_FILE/pid" 2>/dev/null || echo unknown)"
     else

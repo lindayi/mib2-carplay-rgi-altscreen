@@ -7,9 +7,14 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 python3 tests/test_yuedizhibo_baseline.py
 python3 tests/test_mcd_export.py
+sh tests/rgi_dio_direction_test.sh
 bash tests/transaction_snapshot_test.sh
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
+cc -std=gnu99 -Wall -Wextra -Werror -fsanitize=address,undefined tests/maps_profile_test.c -o "$OUT/maps_profile"
+"$OUT/maps_profile"
+cc -std=gnu99 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_ap_status.c -o "$OUT/ap_status"
+"$OUT/ap_status"
 if [ "$(uname)" = Darwin ]; then DEAD_STRIP=-Wl,-dead_strip; else DEAD_STRIP=-Wl,--gc-sections; fi
 
 printf '%-32s ' renderer_runtime_test

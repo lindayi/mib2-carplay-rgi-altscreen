@@ -23,6 +23,9 @@ Toolbox/carplay_alt_screen/rgi/carplay_processes.sh
 Toolbox/carplay_alt_screen/rgi/carplay_startup.sh
 Toolbox/carplay_alt_screen/rgi/flag_atlas.rgba
 Toolbox/carplay_alt_screen/rgi/libcarplay_hook.so
+Toolbox/carplay_alt_screen/rgi/carplay_binpatch
+Toolbox/carplay_alt_screen/rgi/PERFORMANCE-NOTICE.txt
+Toolbox/scripts/carplay_performance.sh
 Toolbox/carplay_alt_screen/rgi/maneuver_render
 Toolbox/carplay_alt_screen/universal/libcarplay_altscreen.so
 Toolbox/final/cleanup.sh

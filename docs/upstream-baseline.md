@@ -124,6 +124,85 @@ the remaining replaced files for manual review.
 
 ## Updating the baseline
 
+### 2026-10-27 compatible Luka ports
+
+The owner approved including and enabling all three performance features in the
+next candidate, with exact-file checks and full rollback/restore support. This
+supersedes the earlier hold for the new candidate only. The reported working
+`4f24de2e` vehicle build is unchanged until a separate SD preparation/installation.
+
+The source reference is Luka
+`a63d54741839c7d30d32dd4e149f693856bcb0db`; yuedizhibo's canonical RGI baseline
+remains Fix1 `652448d`. These are additive ports, not a second RGI/AltScreen stack.
+
+| Port | Integration |
+| --- | --- |
+| Maps30 PPID | Upstream selector in the existing GPL `altcluster` module. RGD and Maps30 share the bounded NmeArray growth helper. The wrapper's video-enabled map/card profile gates the addition; existing PPIDs pass through. The native UI/context/placement owners do not change. |
+| Decoder queue depth | Exact P5145 full-file SHA-256 guards before and after the two-byte upstream transformation. Both video paths use the shared stock decoder; no runtime mprotect fallback is introduced. |
+| MCD pacing and priority | Exact exported daemon/config hashes; five-byte and 13-line upstream transformations. Keep the device list, original modes and stock copies. No live daemon restart; activation is after the documented installation reboot. |
+| Error names | Upstream CoreUtils table and suffix decoder supplement actual AirPlay zoom error numbers. Unknown codes remain numeric; no error value is reinterpreted as success. |
+| iAP2 declarations | The active RGI companion repairs sent/received direction and declares complete groups used by our current modules. It preserves unrelated IDs, rejects duplicate lists/IDs and does not advertise an absent vehicle-status module. |
+| UTF-8 builds | Explicit source encoding for the Java runtime and host weave tools. The generated classes/resources remain byte-identical after normalizing the inlined build-ID constants. |
+
+`deploy/performance/UPSTREAM-NOTICE.txt` maps the imported sources.
+The unchanged upstream `binpatch.py` remains the host transform oracle. The
+Toolbox has no MicroPython runtime, so `firmware_patch.c` is a small native
+adapter with exact stock/optimized SHA-256 guards and the same output bytes.
+It does not embed or ship vehicle firmware. It creates a new file exclusively,
+verifies its transformed bytes before writing and flushes before success.
+The outer installer publishes that file by rename within its existing transaction.
+
+#### Stock-file ownership and recovery
+
+The sole INSTALL now checks all performance inputs before mutation. Original
+performance files and modes live in `backup/performance-original` and are never
+replaced by optimized files. The existing firmware/unit checks still apply.
+The old blanket native-equality check has one narrow exception: the exact known
+decoder stock/optimized pair, with valid original backups. Unrecognized or
+partially changed binaries are still refused.
+
+The transaction includes MCD/config in its pre-operation snapshot. A failed
+install or upgrade restores that snapshot, not an arbitrary stock reset.
+RESTORE ORIGINAL restores all three original files; stock rescue can repair a
+damaged managed file and its undo restores the exact pre-rescue contents.
+Unpublished performance files are retained in the transaction's residue on
+rollback. The candidate must be restored with its matching/newer SD; an older
+card has no knowledge of the approved binary transformations and may correctly
+refuse them. Do not bypass an older card's original-file check.
+
+These are installation-level, HU-wide changes. Turning Master Off still
+withdraws CarPlay modules/extra video, but does not restore stock binaries.
+There is no new reboot-dependent switch in the normal-MMI settings. Settings,
+the VC long-press entry, high-resolution mascots and the one-installer UX remain.
+
+#### Validation and remaining limits
+
+The native adapter is compared byte-for-byte against upstream's transforms on
+the owner's private inputs, including idempotence, corrupt/truncated/partial
+inputs and refusing an existing output. Native selector tests cover its wire
+bytes and failed/moving growth; the actual `altcluster` callback verifies the
+session gate and preserved RGI data. A separate native wire-handoff fixture
+checks PPID coexistence with observe/ThemeAssets framing without linking the
+two production license domains together. It does not enable ThemeAssets.
+
+Installer fixtures exercise success, repeat upgrade, unknown inputs, failure
+after the first decoder write, failure after all performance changes, rollback
+to an already optimized upgrade baseline, exact stock restoration, corruption
+refusal, rescue and reversible undo. They use the actual helper source and
+private exact-unit files; host execution is not on-vehicle ARM validation.
+
+Maps30 selects a phone policy, not a guaranteed panel rate. Reduced queues can
+trade latency for less burst tolerance. MCD polling/priority can change media
+discovery timing. Keep the known-working package and compare both displays,
+reconnects, media insertion/removal and CPU behavior in a separate parked trial.
+
+The open alternative layout/mode/context PRs are not merged wholesale: their
+separate settings stores, long-roller gesture and context writers would replace
+our supported UX/ownership. Their relevant existing capabilities are already
+provided by our settings/accepted Fct54 path. This is not a claim of parity with
+every proposed reroute/approach policy in unmerged PR32; those behavior changes
+need a separate selective port, not silent replacement of our controller.
+
 ### 2026-10-25 synchronization
 
 Allemon `main` is unchanged at `1289981`. Allemon PR 7 remains included; PR 14
