@@ -88,9 +88,22 @@ Do not turn this into a raw conversation log or store credentials/private captur
   This supersedes the historical card `-445`/500-pixel SMALL policy below.
 - Luka's new performance features were investigated, not enabled. The exact
   retained P5145 libairplay matches both queue-depth patch sites, but byte
-  compatibility is not install/rollback or vehicle validation. No unit mcd or
-  mcd.conf is retained. Maps30 PPID needs Identify-dispatcher/growth integration,
-  not a header-only copy. See docs/upstream-baseline.md for the evidence limits.
+  compatibility is not install/rollback or vehicle validation. The October 26
+  private MCD export now matches upstream's stock daemon/config exactly; its
+  five-byte patch and 13 priority edits reproduce upstream candidate hashes in
+  memory. No optimization is enabled. Maps30 can share the existing RGD resize
+  helper (same body as upstream hook_identify_grow), but needs full Identify-chain
+  tests, including the native ThemeAssets size boundary.
+- Correct the earlier main-screen-only decoder assumption: this integration's
+  private111 path also calls stock ScreenStreamCreate and uses OmxVideoImpl.
+  The queue-depth library patch is not stream-specific; evaluate both displays.
+  Do not weaken original-binary equality checks to install it: add explicit
+  known-transform identity, rollback, restore and rescue support first.
+- On October 26 the owner reports the latest build is running fine. The last
+  prepared package is 4f24de2e (merged into Q5 at 7fc31c21); this is an owner
+  report, not independent installed-ID readback or approval of new optimizations.
+  Fresh upstream fetches still show Allemon `1289981`, yuedizhibo `652448d` and
+  Luka `a63d5474`. See docs/upstream-baseline.md for the detailed feasibility map.
 - `altscreen/Toolbox/scripts/export_mcd_originals.sh` is a standalone, private
   SD export, not an installer or optimization. Copy it as SD-root `test.sh`
   for Toolbox's existing Various -> DEV entry. It must preserve source files,
