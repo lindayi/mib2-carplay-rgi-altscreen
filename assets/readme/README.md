@@ -1,4 +1,27 @@
-# README preview images
+# README images
+
+## Vehicle image
+
+`vehicle-layout.jpg` is the owner-approved processed version of the real in-car
+photograph supplied as `IMG_3290.JPEG`. It is cropped to the cockpit and has no
+source GPS/EXIF metadata.
+
+The media/Trip card's upper-left bevel and header alignment were locally retouched
+to illustrate the corrected slope. The narrow newly exposed background strip uses
+adjacent photographed map texture. The surrounding car frame was not moved.
+This is an edited photograph, not an unaltered capture of the corrected geometry.
+
+At the owner's request, street labels, album artwork, the visible mascot and
+instrument readings remain. Removing metadata does not anonymize visible content.
+The original stays private and unchanged. Approval to use this photograph does
+not grant a general license to extract or redistribute third-party artwork or
+mascot packs.
+
+The photo illustrates the in-car appearance; it does not identify an installed
+build or establish telemetry accuracy, performance or current-candidate vehicle
+validation.
+
+## Host-rendered previews
 
 These figures show **this fork's host fixtures**, not an owner's vehicle or an
 upstream demonstration car. All route/media/speed values are synthetic.
@@ -14,7 +37,7 @@ They contain no private firmware capture, real album cover or mascot-pack artwor
 labels. It reads only the named `build/` fixture outputs; it does not read the
 owner's pack, phone metadata, private directories or vehicle logs.
 
-## Regenerate
+## Regenerate the host previews
 
 The commands below assume an existing host GLES test image with C/C++ compilers,
 EGL/GLES, Python/Pillow and DejaVu fonts. The project's local
