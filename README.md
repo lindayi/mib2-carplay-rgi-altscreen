@@ -11,7 +11,7 @@ settings, overlays and recovery work.
 
 **Development branch:** [`q5-mu1316-build-fixes`](https://github.com/lindayi/mib2-carplay-rgi-altscreen/tree/q5-mu1316-build-fixes)
 
-[In-car photo](#an-earlier-in-car-build) · [Features](#what-you-get) · [Controls](#everyday-controls) ·
+[Features](#what-you-get) · [Controls](#everyday-controls) ·
 [Installation](#installation) · [Build](#build) · [Status and limits](#status-and-limits) ·
 [Documentation](#documentation)
 
@@ -20,14 +20,6 @@ settings, overlays and recovery work.
 > The HMI patch and installation guards target the exact firmware above.
 > Installation modifies head-unit software and system configuration; keep verified
 > originals and stop on any failed guard. Do not substitute another firmware's JAR.
-
-## An earlier in-car build
-
-![Owner-supplied photo showing CarPlay map video, media and Trip cards, and maneuver guidance in the Virtual Cockpit, with identifying labels and private artwork masked](assets/readme/in-car-earlier-build.jpg)
-
-*Owner-supplied photo from September 2026 testing. The card styling has since
-changed; this is not validation of the current performance candidate. The photo
-is cropped, metadata removed, and location labels/private artwork masked.*
 
 ## What you get
 
