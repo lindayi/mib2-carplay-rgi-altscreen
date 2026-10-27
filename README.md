@@ -1,546 +1,190 @@
-# MHI2Q CarPlay Virtual Cockpit Integration (AltScreen + Route Guidance)
+# Carplay Altscreen for Audi Q5
 
-**Personal-fork target:** Audi Q5 2020, `MHI2Q_US_AUG22_P5145`, MU1316, iPhone/CarPlay.
-The new native-MMI menu is guarded to this unit's reconstructed stock HMI class.
-Other firmware examples and vehicle reports below describe upstream history, not
-additional supported targets for this fork. Earlier native-menu builds have owner
-confirmation; the new source-integration candidate requires a new vehicle trial.
+**CarPlay maps, turn-by-turn guidance and useful information in the Virtual Cockpit,
+with everyday controls in normal MMI and the steering-wheel menu.**
 
-**Source integration:** Allemon `1289981` and compatible yuedizhibo V3.8 changes are
-integrated. The AltScreen hook and mirror now build from source, with one local
-RGI implementation and the existing custom controls. The native components are
-**source-available under noncommercial terms**, not unrestricted open source.
-See [merge decisions, licensing and evidence](docs/upstream-integration.md).
+This personal fork brings AltScreen video and Route Guidance Integration (RGI)
+together in **one source-built package and one installer**, with Q5-specific
+settings, overlays and recovery work.
 
-**RGI source baseline:** GPL native RGI, Java and renderer sources now use
-yuedizhibo's component paths below `Toolbox/carplay_alt_screen`, including the
-`com.luka.carplay.routeguidance` package. Local features and explicit MU1316
-adapters remain in that single implementation. See the
-[baseline map and three-way update workflow](docs/upstream-baseline.md).
+**Target:** 2020 Audi Q5 · `MHI2Q_US_AUG22_P5145` · MU1316 · iPhone / CarPlay
 
-For project scope, tested build commands, deployment rules and investigation
-lessons, start with [AGENTS.md](AGENTS.md).
+**Development branch:** [`q5-mu1316-build-fixes`](https://github.com/lindayi/mib2-carplay-rgi-altscreen/tree/q5-mu1316-build-fixes)
 
-Unified CarPlay patch set for Audi MHI2Q infotainment with Audi Virtual Cockpit.  
-Integrates **[MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)** (CarPlay instrument cluster video streaming) with **[mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** (3D turn-by-turn route guidance & maneuver renderer) into one single codebase and all-in-one SD card build.
+[Features](#what-you-get) · [Controls](#everyday-controls) ·
+[Installation](#installation) · [Build](#build) · [Status and limits](#status-and-limits) ·
+[Documentation](#documentation)
 
-**Tested & verified on:** Audi Q5 (FY) 2019 · `MHI2Q_ER_AUG22_P5092` · MU Software `1329`.
+> [!WARNING]
+> This is not a universal Audi retrofit or a plug-and-play firmware download.
+> The HMI patch and installation guards target the exact firmware above.
+> Installation modifies head-unit software and system configuration; keep verified
+> originals and stop on any failed guard. Do not substitute another firmware's JAR.
 
-**Additional owner-verified configuration:** Audi Q5 2020 · `MHI2Q_US_AUG22_P5145` · MU Software `1316`.
-On 2026-09-26, the owner reported a successful in-place upgrade from upstream
-MHI2Q-CarPlay-AltScreen and working operation, using a Java patch built against
-that unit's exported stock `lsd.jxe`. This confirms initial installation and
-operation, not exhaustive feature coverage or long-term reliability.
+## What you get
 
-**Owner follow-up, 2026-09-27:** Navigation text and next-turn distance work in the
-car. Google Maps centering remains intermittent: the first one or few navigations
-can be centered, then later navigation can return to an off-center layout. The
-trigger is not established. The last prepared test card was `cb64eee`; this report
-does not validate the later native-MMI menu or recovery additions.
+AltScreen supplies the **phone's cluster video**. RGI supplies **maneuvers, lanes
+and route information**. They are separate inputs, coordinated here rather than
+installed as competing patches.
 
-**Alignment follow-up:** The code now reapplies the selected phone-map layout on
-route transitions even when cluster video stays ready, without changing the crop.
-This corrects a request-lifetime gap; resolution of the intermittent Google Maps
-offset still requires vehicle confirmation ([details](docs/input/steering-wheel.md)).
-
-**Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
-
-## 🖼️ Gallery
-
-**AltScreen: CarPlay instrument cluster video (Google Maps) on the Virtual Cockpit**
-
-<p align="center">
-  <img src="assets/gallery/vc_altscreen_classic.jpg" width="45%" />
-  <img src="assets/gallery/vc_altscreen_sport.jpg" width="45%" /><br />
-  <sub>CarPlay cluster video stream with full navigation map & maneuver overlay on Audi Virtual Cockpit (tested on Audi Q5 FY, MU1329)</sub>
-</p>
-
-**Steering-wheel zoom on Virtual Cockpit**
-
-<p align="center">
-  <img src="assets/gallery/zoom_demo.gif" width="45%" /><br />
-  <sub>Zooming the CarPlay cluster map directly via the left steering-wheel roller</sub>
-</p>
-
-**Virtual Cockpit: route guidance from the 3D maneuver renderer**
-
-<p align="center">
-  <img src="assets/gallery/maneuver_demo.gif" width="90%" /><br />
-  <sub>Cluster maneuver renderer driven through a demo route</sub>
-</p>
-
-<p align="center">
-  <img src="assets/gallery/vc_day_nav.jpeg" height="200" />
-  <img src="assets/gallery/vc_night_nav.jpeg" height="200" />
-</p>
-<p align="center">
-  <img src="assets/gallery/vc_full_map.jpeg" height="200" />
-  <img src="assets/gallery/vc_lane_guidance.jpeg" height="200" />
-</p>
-
-**Audi front PDC no longer hides CarPlay** · **Cover art on the cluster**
-
-<p align="center">
-  <img src="assets/gallery/pdc_over_carplay.jpeg" width="45%" />
-  <img src="assets/gallery/cover_art.jpeg" width="45%" />
-</p>
-
-**Head-up display**
-
-<p align="center">
-  <img src="assets/gallery/IMG_0623.jpeg" width="30%" />
-  <img src="assets/gallery/IMG_6302.jpeg" width="30%" />
-  <img src="assets/gallery/IMG_0599.jpeg" width="30%" />
-</p>
-
-## 📍 Contents
-
-- [Gallery](#-gallery)
-- [Features](#-features)
-- [Repository layout](#-repository-layout)
-- [Build](#-build)
-- [Deployment](#-deployment)
-- [Logging](#-logging)
-- [Documentation](#-documentation)
-- [Help wanted](#-help-wanted)
-- [References](#-references)
-
-## ✨ Features
-
-There is nothing to switch on: plug in the iPhone and CarPlay starts as usual; the cluster
-features below follow it automatically.
-
-- **AltScreen: CarPlay cluster video on the Virtual Cockpit.** Renders the second-screen CarPlay video
-  stream (Apple Maps full cluster map) directly inside the Audi Virtual Cockpit via displayable 3.
-- **Source-built V3.8 cluster video.** Uses the current transport/decoder fixes and
-  NV12-to-GLES conversion, without patching opaque frame-rate constants.
-  Actual frame rate on this MU1316 candidate still requires vehicle measurement.
-- **Corrected aspect ratio (no distortion).** The mirror sidecar was rebuilt with corrected 1:1 aspect ratio
-  geometry (clean bottom crop) so the CarPlay cluster video is not stretched or squashed on the Virtual Cockpit.
-- **No startup branding or watermark assets.** The source mirror waits for actual
-  video; a startup logo cannot be mistaken for video readiness.
-- **CarPlay telephony integration.** Bounded calls, recents, favorites and communication
-  updates use the existing bus, with native Bluetooth restoration and OEM emergency
-  priority. Vehicle handoff behavior is not yet confirmed for this candidate.
-- **Turn-by-turn route guidance + 3D maneuver renderer.** Real-time 3D maneuver arrow, lane guidance,
-  distance to turn, remaining distance and arrival time. When AltScreen video is active, `ScreenModule`
-  automatically selects **Display Context 81** (`{98, 101, 102, 3}`), compositing the custom 3D
-  maneuver overlay and KDK backings cleanly on top of the live video stream.
-  Needs an app that sends CarPlay route guidance: Apple Maps and Google Maps do, AMap does with its
-  CarPlay guidance setting on, Waze does not
-  ([details](docs/rgd/rgd-activation.md#-which-navigation-apps-send-route-guidance)).
-- **Seamless automatic fallback (Context 80 / 74).** When the AltScreen video stream is idle, not ready,
-  or running in standalone route-guidance mode, `ScreenModule` seamlessly falls back to **Context 80**
-  (3D maneuver arrow over the stock native Audi map) or resting **Context 74**
-  ([details](docs/cluster/display-contexts.md)).
-- **Route text in the Virtual Cockpit.** A text line names the exit sign or the next road (the
-  current road when there is nothing else); long names scroll. Press **OK** (the left steering-wheel
-  roller) to toggle Road and Trip. Normal MMI settings choose the default page,
-  current-road versus next-road/exit text, and 20-second return versus keeping the
-  selection until OK or route end. A valid phone-supplied destination offset is
-  used for Audi's existing arrival clock and the Trip summary; otherwise HU-local
-  time remains in use ([details and limits](docs/rgd/vc-route-text.md)).
-- **Head-up display.** The same maneuver icons, lane arrows and distance appear on the HUD.
-- **Next-turn labels in the custom RGI panel.** Distance and the next road/exit appear beneath
-  the arrow, with lane guidance reserved above them. Distance uses the same stock MMI formatter
-  as BAP (including imperial units); unknown values and ended routes clear the labels.
-  This does not move or repurpose the cockpit's native destination-distance widget.
-  The owner confirmed working navigation text and distance on 2026-09-27; newer
-  appearance controls remain unverified in the car. See
-  [renderer details](docs/cluster/maneuver-renderer.md#route-label-footer).
-- **Steering-wheel roller zoom for CarPlay map & stock map.** While the AltScreen CarPlay video is on
-  the Virtual Cockpit, each click of the left steering-wheel roller sends the factory AirPlay
-  `changeMapZoomLevel` command to the iPhone for the cluster display (matching OEM CarPlay behavior).
-  Scrolling away zooms out, scrolling towards you zooms in. The native Audi map beneath the video also
-  continues to zoom ([details](docs/input/steering-wheel.md)).
-- **Cluster map layout selector (car marker centering).** Normal-MMI and VC settings
-  offer *original AltScreen*, *map only*, and maneuver cards on *top*, *right* or
-  *left*, plus a separate phone ETA choice. Card-to-card position changes apply
-  live; card/map profile and phone ETA changes require reconnect.
-  With no saved preference, the maneuver card
-  defaults to the top; upgrades preserve explicitly saved layouts.
-  The selected layout is reapplied on later route transitions, not just video
-  startup, including in map-only mode. **Known limitation:** the intermittent
-  Google Maps offset has not yet been vehicle-retested with this correction;
-  neither the preset nor reapplication guarantees marker centering. The normal-MMI
-  **Reapply cluster layout** action resends the current connection's layout without
-  restarting or reconnecting; it does not apply pending profile/sign/ETA choices.
-- **Cover art on the cluster.** The now-playing album art shows on the cluster media screen.
-- **Optional left-side map cards:** independently enable Now Playing and Trip progress
-  in **Carplay Altscreen -> Map cards** (VC: **More settings -> Map cards**).
-  Both default Off. A wider RGI-inspired left frame has a translucent body,
-  beveled edges and a solid rectangular lower base, without a drawn dial cutout.
-  It leaves right-side guidance alone; a single enabled section uses the available
-  space. Long titles/artists
-  scroll independently, with pauses at each end. The pocket stays fixed across
-  View changes; its intended hiding behind Audi dials in small View needs parked
-  calibration. Trip progress is estimated from this connection's first observed
-  remaining distance, not the original journey. See [behavior and limits](docs/hmi/carplay-settings.md#optional-map-cards).
-- **Native MMI settings:** Navigation -> right drawer -> Navigation settings ->
-  **Carplay Altscreen**. The root directly exposes master enable and presentation
-  mode. Grouped controls cover phone layout, the existing VC information bar,
-  Custom/Minimal/Standard/Large text appearance, wheel/touchpad input, diagnostics and mirror
-  recovery. No setting reboots MMI; connection-affecting changes request a CarPlay
-  reconnect. See [native settings and validation limits](docs/hmi/carplay-settings.md).
-- **Experimental speed/limit badge:** default Off under **Map cards**. Uses
-  camera-marked speed limits first, then Audi's prioritized conventional map
-  limit. The displayed speed turns red above either selected limit; unknown
-  values show `--`. A small CAM/MAP label identifies the source. The top-right
-  badge moves inward for large-dial View, unlike the fixed left cards.
-  Source accuracy and physical dial clearance still need vehicle confirmation.
-  See [selection rules and limits](docs/hmi/carplay-settings.md#experimental-speedlimit-badge).
-- **Optional map mascots:** Overlay appearance -> Map mascot -> **Off / locally configured choices**.
-  Default Off; animates along the bottom of the cluster navigation canvas, above
-  the separate text bar. No main-MMI overlay or extra maneuver-box content.
-  Packs support up to 16 animations, with focused animated previews in the VC menu.
-  Public builds need no artwork; an original CC0 robot example can be generated locally.
-  See [local packs, implementation and vehicle limits](docs/hmi/carplay-settings.md#optional-map-mascots).
-- **Export-only diagnostics.** GEM **EXPORT DIAGNOSTICS ONLY (no restore)** saves a
-  health summary and bounded private log tails to the SD card without stopping,
-  restarting, restoring or uninstalling anything.
-- **Opt-in speed/sign source diagnostic.** Verbose next-session logging samples
-  existing Audi notifications without changing Audi settings or drawing a speed
-  badge. See the [car test and private-export plan](docs/input/speed-source-test.md).
-- **Conservative mirror startup/recovery.** The mirror waits asynchronously for the
-  Java cluster controller before initializing. After observing regular presentation
-  telemetry, it can recover a stalled mirror while input video keeps advancing.
-  Recovery is bounded, checks process identity, and never resets USB or the main
-  CarPlay process. Missing telemetry or a stationary input does not trigger a restart.
-- **Parking popups no longer hide CarPlay.** When the Audi front PDC / parking view pops up beside it,
-  CarPlay stays on screen instead of being replaced ([details](docs/hmi/pdc-small-stage.md)).
-- **MMI touchpad → DPAD bridging** so finger drags navigate CarPlay menus.
-
-## 🗂️ Repository layout
-
-| Path | Purpose |
+| Feature | In this fork |
 | --- | --- |
-| `Toolbox/carplay_alt_screen/rgi_native/src/` | Shipping native `libcarplay_hook.so`, based on upstream RGI |
-| `altscreen_native/` | Separate source-available Type111 hook and NV12/GLES mirror, licenses and provenance |
-| `Toolbox/carplay_alt_screen/hmi/src/` | The only supported Java source; upstream routeguidance package plus local features and MU1316 adapters |
-| `Toolbox/carplay_alt_screen/hmi/resources/` | Resources packed into the JAR |
-| `Toolbox/carplay_alt_screen/rgi_renderer/src/` | Upstream GLES maneuver renderer and C++11 scene engine, with the local footer/options |
-| `mascot/` | Optional mirror-only GLES map mascot compositor; artwork is supplied privately |
-| `Toolbox/carplay_alt_screen/rgi_renderer/common/` | QNX Screen surface, GL program-binary cache and log timestamps |
-| `deploy/smartphone_integrator/` | Runtime scripts and child-process configuration for the HU |
-| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/`, `logging_MoreIncredibleBash/` | M.I.B. custom scripts that install / remove a staged release / collect logs |
-| `altscreen/` | AltScreen SD tree (CarPlay video on the VC) with RGI wired into its installer; `scripts/build_sd.sh` turns it into a card |
-| `deploy/altscreen/` | The AltScreen variant of the SI carplay child (`CARPLAY_PRELOAD_EXTRA`) |
-| `tools/` | Guarded stock-Java weaving, asset tools and H.264 analysis; old FPS patcher retained only as history |
-| `scripts/` | Docker build entry points (Java / hook / renderer / SD card) and host test runners |
-| `tests/` | Host tests (C, Java, Python) for the hook, Java bridge and renderer |
-| `Toolbox/carplay_alt_screen/rgi_renderer/toolchain/qnx65-abi/` | QNX Screen ABI headers used only for cross-compilation |
-| `docs/` | Markdown knowledge base (also opens in Obsidian) - validated RE + implementation notes (open [`docs/INDEX.md`](docs/INDEX.md)) |
-| `assets/` | Screenshots and visual reference material |
-| `build/` | Canonical deployable artifacts |
+| Maps and guidance | Choose CarPlay map + guidance, CarPlay map only, or Audi map + guidance. |
+| Maneuver panel | 3D arrows, lane guidance, distance to the next turn and next-road/exit text; appearance and scrolling controls. |
+| Phone presentation | Top/right/left maneuver cards, map-only and original layout, plus phone ETA and sign choices. |
+| Information cards | Optional Now Playing and Trip cards, an estimated trip-progress bar, and an experimental camera-first speed/limit badge. |
+| Everyday controls | Native MMI settings, a guarded VC quick-settings panel, roller zoom and optional touchpad navigation. |
+| MMI integration | Parking-popup, phone/call and media integration, while retaining native emergency-call priority. |
+| Diagnostics and recovery | Export without restoring, transactional installation, retained originals and an explicit no-SD performance-recovery action. |
 
-Raw unit logs and generated class trees are intentionally kept outside Git.
+### Guidance at a glance
 
-The optional mascot artwork and generated animation atlas are not included.
-The repository's code license does not license third-party animations. A
-[source/license review](docs/hmi/carplay-settings.md#optional-map-mascots) found
-CC BY-NC-ND 3.0 for the original Capybara, but did not establish permission to
-redistribute the current modified four-mascot atlas. Attribution or a
-"we do not own the rights" disclaimer does not replace applicable permission.
+![Host-rendered exit and roundabout examples with lane selection, 500-foot distance and next-road labels](assets/readme/guidance.png)
 
-The renderer embeds a small DejaVu-derived font atlas. Keep
-`Toolbox/carplay_alt_screen/rgi_renderer/src/LICENSE.DEJAVU` with redistributed renderer binaries; the native
-build copies it into `build/` and the SD build includes it at the card root.
+*Real renderer output with synthetic route data. These are enlarged host previews,
+not vehicle photographs or proof of final cockpit placement.*
 
-### Native-menu build and tests
+### Optional information alongside the map
 
-The menu build also uses `tools/uninline/lib/asm-9.7.jar` and `asm-tree-9.7.jar`
-from the jxe2jar tooling. `tools/PatchNavigationSettings.java` checks the exact
-private stock factory fingerprint, adds our native subclasses, and rejects other
-input classes. The initial menu installation requires the normal Toolbox update,
-INSTALL and one full MMI reboot. INSTALL now includes boot-only START arming;
-subsequent menu preferences never reboot MMI.
-Run `TOOLS_DIR=<jxe2jar> ./scripts/test_mmi_settings.sh` for the menu/storage/session
-tests and `./scripts/test_route_labels.sh` for live overlay-option previews.
-Builds default to no artwork while retaining the VC menu. To include your own
-animations, generate a pack and explicitly pass the same `MASCOT_PACK` directory
-to Java build and SD staging; see [map mascots](docs/hmi/carplay-settings.md#optional-map-mascots).
-`./scripts/test_mascots.sh` exercises synthetic packs and the compositor with host
-EGL/GLES2, Pillow and FFmpeg, without requiring the owner's artwork.
+![Host previews of the Now Playing and Trip card and the camera-first speed-limit badge](assets/readme/map-cards.png)
 
-## 🔧 Build
+Now Playing and Trip can be enabled independently. Cards, the speed/limit display
+and map mascots default **Off**. Trip progress is an estimate from the first
+remaining distance observed in a route, not a measurement of the entire journey.
 
-Native code needs the QNX 6.5 ARMv7 cross-toolchain image from
-[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain). Build it once:
+The custom speed badge and **Phone sign** are different choices: the former uses
+Audi-derived data; the latter requests the navigation app's own rendered sign.
+Neither is an authoritative source of the legal speed limit.
+[Card and speed-source details](docs/hmi/carplay-settings.md#optional-map-cards).
 
-```sh
-git clone https://github.com/luka-dev/qnx65-armv7-toolchain
-cd qnx65-armv7-toolchain
-./host-scripts/qnx-run.sh build        # qnx65-armv7-toolchain:latest (GCC 8.5)
-```
+Optional mascots use locally supplied packs. Public builds contain no character
+artwork; an original CC0 demo can be generated for development.
+[Pack creation and licensing](docs/hmi/carplay-settings.md#optional-map-mascots).
 
-Then run from this repository's root:
+## Everyday controls
 
-```sh
-./scripts/build_java.sh        # → build/carplay_hook.jar
-./scripts/build_hook.sh        # → build/libcarplay_hook.so
-./scripts/build_renderers.sh   # → build/maneuver_render
-```
+**Normal MMI:** NAV → right drawer → Navigation settings → **Carplay Altscreen**
 
-All three build in Docker - no host toolchain required. The Java patch compiles in a
-JDK 8 container against `out/MU1316-P5145-stock.jar`, OSGi and ASM libraries in
-`TOOLS_DIR` (default `../../Tools/jxe2jar`). Set `STOCK_JAR` only to an equivalent
-conversion of the owner's original P5145 JXE; the native settings factory's SHA256
-must match. No stock JAR or decompiled factory source is committed. The two
-native builds use the `qnx65-armv7-toolchain` image and synthesize their import stubs, so the resulting
-ELF binds the unit's real Screen/EGL/GLES libraries at runtime. The renderer's C++ scene engine is
-built with that image's `g++` and must not pull in the C++ runtime; the hook build rejects any dynamic
-export beyond its five interposers. There are no Java variants.
+**Virtual Cockpit:** in large-map View with live CarPlay video, use a roller zoom
+detent to establish eligibility, then long-press the roller to open quick settings.
+This is an experimental project panel, not a replacement Audi drawer.
+Outside the panel, the roller provides map zoom and the configured Road/Trip action.
 
-There is one hook image: logging is always compiled in, WARN/ERROR by default, INFO with the
-`carplay_verbose` marker (see [Logging](#-logging)). The only build-time switch is for debugging:
+![Normal-MMI menu path diagram next to a host-rendered Carplay Altscreen VC settings panel](assets/readme/controls.png)
 
-```sh
-./scripts/build_hook.sh                        # production image
-LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # + raw RGD packet hex dumps
-```
+*The left side is a navigation diagram; the right side is a host UI fixture.
+Neither is a photograph of the native MMI screen.*
 
-### AltScreen SD card (CarPlay video on the VC + route guidance)
-
-`altscreen/` holds the [MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen)
-SD tree (CarPlay's instrument-cluster video on the Virtual Cockpit) with this project's route
-guidance wired into its installer. Build the additional native image first:
-
-```sh
-docker build -t mib2-altscreen-native:local -f altscreen_native/Dockerfile altscreen_native
-```
-
-Then build the complete candidate:
-
-```sh
-STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh            # -> build/sd/
-SD=/Volumes/SD32 STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
-```
-
-It fills in the JAR size/cksum that AltScreen's INSTALL/START/STATUS pin and regenerates
-`SHA256SUMS-SD.txt`; the card's `MMI-Cockpit-Carplay/` (AltScreen stock backups) is never touched.
-On the car, parked with stable power and the phone disconnected:
-**Toolbox -> Update Toolbox**, then **MMI-Cockpit-Carplay -> INSTALL**. Wait for
-PASS, perform **one full MMI reboot**, then reconnect. Stop on FAIL. INSTALL
-includes boot-only START arming; a separate START/reboot step is no longer needed.
-This transaction is host-tested, not vehicle-confirmed.
-While the video runs the cluster uses ctx 81 (`{98, 101, 102, 3}`, maneuver panel over the
-video); without it route guidance falls back to ctx 80 over the stock map
-([display-contexts](docs/cluster/display-contexts.md)). **STATUS** reports `DIO_PRELOAD_ALTSCREEN`,
-`DIO_PRELOAD_RGI`, `RGI_*` and the live context. **RESTORE ORIGINAL** removes both.
-The steering-wheel roller zooms the CarPlay cluster map as it zooms the native one
-([steering-wheel](docs/input/steering-wheel.md)); use **Carplay Altscreen** in
-normal MMI or the VC panel to choose the iPhone's cluster presentation.
-GEM layout/area/shift entry points are retired and cannot write preferences.
-The build compiles AltScreen's hook and mirror from `altscreen_native/`, then
-checks the source manifest and binary hashes. `ALTSCREEN_FULL_FPS` is retired.
-GEM **Dump cluster video to SD (diagnostic)** saves
-the last ~4 MB of the cluster H.264 stream to `MMI-Cockpit-Carplay/logs/h264/`;
-`python3 tools/h264_ring_analyze.py <file>` shows what the iPhone sent.
-End-to-end check of the package (needs an AltScreen stock backup from a unit):
-`INSTALLER_PACKAGE_MODE=staged SD_DIR=<package> FIXTURE=<backup> ./scripts/test_altscreen_e2e.sh`.
-This uses the packaged scripts, pins and real ARM payloads without source overlays.
-It explicitly stubs native execution; it checks every command's
-exit status and the integrated completion message, not actual video output. It
-also exercises interrupted restore, cleanup failures, and retry recovery. Restore
-verifies the stock launcher configuration before removing the RGI runtime; failed
-cleanup retains the recovery scripts and pending transaction for a retry.
-The all-case runner also retains preference-aware mirror recovery checks.
-See [transaction and rescue](docs/upstream-integration.md#installation-and-rescue)
-for guarded manual recovery; these are not normal-MMI preference actions.
-
-#### Integrated AltScreen features:
-- **Source-native video pipeline:** current V3.8 transport/decoder code, with local
-  UI ownership and source-level checks instead of binary patches.
-- **Steering-wheel cluster map zoom:** Each roller click sends `changeMapZoomLevel` directly to iOS via AirPlay (`CRSUIClusterZoomAction`); scrolling away zooms out, scrolling towards zooms in.
-- **Phone map controls:** shared MMI/VC choices for top/right/left cards, map-only,
-  original layout, phone ETA and Off/our badge/phone speed sign. Card position
-  applies live; profile, phone sign and ETA require reconnect. These requests
-  do not guarantee vehicle-marker centering or phone-app support.
-- **Corrected aspect ratio & projection:** Instead of stretching or squashing the image, the mirror sidecar is rebuilt with a 1:1 aspect ratio and clean bottom crop so that maps and road geometry display with natural proportions.
-- **No startup artwork:** No logo or watermark asset is required or staged. Only
-  actual video presentation can establish readiness.
-- **Seamless RGI companion:** The integrated `rgi_companion.sh` automatically wires both the AltScreen universal preload and `libcarplay_hook.so` via `CARPLAY_PRELOAD_EXTRA` without clobbering the environment.
-
-### Tests
-
-Host-only, no unit needed:
-
-```sh
-./scripts/run_tests.sh            # C + shell: RGD parser, bus, cover art, shader cache, installer, supervisor
-./scripts/test_route_info.sh      # Java route-guidance / BAP bridge against the stock interfaces
-./scripts/test_java_transports.sh # Java bus + renderer sockets, touchpad
-./scripts/test_maneuver_native.sh # renderer engine + lanes (macOS, ASan/UBSan)
-```
-
-The Java suites need the stock MU1316 JAR and JDK, selected through `TOOLS_DIR`
-and `STOCK_JAR`. Full toolchain,
-threading, boot and the complete test list live in the knowledge base - see
-[`docs/architecture.md`](docs/architecture.md).
-
-## 🚀 Deployment
-
-**Historical upstream hardware report (not this source candidate):**
-- **Confirmed & verified working on:**
-  - **Vehicle:** Audi Q5 (FY) 2019
-  - **Firmware Release:** `MHI2Q_ER_AUG22_P5092`
-  - **MU Software:** `1329`
-- **Supported units:** Any Audi MHI2Q infotainment unit (developed and tested on MU1316 and MU1329).
-  What matters is:
-  - A fully digital instrument cluster (**Audi Virtual Cockpit**); analog clusters are not supported.
-  - Preferably the latest firmware available for the unit, flashed before installing.
-
----
-
-### Option 1: Unified AltScreen + Route Guidance SD Card (Recommended)
-
-This installs both **AltScreen** (full CarPlay cluster video stream on the Virtual Cockpit) and **Route Guidance Integration (RGI)** (3D maneuver arrow overlay, lane guidance, route text, HUD) using the integrated MIB2 Toolbox.
-
-1. **Build the SD card image:**
-   ```sh
-   STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh                  # stages files into build/sd/
-   SD=/Volumes/SD32 STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh   # or copies directly onto your SD card
-   ```
-2. **Insert the SD card** into slot 1 (SD1) of the MMI unit.
-3. **Open GEM** (Green Engineering Menu):
-   - Go to **Toolbox -> Update Toolbox** to load the scripts.
-   - Go to **MMI-Cockpit-Carplay -> INSTALL**. The companion installer (`rgi_companion.sh`) automatically installs the native RGI files to `/mnt/app/root/hooks/`, places the unified HMI jar `carplay_hook-basevideo3.jar`, and patches `smartphone_integrator.json` (with `CARPLAY_PRELOAD_EXTRA`) and `dio_manager.json`.
-4. Wait for **INSTALL PASS**. Stop on any failure; do not bypass the guards.
-5. Perform **one full MMI reboot**, then reconnect the phone. INSTALL already
-   includes boot-only START arming. The separate START entry remains for
-   compatibility, not as a required second installation step.
-
-**On-Car Verification & Features:**
-- **Steering-wheel zoom:** Start CarPlay with the navigation map on the Virtual Cockpit and turn the left steering-wheel roller ("away" = zoom out, "towards" = zoom in).
-- **Vehicle marker alignment:** While parked, build a route and use **Carplay
-  Altscreen -> CarPlay map layout** in normal MMI. Try top/right/left cards live.
-  Reconnect when moving between card/map profiles or changing phone ETA/sign.
-  These request iPhone layouts, not direct marker positions; results vary by app.
-- **STATUS:** Run **MMI-Cockpit-Carplay -> STATUS** in GEM to inspect system health. It reports `DIO_PRELOAD_ALTSCREEN`, `DIO_PRELOAD_RGI`, `RGI_*` status, and the live display context from `/tmp/carplay_cluster.ctx`.
-- **RESTORE ORIGINAL:** Selecting **RESTORE ORIGINAL** in GEM cleanly removes all patches and restores the stock firmware configuration from backup.
-
----
-
-### Option 2: Standalone Route Guidance (Without AltScreen Video)
-
-For users who want route guidance and 3D maneuver arrows drawn only over the native Audi cluster map without the CarPlay video stream.
-
-A standalone release consists of nine files plus two config edits; use the unified
-SD package for this fork's native menu runtime and its diagnostic/video actions:
-
-| On-unit path | Files |
+| Change | When it applies |
 | --- | --- |
-| `/mnt/app/root/hooks/` | `libcarplay_hook.so`, `maneuver_render` (from `build/`), `flag_atlas.rgba` (from `Toolbox/carplay_alt_screen/rgi_renderer/src/resources/`), and the startup/monitor/settings scripts from `deploy/smartphone_integrator/` |
-| `/mnt/app/eso/hmi/lsd/jars/` | `carplay_hook.jar` (from `build/`) |
-| `/mnt/system/etc/eso/production/smartphone_integrator.json` | `children.carplay` replaced by [`carplay_child.json`](deploy/smartphone_integrator/carplay_child.json) |
-| `/mnt/system/etc/eso/production/dio_manager.json` | `MessagesSentByAccessory` += `0x5200`, `0x5203`; `MessagesReceivedFromDevice` += `0x5201`, `0x5202`, `0x5204` |
+| Appearance, media/Trip cards, card-to-card position | Live where the current session supports it. |
+| Phone map/card profile, phone ETA, entering/leaving Phone sign | Requires a CarPlay reconnect. The menu tells you when one is needed. |
+| Master Off | Releases project cockpit features live; the extra-stream/preload bypass takes effect next CarPlay session. It is not an uninstall. |
 
-Both the `dio_manager.json` IDs and the hook's runtime Identify patch are required: without the IDs
-iOS sends route guidance and the SDK silently drops it.
+**Changing a preference never requires a full MMI reboot or silently disconnects
+the phone.** Installation is different and does require the reboot below.
+See [all settings](docs/hmi/carplay-settings.md) and
+[VC controls and eligibility](docs/hmi/vc-quick-settings.md).
 
-- **With M.I.B. (recommended for standalone RGI):** Copy `install_MoreIncredibleBash/` to the M.I.B. SD card and drop
-  all release assets straight into `mod/carplay/` (the nine files above plus `carplay_child.json`), then run
-  **GEM -> M.I.B. -> Advanced Settings -> Run Custom Script** with CarPlay disconnected. To remove, run
-  `uninstall_MoreIncredibleBash/`.
-- **Manually:** Over root shell (SSH or Telnet). See [`docs/deploy/install.md`](docs/deploy/install.md) for the complete
-  step-by-step guide.
+## Installation
 
-**Reboot.** Disconnect CarPlay, run `sync` and wait a few seconds, then reboot normally: a forced
-reboot (the MMI button combo) right after copying can leave files truncated or missing. On boot
-`smartphone_integrator` launches everything; check the logs in `/tmp`.
+For an exact-target unit that **already has MIB2 Toolbox installed**, use the
+complete package built from this fork. Presentation modes are settings, not
+separate installation variants.
 
-Exact ownership rules, the `LD_PRELOAD`/env constraints and the MU1316 QNX-compat audit are in
-[`deploy/smartphone_integrator/README.md`](deploy/smartphone_integrator/README.md).
+1. **Back up the card.** Copy and hash-verify all files, including hidden files
+   except Windows `System Volume Information`. Retain earlier recovery data.
+2. **Prepare the card.** Merge the contents of the verified staged package into
+   the SD root. Do not format or delete unrelated data. Preserve
+   `MMI-Cockpit-Carplay` backups/logs/state and `Dump`; verify copied and untouched files.
+3. **Park with stable power and disconnect the iPhone.** Insert the card and run
+   **Toolbox → Update Toolbox** to refresh the scripts and Green Menu.
+4. Select **MMI-Cockpit-Carplay → INSTALL** and wait for the **final PASS**.
+   INSTALL includes boot-only START arming; a separate START step is not required.
+5. Perform **one full MMI reboot**, then reconnect the iPhone.
 
-## 📝 Logging
+> [!IMPORTANT]
+> **Stop on FAIL. Do not use the red Software Update menu for this Toolbox upgrade.**
+> Current source includes Maps30 selection and exact-file decoder/MCD performance
+> changes. The stock-file changes affect head-unit video/media handling, activate
+> after reboot and are not undone by Master Off.
+> [Performance scope and recovery](docs/upstream-baseline.md#stock-file-ownership-and-recovery).
 
-### Export without changing the installation
+These steps are not instructions for first-time Toolbox installation or a firmware
+upgrade. Follow the [package instructions](altscreen/SD_CARD_README.txt) and keep the
+matching card/originals available for recovery.
 
-While parked, select **GEM -> Customization -> MMI-Cockpit-Carplay ->
-EXPORT DIAGNOSTICS ONLY (no restore)** with the prepared SD inserted.
-It creates `MMI-Cockpit-Carplay/logs/exports/export_<timestamp>_<pid>/` containing:
+## Status and limits
 
-- `SUMMARY.txt`: selected firmware/context/readiness fields, process liveness,
-  mirror-health state, last reported frame counters and whether the installed JAR
-  matches the SD package. A readiness marker is not proof of live pixels.
-- `private/`: up to 256 KiB from each of twelve known logs. These are **raw,
-  not anonymized**; they can contain road names, destinations and device/network
-  details. Keep them local and review/redact before sharing.
-- `FILES.txt`, `PRIVACY.txt`, and `CKSUMS.txt`: missing/error inventory and integrity data.
-
-An export error leaves the current installation running. **STORE LOGS + RESTORE
-still restores the vehicle configuration; it is not the export-only action.**
-
-### Mirror recovery scope
-
-The boot launcher waits for this fork's `carplay_cluster.ctx` before executing the
-mirror; it does not delay `dio_manager`. With a live phone process but no Java
-controller, each attempt times out after 90 polls (approximately 90 seconds).
-Without a phone it may wait quietly for a later connection.
-The initial delayed launch enables the native sidecar's guarded same-session
-recovery, so a cluster-stream request arriving before HMI readiness is not missed.
-
-Live-freeze recovery requires independently changing H.264 header counters and at
-least two observed presentation-counter advances. The stall threshold is at least
-40 active-input polls and at least four times the observed reporting interval.
-Only an identity-verified mirror process may be signaled; no-input/unknown telemetry
-is not evidence of a freeze. The existing default limit of three abnormal restarts
-still applies. Exhaustion withdraws stale readiness so Java can fall back to stock
-map/RGI, and explicit STOP remains authoritative. This does not fix every possible
-decoder/HMI fault or guarantee recovery before the first frame.
-
-Everything logs to `/tmp` on the unit:
-
-| File | Source |
+| Evidence | What it establishes |
 | --- | --- |
-| `/tmp/carplay_hook.log` | native hook (inside `dio_manager`) |
-| `/tmp/carplay_java.log` | Java patch (bounded + rotated, `.1` = previous) |
-| `/tmp/maneuver_render.log` | cluster maneuver renderer |
-| `/tmp/carplay_wrapper.log` | startup wrapper, preload merger (`CARPLAY_PRELOAD_EXTRA`), and renderer monitor |
-| `/tmp/carplay_cluster.ctx` | active cluster display context (`81` = AltScreen video + maneuver, `80` = maneuver on stock map, `74` = idle) |
+| Earlier vehicle use | Owner reports confirm working features on earlier builds, including navigation labels and repaired menus/mascots. Those reports predate the current performance candidate and are not exhaustive acceptance tests. |
+| Current source | Includes the V3.8 Fix1 integration, compatible Luka ports and reviewed installation/recovery fixes. |
+| Host validation | Native/Java suites, renderer previews, QNX cross-build and staged installation/rollback/rescue tests provide software evidence, not execution of the complete QNX/vehicle path. |
+| Current performance candidate | Prepared for a vehicle trial; its Maps30, reduced decoder queues, MCD behavior and new recovery path are not yet vehicle-validated. |
 
-By default only warnings and errors are recorded. To capture **everything** (lift hook and Java to
-`INFO`), drop a marker file on the unit - no rebuild needed:
+Known limits worth reading before use:
 
-```sh
-touch /mnt/app/carplay_verbose        # survives reboot; /tmp/carplay_verbose does not
-```
+- **Google Maps centering can be intermittent.** Layout reapplication exists, but
+  it is not a confirmed universal fix or a direct vehicle-marker positioning API.
+- **App support varies.** Map video does not guarantee maneuver data, lanes, ETA
+  or a phone-rendered speed sign. See [route-guidance compatibility](docs/rgd/rgd-activation.md).
+- **Physical placement and input coexistence need real-car checks.** Host images
+  do not establish Audi dial clearance, VC input ownership or wireless-adapter behavior.
+- **Source availability is not full openness.** Some native components have
+  noncommercial terms; private platform inputs are still required.
 
-Hook and Java read the marker at every CarPlay session start, so it takes effect on the next phone
-connect - no reboot. Remove the marker to return to the quiet default. Logs reset on reboot, so pull
-them before restarting.
+## Build
 
-For raw route-guidance packet dumps, rebuild the hook with `LOG_RGD_PACKET_RAW=1` (see [Build](#-build)).
+The complete build needs Docker, the QNX 6.5 ARMv7 toolchain and a conversion of
+the exact unit's original `lsd.jxe`. OEM firmware/JARs and private artwork are not
+included in this repository.
 
-**No shell? Use M.I.B.** Copy `logging_MoreIncredibleBash/` to the card and run it like the installer.
-Each run saves everything to `<card>/carplay_logs/NNN/` and then creates `/tmp/carplay_verbose`: run it
-once, reconnect the phone and drive with CarPlay, run it again - the second folder holds the verbose
-session. Attach that folder to a bug report.
+Start with the **[Q5 build and validation guide](docs/deploy/build.md)**.
+It covers the required inputs, complete SD staging, Windows constraints and
+the test commands. Building a package and copying it to an SD card are separate steps.
 
-## 📚 Documentation
+For code navigation: [architecture](docs/architecture.md),
+[source baseline and local adapters](docs/upstream-baseline.md), and
+[contributor working agreements](AGENTS.md).
 
-`docs/` is a Markdown knowledge base (also opens in Obsidian) - one note per topic, each fact validated against code /
-firmware / iOS binary. Start at [`docs/INDEX.md`](docs/INDEX.md): architecture & threading, the hook
-and bus, route guidance (TLV → BAP → cluster, lanes, route text), cluster compositing and the maneuver
-renderer, input, deploy/connect, build & host tests, the reverse-engineering references, and a
-per-note verification status.
+## Logging and recovery
 
-## 🤝 Help wanted
+| Need | Use |
+| --- | --- |
+| Collect diagnostics without changing the installation | **EXPORT DIAGNOSTICS ONLY (no restore)** in the Green Menu. |
+| Restore installed software/configuration | **RESTORE ORIGINAL**, with the matching card and backups. This is not a downgrade to a previous AltScreen version. |
+| Recover when a performance regression prevents SD discovery | **RESCUE: restore performance originals (no SD)**, if the installed kit and Green Menu are available. It restores only the decoder/MCD files, not the whole installation. Reboot after PASS. |
+| Repair/reverse an interrupted transaction | Follow the [guarded transaction/rescue instructions](docs/upstream-integration.md#installation-and-rescue), not an improvised manual copy. |
 
-PRs are welcome - bug fixes, new maneuver cases, docs, on-car test reports.
+**STORE LOGS + RESTORE really restores.** Do not use it merely to collect evidence.
+Raw diagnostic exports can contain destinations, device details and other private
+data. Keep them local; share only reviewed/redacted excerpts.
 
-**Reporting a bad maneuver icon.** The iAP2→BAP mapping covers all 54 CarPlay maneuver types but has
-only been exercised on a limited set of real routes. A snippet of `/tmp/carplay_hook.log` from the
-moment plus a note on what was expected helps a lot. The hook logs unrecognised route-guidance messages
-as `[HOOK] Unknown 0x52xx msgid=0xNNNN dir=IN len=N` followed by a hex dump - that line is the best
-starting point when iOS sends a maneuver type we don't handle yet.
+For an issue report, include the firmware/build ID, iOS and navigation-app versions,
+wired/adapter connection, selected mode, and a parked reproduction sequence.
+Distinguish what happened on the car from what a host fixture showed.
 
-## 🔗 References
+## Documentation
 
-Thanks for the prior work and knowledge that helped figure this out.
+- [Settings, live/reconnect rules and optional overlays](docs/hmi/carplay-settings.md)
+- [Steering-wheel behavior and parked acceptance checks](docs/input/steering-wheel.md)
+- [Upstream integration, retained policies and evidence](docs/upstream-integration.md)
+- [Technical knowledge index](docs/INDEX.md) — includes revision-specific reverse-engineering notes
+- [Preview provenance and regeneration](assets/readme/README.md)
 
-- [yuedizhibo/MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen) — Virtual Cockpit CarPlay video mirror sidecar, universal preload, and MIB2 Toolbox installer (by yuedizhibo and Lanye-z).
-- [luka-dev/mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi) — Turn-by-turn route guidance, 3D maneuver renderer, and BAP integration.
-- https://github.com/ludwig-v/wireless-carplay-dongle-reverse-engineering
-- https://github.com/EthanArbuckle/iPhone18-3_26.1_23B85_Restore
-- https://github.com/adi961/mib2-android-auto-vc
-- [@fifthBro](https://t.me/fifthBro)
+## Credits and licensing
+
+Built on the work of
+[yuedizhibo / MHI2Q-CarPlay-AltScreen](https://github.com/yuedizhibo/MHI2Q-CarPlay-AltScreen),
+[Luka / mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi), and
+[Allemon / mib2-carplay-rgi-altscreen](https://github.com/Allemon/mib2-carplay-rgi-altscreen).
+This fork keeps upstream attribution while documenting its own controls,
+MU1316 adapters and validation limits.
+
+Licensing is component-specific: the RGI source baseline is GPL; the independent
+AltScreen native pair uses [PolyForm Noncommercial and additional terms](altscreen_native/NOTICE.md).
+Keep the [DejaVu font notice](Toolbox/carplay_alt_screen/rgi_renderer/src/LICENSE.DEJAVU)
+and [card CJK font license](map_cards/LICENSE.OFL) with relevant distributions.
+Repository/source licenses do not grant rights to redistribute private firmware,
+vehicle captures or third-party mascot artwork.

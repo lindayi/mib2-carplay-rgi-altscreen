@@ -6,6 +6,12 @@ status: complete
 
 # MHI2Q CarPlay - Knowledge Index
 
+**Start here:** [Project overview and installation](../README.md) ·
+[Q5 build and validation guide](deploy/build.md) ·
+[Everyday settings](hmi/carplay-settings.md).
+The technical notes below include historical, revision-specific investigations;
+do not treat an old standalone-RGI procedure as the current combined installer.
+
 Map of Content for the reverse-engineering and implementation notes. Each note covers **one topic**;
 every factual claim is validated against a source (code / firmware / iOS binary) and states only the
 final verified fact. `reconciles:` frontmatter records which legacy docs were folded in.

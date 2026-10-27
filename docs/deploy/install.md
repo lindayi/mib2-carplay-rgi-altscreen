@@ -19,8 +19,15 @@ reconciles:
 
 # Install, verify and uninstall
 
-*The build scripts only produce loose binaries. A release is staged by hand and installed either with
-the M.I.B. custom script or by hand in a root shell on the unit. Both do exactly the same thing: copy nine
+> [!NOTE]
+> This page retains the **low-level standalone-RGI deployment reference**, not the
+> current combined Q5 installation procedure. For Carplay Altscreen, use the
+> [single-package installation sequence](../../README.md#installation) and
+> [Q5 build guide](build.md). Choose Audi-map/CarPlay presentation in settings;
+> do not use this page to construct a second installation alongside the package.
+
+*In the standalone procedure documented below, loose binaries are staged by hand and installed either with
+the M.I.B. custom script or in a root shell on the unit. Both copy nine
 files, replace one SI child and register five iAP2 message IDs. Nothing is started, stopped or
 rebooted for you.*
 
@@ -32,7 +39,7 @@ rebooted for you.*
 
 ## 📦 What a release contains
 
-This branch replaces **no stock binary** and edits **no firewall profile**: the cluster keeps the
+This standalone RGI procedure replaces **no stock binary** and edits **no firewall profile**: the cluster keeps the
 head unit's own map, so there is no CarPlay video stream and no extra RTSP port to open. A release is
 nine files plus two in-place config edits. Use the unified SD package for this
 personal fork's native menu helpers and its diagnostic/recovery actions.
@@ -48,7 +55,7 @@ personal fork's native menu helpers and its diagnostic/recovery actions.
 | `dio_manager.json` | not staged | `/mnt/system/etc/eso/production/`, five route-guidance IDs added in place | - |
 
 Build the three compiled outputs first (`build_hook.sh`, `build_renderers.sh`, `build_java.sh`); see
-[README - Build](../../README.md#-build). Everything else is copied unchanged.
+[Q5 build guide](build.md). Everything else is copied unchanged.
 
 ```mermaid
 flowchart TB
@@ -391,7 +398,7 @@ ls -l /mnt/app/root/hooks/ /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
 Then connect the phone and start a route in Apple Maps: the maneuver panel must appear on the cluster
 over the stock map, with the turn arrow on the HUD. Logs: `/tmp/carplay_hook.log`,
 `/tmp/carplay_java.log`, `/tmp/maneuver_render.log`, `/tmp/carplay_wrapper.log` (see
-[README - Logging](../../README.md#-logging)). If route guidance never appears, check the
+[README - Logging](../../README.md#logging-and-recovery)). If route guidance never appears, check the
 `dio_manager.json` grep first: with the IDs missing the SDK drops the messages before the hook, so the
 hook logs nothing about them.
 
