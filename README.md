@@ -11,7 +11,7 @@ settings, overlays and recovery work.
 
 **Development branch:** [`q5-mu1316-build-fixes`](https://github.com/lindayi/mib2-carplay-rgi-altscreen/tree/q5-mu1316-build-fixes)
 
-[Features](#what-you-get) · [Controls](#everyday-controls) ·
+[In-car image](#in-the-car) · [Features](#what-you-get) · [Controls](#everyday-controls) ·
 [Installation](#installation) · [Build](#build) · [Status and limits](#status-and-limits) ·
 [Documentation](#documentation)
 
@@ -20,6 +20,12 @@ settings, overlays and recovery work.
 > The HMI patch and installation guards target the exact firmware above.
 > Installation modifies head-unit software and system configuration; keep verified
 > originals and stop on any failed guard. Do not substitute another firmware's JAR.
+
+## In the car
+
+![CarPlay map, media and Trip card, speed-limit badge and maneuver guidance in the owner's Virtual Cockpit](assets/readme/vehicle-layout.jpg)
+
+*[Real in-car image.](assets/readme/README.md#vehicle-image)*
 
 ## What you get
 
@@ -171,7 +177,7 @@ Distinguish what happened on the car from what a host fixture showed.
 - [Steering-wheel behavior and parked acceptance checks](docs/input/steering-wheel.md)
 - [Upstream integration, retained policies and evidence](docs/upstream-integration.md)
 - [Technical knowledge index](docs/INDEX.md) — includes revision-specific reverse-engineering notes
-- [Preview provenance and regeneration](assets/readme/README.md)
+- [Image provenance and preview regeneration](assets/readme/README.md)
 
 ## Credits and licensing
 

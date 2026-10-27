@@ -22,10 +22,12 @@ Do not turn this into a raw conversation log or store credentials/private captur
 - Keep everyday controls in normal MMI where practical. Install/uninstall, full
   restore, firmware operations and vehicle coding are not normal-MMI menu actions.
 - English documentation only. Ukrainian READMEs were intentionally removed.
-- README figures use public synthetic host fixtures, composed by
+- README generated previews use public synthetic host fixtures, composed by
   `tools/render_readme_previews.py`; keep their host-preview labels and provenance
-  in `assets/readme/README.md`. Never substitute private captures or mascot packs,
-  or present an upstream reference photo as validation of this Q5 build.
+  in `assets/readme/README.md`. Separately approved vehicle-photo derivatives need
+  metadata removal and privacy/licensing review; document retouching and evidence
+  limits in the image notes. Never publish raw private inputs or redistribute
+  private mascot packs, or present an upstream reference as Q5 validation.
 
 ## Resume here: workspace and source history
 
