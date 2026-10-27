@@ -3,9 +3,9 @@
 # Build the complete MMI-Cockpit-Carplay SD card: AltScreen (CarPlay video on the VC)
 # with route guidance from this repo.
 #
-#   STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh              # build all, stage build/sd/
+#   TOOLS_DIR=/path/to/jxe2jar STOCK_JAR=MU1316-P5145-stock.jar ./scripts/build_sd.sh
 #   SKIP_BUILD=1 ./scripts/build_sd.sh                           # reuse build/ artifacts
-#   SD=/Volumes/SD32 STOCK_JAR=MU1329-base.jar ./scripts/build_sd.sh   # also sync onto the card
+# Copy to SD separately after backup/checksum verification; see docs/deploy/build.md.
 #
 # Inputs:  altscreen/   the AltScreen SD tree (scripts, mirror sidecar, universal preload,
 #                       GEM menu, MIB2 Toolbox) with @CARPLAY_JAR_SIZE@/@CARPLAY_JAR_CKSUM@
